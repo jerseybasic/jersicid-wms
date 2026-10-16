@@ -1,27 +1,21 @@
+import defaultTheme from 'tailwindcss/defaultTheme';
+
 /** @type {import('tailwindcss').Config} */
 export default {
     content: [
-        './resources/**/*.blade.php',
-        './resources/**/*.js',
-        './resources/**/*.vue',
+        './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
+        './storage/framework/views/*.php',
+        './resources/views/**/*.blade.php',
+        './resources/js/**/*.js',
     ],
-    darkMode: 'class',
     theme: {
         extend: {
-            screens: {
-                'xs': '474px',
-                'sm': '639px',
-                'md': '767px',
-                'lg': '1023px',
-                'xl': '1439px',
-                '1xl': '1920px',
+            fontFamily: {
+                sans: ['Inter', 'system-ui', 'sans-serif'],
             },
-            spacing: {
-                'safe-top': 'env(safe-area-inset-top)',
-                'safe-bottom': 'env(safe-area-inset-bottom)',
-            }
         },
     },
-    plugins: [],
-}
-
+    plugins: [
+        require('@tailwindcss/forms'),
+    ],
+};

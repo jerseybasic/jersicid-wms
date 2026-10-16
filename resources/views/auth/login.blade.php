@@ -11,14 +11,19 @@
     <div class="relative h-full w-full flex">
         
         <!-- ==================== LEFT PANEL: LOGIN FORM ==================== -->
-        <div class="w-1/2 h-full relative overflow-hidden bg-slate-900">
+        <div class="w-full md:w-1/2 h-full relative overflow-hidden bg-slate-900">
             
             <div class="h-full flex flex-col justify-center p-12">
                 <div class="w-full max-w-md mx-auto">
                     <!-- Logo -->
                     <div class="flex items-center gap-3 mb-8">
-                        <div class="w-12 h-12 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                            <img src="{{ asset('images/logo-jersic.png') }}" alt="Logo" class="w-full h-full object-contain">
+                        <div class="w-10 h-10 bg-gradient-to-br from-transparent-400 to-transparent-600 rounded-xl flex items-center justify-center shadow-lg shadow-transparent-500/30">
+                            <img src="{{ asset('images/icon-jersic.webp') }}" alt="JERSIC.ID" 
+                                 class="w-full h-full object-contain"
+                                 width="40"
+                                 height="40"
+                                 loading="eager"
+                                 fetchpriority="high">
                         </div>
                         <h1 class="text-2xl font-bold text-white tracking-wider">JERSIC.ID<span class="text-cyan-400">-WMS</span></h1>
                     </div>
@@ -34,8 +39,12 @@
 
                     @if(session('register_error'))
                         <div class="mb-4 p-4 bg-red-900/30 border border-red-500/50 text-red-400 rounded-xl text-sm flex items-start gap-3 animate-fade-in">
-                            <div class="w-10 h-10 flex items-center justify-center flex-shrink-0">
-                                <img src="{{ asset('images/logo-jersic.png') }}" alt="Logo" class="w-full h-full object-contain">
+                            <div class="w-20 h-20 bg-gradient-to-br from-transparent-400 to-transparent-600 rounded-xl flex items-center justify-center shadow-lg shadow-transparent-500/30">
+                                <img src="{{ asset('images/icon-logo-jersic.webp') }}" alt="JERSIC.ID WMS" 
+                                     class="w-full h-full object-contain"
+                                     width="80"
+                                     height="80"
+                                     loading="eager">
                             </div>
                             <span>{{ session('register_error') }}</span>
                         </div>
@@ -43,7 +52,7 @@
 
                     <div class="mb-8">
                         <h2 class="text-3xl font-bold text-white mb-2">Selamat Datang</h2>
-                        <p class="text-slate-400">Masuk ke akun Anda</p>
+                        <p class="text-slate-300">Masuk ke akun Anda</p>
                     </div>
 
                     @if($errors->any())
@@ -60,16 +69,14 @@
                         @csrf
                         
                         <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                            <label for="email" class="block text-sm font-medium text-slate-300 mb-2">Email</label>
                             <div class="relative">
                                 <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"/>
                                     </svg>
                                 </div>
-                                <input type="email" name="email" value="{{ old('email') }}" required autofocus 
-                                       placeholder="nama@jersic.id"
-                                       class="w-full pl-12 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 focus:outline-none transition-all"/>
+                                <input type="email" name="email" value="{{ old('email') }}" required autofocus placeholder="nama@jersic.id" class="w-full pl-12 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"/>
                             </div>
                         </div>
 
@@ -87,10 +94,10 @@
                                     id="login_password"
                                     required 
                                     placeholder="••••••••"
-                                    class="w-full pl-12 pr-12 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 focus:outline-none transition-all"
+                                    class="w-full pl-12 pr-12 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"
                                 />
                                 <button 
-                                    type="button"
+                                    type="button" name="eyes-btn" 
                                     onclick="toggleLoginPassword()"
                                     class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-cyan-400 transition-colors focus:outline-none"
                                 >
@@ -115,13 +122,25 @@
                         <button type="submit" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transform hover:scale-[1.02] transition-all duration-200">
                             Masuk
                         </button>
+
+                        <!-- ✅ Link Register - Hanya muncul di Mobile -->
+                        <div class="md:hidden text-center mt-4 pt-4 border-t border-slate-800">
+                            <p class="text-sm text-slate-400 mb-2">Belum punya akun?</p>
+                            <a href="{{ route('register') }}" 
+                               class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 transition-all shadow-lg hover:shadow-cyan-500/10">
+                                <span>Daftar Akun Baru</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                            </a>
+                        </div>
                     </form>
                 </div>
             </div>
         </div>
 
         <!-- ==================== RIGHT PANEL: INFO ==================== -->
-        <div class="w-1/2 h-full flex flex-col justify-center items-center p-12 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 relative overflow-hidden">
+        <div class="hidden md:flex w-1/2 h-full flex-col justify-center items-center p-12 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 relative overflow-hidden">
             
             <div class="absolute inset-0 overflow-hidden pointer-events-none">
                 <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-3xl"></div>
@@ -129,8 +148,8 @@
 
             <div class="max-w-md relative z-10 text-center">
                 <div class="flex justify-center mb-6">
-                    <div class="w-24 h-24 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                        <img src="{{ asset('images/logo-jersic.png') }}" alt="Logo" class="w-full h-full object-contain">
+                    <div class="w-20 h-20 bg-gradient from-transparent-400 to-transparent-600 rounded-xl flex items-center justify-center shadow-lg shadow-transparent-500/30">
+                        <img src="{{ asset('images/icon-logo-jersic.webp') }}" alt="Logo" class="w-full h-full object-contain">
                     </div>
                 </div>
 

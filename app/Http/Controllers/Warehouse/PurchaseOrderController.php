@@ -6,9 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\MasterSku;
-use App\Models\Supplier;
+use App\Models\Supplier; // ✅ TAMBAHKAN BARIS INI
+use App\Models\SystemSetting;
+use App\Models\User;
+use App\Notifications\POStatusUpdated;
 use App\Models\StockActive;
 use App\Models\StockMovement;
+use App\Models\AuditTrail; // ✅ Pastikan ini juga ada untuk method updateStatus
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -165,9 +169,9 @@ class PurchaseOrderController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(PurchaseOrder $po)
+    public function show($id)
     {
-        $po->load(['supplier', 'user:id,name', 'items']);
+        $po = PurchaseOrder::with(['vendor', 'items'])->findOrFail($id);
         return view('warehouse.po.show', compact('po'));
     }
 
@@ -472,4 +476,81 @@ class PurchaseOrderController extends Controller
             ], 500);
         }
     }
-}
+
+        /**
+     * Update Status PO (Khusus Admin Gudang / Supervisor / Owner)
+     */
+    public function updateStatus(Request $request, $id)
+    {
+        $user = auth()->user();
+        
+        // Validasi Role
+        if (!in_array($user->role, ['ADMIN_GUDANG', 'SUPERVISOR', 'OWNER'])) {
+            abort(403, 'Akses ditolak. Hanya Admin Gudang/Supervisor/Owner yang bisa update status.');
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|in:IN_PRODUCTION,READY_FOR_PICKUP,RECEIVED,CANCELLED',
+            'defect_count' => 'nullable|integer|min:0',
+            'defect_notes' => 'nullable|string|max:1000',
+        ]);
+
+        $po = PurchaseOrder::with('vendor')->findOrFail($id);
+        $oldStatus = $po->status;
+        $newStatus = $validated['status'];
+
+        // Cek apakah transisi status diizinkan
+        if (!$po->canTransitionTo($newStatus)) {
+            return back()->withErrors([
+                'status' => "Transisi dari '{$oldStatus}' ke '{$newStatus}' tidak diizinkan."
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($po, $validated, $newStatus) {
+                $updateData = ['status' => $newStatus];
+                
+                // Jika status READY_FOR_PICKUP, catat waktunya
+                if ($newStatus === 'READY_FOR_PICKUP') {
+                    $updateData['ready_at'] = now();
+                }
+                
+                // Update defect jika ada
+                if (isset($validated['defect_count'])) {
+                    $updateData['defect_count'] = $validated['defect_count'];
+                    $updateData['defect_notes'] = $validated['defect_notes'] ?? null;
+                }
+
+                $po->update($updateData);
+
+                // Audit trail
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'UPDATE_PO_STATUS',
+                    'module' => 'PURCHASE_ORDER',
+                    'old_values' => json_encode(['status' => $oldStatus]),
+                    'new_values' => json_encode(array_merge(['status' => $newStatus], $updateData)),
+                    'ip_address' => request()->ip(),
+                ]);
+            });
+
+            // ✅ KIRIM NOTIFIKASI
+            $this->sendStatusNotification($po, $oldStatus, $newStatus, $user);
+
+            $statusLabels = [
+                'IN_PRODUCTION' => 'Sedang Diproduksi',
+                'READY_FOR_PICKUP' => 'Siap Diambil',
+                'RECEIVED' => 'Sudah Diterima',
+                'CANCELLED' => 'Dibatalkan',
+            ];
+
+            return back()->with('success', 
+                "Status PO berhasil diupdate menjadi '{$statusLabels[$newStatus]}'. " .
+                "Notifikasi terkirim ke Owner & Supervisor."
+            );
+
+        } catch (\Exception $e) {
+            return back()->withErrors(['error' => 'Gagal update status: ' . $e->getMessage()]);
+        }
+    }
+} // ✅ TAMBAHKAN KURUNG KURAWAL INI DI BARIS PALING BAWAH

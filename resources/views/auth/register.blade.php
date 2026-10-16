@@ -11,7 +11,7 @@
     <div class="relative h-full w-full flex">
         
         <!-- ==================== LEFT PANEL: INFO ==================== -->
-        <div class="w-1/2 h-full flex flex-col justify-center items-center p-12 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 relative overflow-hidden">
+        <div class="hidden md:flex w-1/2 h-full flex-col justify-center items-center p-12 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 relative overflow-hidden">
             
             <div class="absolute inset-0 overflow-hidden pointer-events-none">
                 <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-3xl"></div>
@@ -19,8 +19,12 @@
 
             <div class="max-w-md relative z-10 text-center">
                 <div class="flex justify-center mb-6">
-                    <div class="w-24 h-24 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                        <img src="{{ asset('images/logo-jersic.png') }}" alt="Logo" class="w-full h-full object-contain">
+                    <div class="w-20 h-20 bg-gradient-br from-transparent-400 to-transparent-600 rounded-xl flex items-center justify-center shadow-lg shadow-transparent-500/30">
+                        <img src="{{ asset('images/icon-logo-jersic.webp') }}" alt="JERSIC.ID WMS" 
+                            class="w-full h-full object-contain"
+                            width="80"
+                            height="80"
+                            loading="eager">
                     </div>
                 </div>
 
@@ -90,14 +94,19 @@
         </div>
 
         <!-- ==================== RIGHT PANEL: REGISTER FORM (WITH SCROLL) ==================== -->
-        <div class="w-1/2 h-full relative overflow-hidden bg-slate-900">
+        <div class="w-full md:w-1/2 h-full relative overflow-hidden bg-slate-900">
             
             <div class="h-full overflow-y-auto p-12">
                 <div class="w-full max-w-md mx-auto pb-8">
                     <!-- Logo -->
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="w-10 h-10 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                            <img src="{{ asset('images/logo-jersic.png') }}" alt="Logo" class="w-full h-full object-contain">
+                        <div class="w-10 h-10 bg-gradient-to-br from-transparent-400 to-transparent-600 rounded-xl flex items-center justify-center shadow-lg shadow-transparent-500/30">
+                            <img src="{{ asset('images/icon-jersic.webp') }}" alt="JERSIC.ID" 
+                                 class="w-full h-full object-contain"
+                                 width="40"
+                                 height="40"
+                                 loading="eager"
+                                 fetchpriority="high">
                         </div>
                         <h1 class="text-xl font-bold text-white tracking-wider">JERSIC.ID<span class="text-cyan-400">-WMS</span></h1>
                     </div>
@@ -128,8 +137,8 @@
                                        class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 focus:outline-none transition-all"/>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-slate-300 mb-1">Email</label>
-                                <input type="email" name="email" value="{{ old('email') }}" required 
+                                <label for="email" class="block text-xs font-medium text-slate-300 mb-1">Email</label>
+                                <input type="email" name="email" id="email" value="{{ old('email') }}" required 
                                        placeholder="nama@jersic.id"
                                        class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 focus:outline-none transition-all"/>
                             </div>
@@ -180,7 +189,7 @@
                                     oninput="checkPasswordStrength(this.value)"
                                 />
                                 <button 
-                                    type="button"
+                                    type="button" id="btn-register-pwd" 
                                     onclick="togglePassword('register_password', this)"
                                     class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-cyan-400 transition-colors focus:outline-none"
                                 >
@@ -264,7 +273,7 @@
                                     oninput="checkPasswordMatch()"
                                 />
                                 <button 
-                                    type="button"
+                                    type="button" id="btn-register-pwd-cfm" 
                                     onclick="togglePassword('register_password_confirmation', this)"
                                     class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-cyan-400 transition-colors focus:outline-none"
                                 >
@@ -280,6 +289,18 @@
                         <button type="submit" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transform hover:scale-[1.02] transition-all duration-200">
                             Daftar Sekarang
                         </button>
+
+                        <!-- ✅ Link Login - Hanya muncul di Mobile -->
+                        <div class="md:hidden text-center mt-4 pt-4 border-t border-slate-800">
+                            <p class="text-sm text-slate-400 mb-2">Sudah punya akun?</p>
+                            <a href="{{ route('login') }}" 
+                               class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 transition-all shadow-lg hover:shadow-cyan-500/10">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                                </svg>
+                                <span>Masuk ke Akun</span>
+                            </a>
+                        </div>
                     </form>
                 </div>
             </div>

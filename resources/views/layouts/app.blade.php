@@ -7,10 +7,26 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name', 'JERSIC.ID WMS') }}</title>
 
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800" rel="stylesheet" />
+    <!-- Preconnect to font domains -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
 
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <!-- Load Google Fonts with display=swap (non-blocking) -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"></noscript>
+
+    <!-- Bunny.net fonts (non-blocking) -->
+    <link rel="preload" as="style" href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800">
+    <link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800" media="print" onload="this.media='all'">
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700,800">
+    </noscript>
+
+    @vite(['resources/css/app.css'])
+    <!-- Preload critical scripts -->
+    <link rel="modulepreload" href="{{ Vite::asset('resources/js/app.js') }}">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <style>
@@ -101,6 +117,10 @@
         this.currentTime = hours + ':' + minutes + ' WIB';
     }
 }">
+    <!-- Skip to main content link for keyboard users -->
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-white focus:rounded-lg">
+        Skip to main content
+    </a>
 
     <!-- ==================== LAYOUT CONTAINER (FLEXBOX) ==================== -->
     <div class="flex h-screen overflow-hidden">
@@ -113,11 +133,15 @@
             <!-- Logo & Toggle Button -->
             <div class="flex items-center justify-center px-4 py-4 border-b border-slate-800 flex-shrink-0">
                 <div class="flex items-center gap-3 w-full overflow-hidden">
-                    <button @click="sidebarOpen = !sidebarOpen"
+                    <button @click="sidebarOpen = !sidebarOpen" aria-label="Toggle sidebar navigation"
                         class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-800 transition-all duration-200 flex-shrink-0 group"
                         title="Toggle Sidebar">
-                        <img src="{{ asset('images/logo-jersic.png') }}" alt="logo"
-                            class="w-8 h-8 border-2 border-slate-700 bg-white rounded-full object-contain group-hover:scale-110 transition-transform duration-200">
+                        <img src="{{ asset('images/logo-jersic.png') }}" alt="JERSIC.ID Logo"
+                            class="w-8 h-8 border-2 border-slate-700 bg-white rounded-full object-contain group-hover:scale-110 transition-transform duration-200"
+                            width="32"
+                            height="32"
+                            loading="eager"
+                            fetchpriority="high">
                     </button>
 
                     <!-- Logo Text -->
@@ -133,7 +157,7 @@
             </div>
 
             <!-- Menu (Scrollable) -->
-            <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto sidebar-scroll">
+            <nav class="flex-1 px-3 py-3 space-y-1 overflow-y-auto sidebar-scroll">
                 @php
                     $user = auth()->user();
                     $role = $user->role;
@@ -490,7 +514,6 @@
 
         <!-- ==================== MAIN CONTENT AREA ==================== -->
         <div class="flex-1 flex flex-col overflow-hidden min-w-0">
-
             <!-- Header -->
             <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
                 <div class="flex items-center justify-between px-3 py-3">
@@ -712,7 +735,7 @@
             </header>
 
             <!-- Page Content (Scrollable) -->
-            <main class="flex-1 overflow-y-auto bg-slate-950 p-6">
+            <main id="main-content" class="flex-1 overflow-y-auto bg-slate-950 p-6">
                 @isset($slot)
                     {{ $slot }}
                 @else
@@ -721,6 +744,8 @@
             </main>
         </div>
     </div>
+    <!-- ✅ FIX: Load JS dengan defer di footer -->
+    @vite(['resources/js/app.js'])
 </body>
 
 </html>

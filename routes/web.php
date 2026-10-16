@@ -78,8 +78,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('suppliers')->group
 });
 
 // ==================== PURCHASE ORDER (OWNER & SUPERVISOR) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,SUBLIM,KONVEKSI'])
-    ->prefix('po')
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG'])
+    ->prefix('purchase-orders')
     ->name('po.')
     ->group(function () {
         Route::get('/', [PurchaseOrderController::class, 'index'])->name('index');
@@ -88,10 +88,10 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,SUBLIM,KONVEKSI'])
         Route::get('/{id}', [PurchaseOrderController::class, 'show'])->name('show');
         Route::get('/{id}/edit', [PurchaseOrderController::class, 'edit'])->name('edit');
         Route::put('/{id}', [PurchaseOrderController::class, 'update'])->name('update');
-        Route::patch('/{id}/approve', [PurchaseOrderController::class, 'approve'])->name('approve');
-        Route::patch('/{id}/reject', [PurchaseOrderController::class, 'reject'])->name('reject');
         Route::delete('/{id}', [PurchaseOrderController::class, 'destroy'])->name('destroy');
-        Route::post('/create-from-low-stock', [PurchaseOrderController::class, 'createFromLowStock'])->name('create-from-low-stock');
+        
+        // ✅ TAMBAHKAN INI: Route untuk update status
+        Route::patch('/{id}/status', [PurchaseOrderController::class, 'updateStatus'])->name('update-status');
     });
 
 // ==================== INBOUND (GUDANG) ====================
@@ -137,6 +137,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
         Route::post('/{sessionId}/items/{itemId}/pack', [PackingController::class, 'packItem'])->name('packing.pack');
         Route::post('/{id}/complete', [PackingController::class, 'complete'])->name('packing.complete');
         Route::delete('/{id}', [PackingController::class, 'destroy'])->name('packing.destroy');
+        Route::patch('/{id}/status', [PurchaseOrderController::class, 'updateStatus'])->name('po.update-status');
     });
 
 // ==================== TRANSFER STOK (GUDANG) ====================

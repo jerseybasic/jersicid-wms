@@ -2,6 +2,7 @@
 // IMPORT ALPINE.JS
 // ============================================
 import Alpine from 'alpinejs';
+import '../css/app.css';
 
 // ============================================
 // THEME MANAGER - Dark/Light Mode

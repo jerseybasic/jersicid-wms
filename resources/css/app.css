@@ -1,3 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles yang tidak bisa di-tailwind */
+@layer base {
+  body {
+    @apply font-sans antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 transition-colors;
+  }
+}
+
 /* Smooth sliding animation */
 .slide-in-left {
     animation: slideInLeft 0.6s cubic-bezier(0.4, 0, 0.2, 1);

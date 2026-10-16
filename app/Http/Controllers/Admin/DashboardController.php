@@ -6,14 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Models\StockMovement;
-use App\Models\Supplier;
-use App\Models\PurchaseOrder;
+use App\Models\InboundReceipt;
 use App\Models\Order;
-use App\Models\AuditTrail;
-use App\Models\WarehouseRack;
-use Illuminate\Http\Request;
+use App\Models\PickingSession;
+use App\Models\PackingSession;
+use App\Models\PurchaseOrder;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
@@ -138,86 +137,168 @@ class DashboardController extends Controller
 
     public function gudang()
     {
-        // ==================== STATS CARDS ====================
-
-        // Total Stok
+        $user = auth()->user();
+        
+        // 1. Total stok unit
         $totalStock = StockActive::sum('qty');
-
-        // Low Stock Count
-        $lowStockCount = MasterSku::select('master_skus.sku', 'master_skus.min_stock')
-            ->join('stock_actives', 'master_skus.sku', '=', 'stock_actives.sku')
-            ->where('master_skus.status', 'AKTIF')
-            ->whereRaw('stock_actives.qty <= master_skus.min_stock')
-            ->selectRaw('SUM(stock_actives.qty) as current_qty')
-            ->groupBy('master_skus.sku', 'master_skus.min_stock')
-            ->havingRaw('SUM(stock_actives.qty) <= master_skus.min_stock')
+        
+        // 2. Nilai stok (price × qty)
+        $stockValue = DB::table('stock_actives')
+            ->join('master_skus', 'stock_actives.sku', '=', 'master_skus.sku')
+            ->selectRaw('SUM(master_skus.price * stock_actives.qty) as total_value')
+            ->value('total_value') ?? 0;
+        
+        // 3. Low stock alert count
+        $lowStock = MasterSku::where('status', 'AKTIF')
+            ->whereRaw('min_stock > 0')
+            ->whereRaw('COALESCE((SELECT SUM(qty) FROM stock_actives WHERE stock_actives.sku = master_skus.sku), 0) <= min_stock')
             ->count();
-
-        // Inbound & Outbound Hari Ini
-        $todayInbound = StockMovement::where('type', 'INBOUND')
-            ->whereDate('created_at', today())
-            ->sum('qty');
-
-        $todayOutbound = StockMovement::where('type', 'OUTBOUND')
-            ->whereDate('created_at', today())
-            ->sum('qty');
-
-        // Picking & Packing Stats
-        $pendingPicking = \App\Models\PickingSession::where('status', 'PENDING')->count();
-        $pendingPacking = \App\Models\PackingSession::where('status', 'PENDING')->count();
-        $inProgressPicking = \App\Models\PickingSession::where('status', 'IN_PROGRESS')->count();
-        $inProgressPacking = \App\Models\PackingSession::where('status', 'IN_PROGRESS')->count();
-        $completedToday = \App\Models\PickingSession::where('status', 'COMPLETED')
-            ->whereDate('completed_at', today())->count()
-            + \App\Models\PackingSession::where('status', 'COMPLETED')
-            ->whereDate('completed_at', today())->count();
-
-        // ==================== PANEL DATA ====================
-
-        // Pending PO (Purchase Order siap diterima - status APPROVED)
-        $pendingPO = PurchaseOrder::whereIn('status', ['APPROVED', 'SENT'])->count();
-
-        // Pending Pick (Order yang butuh picking - status CONFIRMED)
-        $pendingPick = \App\Models\Order::where('status', 'CONFIRMED')->count();
-
-        // Pending Pack (Order yang butuh packing - status PICKING_COMPLETED)
-        $pendingPack = \App\Models\Order::where('status', 'PICKING_COMPLETED')->count();
-
-        // Low Stock Items (untuk panel alert)
-        $lowStockItems = MasterSku::select('master_skus.sku', 'master_skus.product_name', 'master_skus.min_stock')
-            ->join('stock_actives', 'master_skus.sku', '=', 'stock_actives.sku')
+        
+        // 4. Inbound hari ini
+        $inboundToday = $this->getInboundToday();
+        
+        // 5. Outbound hari ini
+        $outboundToday = $this->getOutboundToday();
+        
+        // 6-9. Session stats
+        $pickingPending = DB::table('picking_sessions')->where('status', 'PENDING')->count();
+        $packingPending = DB::table('packing_sessions')->where('status', 'PENDING')->count();
+        $inProgress = DB::table('picking_sessions')->where('status', 'IN_PROGRESS')->count() 
+                    + DB::table('packing_sessions')->where('status', 'IN_PROGRESS')->count();
+        $completedToday = DB::table('picking_sessions')->whereDate('completed_at', today())->count()
+                        + DB::table('packing_sessions')->whereDate('completed_at', today())->count();
+        
+        // 10. PO siap diterima
+        $poReady = DB::table('purchase_orders')->where('status', 'READY_FOR_PICKUP')->count();
+        
+        // 11. ✅ TAMBAH: Order perlu picking
+        $orderNeedPicking = DB::table('orders')->whereIn('status', ['CONFIRMED', 'PENDING'])->count();
+        
+        // 12. ✅ TAMBAH: Order perlu packing (status sudah picked, belum packed)
+        $orderNeedPacking = DB::table('orders')->whereIn('status', ['PICKED', 'PICKING'])->count();
+        
+        // 13. Low stock products (top 5) - untuk panel
+        $lowStockProducts = MasterSku::select('master_skus.*')
+            ->selectRaw('COALESCE((SELECT SUM(qty) FROM stock_actives WHERE stock_actives.sku = master_skus.sku), 0) as current_stock')
             ->where('master_skus.status', 'AKTIF')
-            ->whereRaw('stock_actives.qty <= master_skus.min_stock')
-            ->selectRaw('SUM(stock_actives.qty) as current_qty')
-            ->groupBy('master_skus.sku', 'master_skus.product_name', 'master_skus.min_stock')
-            ->havingRaw('SUM(stock_actives.qty) <= master_skus.min_stock')
-            ->orderBy('current_qty')
+            ->whereRaw('min_stock > 0')
+            ->whereRaw('COALESCE((SELECT SUM(qty) FROM stock_actives WHERE stock_actives.sku = master_skus.sku), 0) <= min_stock')
+            ->orderBy('current_stock')
             ->limit(5)
             ->get();
-
-        // Recent Movements (5 pergerakan terakhir)
-        $recentMovements = StockMovement::with(['masterSku:sku,product_name', 'user:id,name'])
+        
+        // 14. Pergerakan terakhir (pakai Eloquent agar relasi berfungsi)
+        $recentMovements = StockMovement::with(['user:id,name', 'masterSku:sku,product_name'])
             ->orderBy('created_at', 'desc')
-            ->limit(10)
+            ->limit(5)
             ->get();
-
-        // ==================== PASS TO VIEW ====================
-
+        
         return view('dashboard.gudang', compact(
             'totalStock',
-            'lowStockCount',
-            'todayInbound',
-            'todayOutbound',
-            'pendingPicking',
-            'pendingPacking',
-            'inProgressPicking',
-            'inProgressPacking',
+            'stockValue',
+            'lowStock',
+            'inboundToday',
+            'outboundToday',
+            'pickingPending',
+            'packingPending',
+            'inProgress',
             'completedToday',
-            'pendingPO',
-            'pendingPick',
-            'pendingPack',
-            'lowStockItems',
+            'poReady',           // ← untuk $poPending di view
+            'orderNeedPicking',  // ← untuk $pendingPick di view
+            'orderNeedPacking',  // ← untuk $pendingPack di view
+            'lowStockProducts',  // ← untuk $lowStockItems di view
             'recentMovements'
         ));
+    }
+
+    /**
+     * ✅ FIX: Hitung inbound hari ini - tanpa Schema facade
+     */
+    private function getInboundToday(): int
+    {
+        try {
+            // Coba kolom qty_received (paling umum di inbound_receipt_items)
+            $result = DB::table('inbound_receipts')
+                ->join('inbound_receipt_items', 'inbound_receipts.id', '=', 'inbound_receipt_items.inbound_receipt_id')
+                ->whereDate('inbound_receipts.created_at', today())
+                ->sum('inbound_receipt_items.qty_received');
+            
+            if ($result !== null) {
+                return (int) $result;
+            }
+        } catch (\Exception $e) {
+            // Kolom qty_received tidak ada, coba kolom lain
+        }
+
+        try {
+            // Fallback: coba received_qty
+            $result = DB::table('inbound_receipts')
+                ->join('inbound_receipt_items', 'inbound_receipts.id', '=', 'inbound_receipt_items.inbound_receipt_id')
+                ->whereDate('inbound_receipts.created_at', today())
+                ->sum('inbound_receipt_items.received_qty');
+            
+            if ($result !== null) {
+                return (int) $result;
+            }
+        } catch (\Exception $e) {
+            // Kolom received_qty tidak ada, coba kolom lain
+        }
+
+        try {
+            // Fallback terakhir: coba qty
+            $result = DB::table('inbound_receipts')
+                ->join('inbound_receipt_items', 'inbound_receipts.id', '=', 'inbound_receipt_items.inbound_receipt_id')
+                ->whereDate('inbound_receipts.created_at', today())
+                ->sum('inbound_receipt_items.qty');
+            
+            return (int) ($result ?? 0);
+        } catch (\Exception $e) {
+            \Log::warning('Failed to get inbound today: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * ✅ FIX: Hitung outbound hari ini - tanpa Schema facade
+     */
+    private function getOutboundToday(): int
+    {
+        try {
+            // Coba total_qty (paling umum di orders)
+            $result = DB::table('orders')
+                ->whereDate('created_at', today())
+                ->sum('total_qty');
+            
+            if ($result !== null) {
+                return (int) $result;
+            }
+        } catch (\Exception $e) {
+            // Kolom total_qty tidak ada, coba kolom lain
+        }
+
+        try {
+            // Fallback: coba total_quantity
+            $result = DB::table('orders')
+                ->whereDate('created_at', today())
+                ->sum('total_quantity');
+            
+            if ($result !== null) {
+                return (int) $result;
+            }
+        } catch (\Exception $e) {
+            // Kolom total_quantity tidak ada, coba kolom lain
+        }
+
+        try {
+            // Fallback terakhir: hitung jumlah order saja
+            $result = DB::table('orders')
+                ->whereDate('created_at', today())
+                ->count();
+            
+            return (int) $result;
+        } catch (\Exception $e) {
+            \Log::warning('Failed to get outbound today: ' . $e->getMessage());
+            return 0;
+        }
     }
 }

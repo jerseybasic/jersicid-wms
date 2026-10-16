@@ -8,4 +8,22 @@ export default defineConfig({
             refresh: true,
         }),
     ],
+    build: {
+        target: 'es2020', // ✅ Sudah bagus
+        manifest: true,
+        minify: 'terser', // ✅ Tambahkan ini
+        terserOptions: {
+            compress: {
+                drop_console: true, // ✅ Hapus console.log di production
+                drop_debugger: true,
+            },
+        },
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    vendor: ['alpinejs'], // ✅ Pisahkan vendor untuk caching lebih baik
+                },
+            },
+        },
+    },
 });

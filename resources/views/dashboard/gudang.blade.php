@@ -21,7 +21,7 @@
                     </svg>
                 </div>
                 <p class="text-xs text-slate-400 mb-0.5">Total Stok</p>
-                <p class="text-xl font-bold text-white">{{ number_format($totalStock) }}</p>
+                <p class="text-xl font-bold text-white">{{ number_format($totalStock ?? 0) }}</p>
                 <p class="text-[10px] text-slate-500 mt-0.5">Unit</p>
             </div>
 
@@ -34,8 +34,9 @@
                     </svg>
                 </div>
                 <p class="text-xs text-emerald-400 mb-0.5">Nilai Stok</p>
-                <p class="text-xl font-bold text-emerald-400">Rp {{ number_format($stockValue / 1000000, 1) }}M</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">IDR</p>
+                <p class="text-xl font-bold text-emerald-400">
+                    Rp {{ number_format(($stockValue ?? 0) / 1000000, 1) }}M
+                </p>
             </div>
 
             <!-- Low Stock -->
@@ -47,7 +48,7 @@
                     </svg>
                 </div>
                 <p class="text-xs text-red-400 mb-0.5">Low Stock</p>
-                <p class="text-xl font-bold text-red-400">{{ $lowStockCount }}</p>
+                <p class="text-xl font-bold text-red-400">{{ $lowStock ?? 0 }}</p>
                 <p class="text-[10px] text-slate-500 mt-0.5">Alert</p>
             </div>
 
@@ -60,63 +61,64 @@
                     </svg>
                 </div>
                 <p class="text-xs text-purple-400 mb-0.5">Inbound Hari Ini</p>
-                <p class="text-xl font-bold text-white">+{{ number_format($todayInbound) }}</p>
+                <p class="text-xl font-bold text-cyan-400">+{{ $inboundToday ?? 0 }}</p>
                 <p class="text-[10px] text-slate-500 mt-0.5">Unit</p>
             </div>
         </div>
 
         <!-- Stats Cards Row 2 -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Pending Picking -->
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                <div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center mb-3">
-                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <!-- Picking Pending -->
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+                <div class="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center mb-2">
+                    <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                 </div>
-                <p class="text-xs text-amber-400 mb-1">Picking Pending</p>
-                <p class="text-2xl font-bold text-white">{{ $pendingPicking }}</p>
-                <p class="text-xs text-slate-500 mt-1">Session</p>
+                <p class="text-xs text-amber-400 mb-0.5">Picking Pending</p>
+                <p class="text-xl font-bold text-white">{{ $pickingPending ?? 0 }}</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">Session</p>
             </div>
 
-            <!-- Pending Packing -->
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                <div class="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center mb-3">
-                    <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <!-- Packing Pending -->
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+                <div class="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center mb-2">
+                    <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
                 </div>
-                <p class="text-xs text-indigo-400 mb-1">Packing Pending</p>
-                <p class="text-2xl font-bold text-white">{{ $pendingPacking }}</p>
-                <p class="text-xs text-slate-500 mt-1">Session</p>
+                <p class="text-xs text-indigo-400 mb-0.5">Packing Pending</p>
+                {{-- ✅ FIX: Ganti $pickingPending → $packingPending --}}
+                <p class="text-xl font-bold text-white">{{ $packingPending ?? 0 }}</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">Session</p>
             </div>
 
             <!-- In Progress -->
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
-                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+                <div class="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center mb-2">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                 </div>
-                <p class="text-xs text-blue-400 mb-1">In Progress</p>
-                <p class="text-2xl font-bold text-white">{{ $inProgressPicking + $inProgressPacking }}</p>
-                <p class="text-xs text-slate-500 mt-1">Session</p>
+                <p class="text-xs text-blue-400 mb-0.5">In Progress</p>
+                <p class="text-xl font-bold text-white">{{ $inProgress ?? 0 }}</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">Session</p>
             </div>
 
             <!-- Completed Today -->
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                <div class="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center mb-3">
-                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+                <div class="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center mb-2">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                 </div>
-                <p class="text-xs text-emerald-400 mb-1">Selesai Hari Ini</p>
-                <p class="text-2xl font-bold text-white">{{ $completedToday }}</p>
-                <p class="text-xs text-slate-500 mt-1">Session</p>
+                <p class="text-xs text-emerald-400 mb-0.5">Selesai Hari Ini</p>
+                <p class="text-xl font-bold text-white">{{ $completedToday ?? 0 }}</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">Session</p>
             </div>
         </div>
 
@@ -124,16 +126,14 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
             <!-- Pending Tasks -->
-            <div
-                class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
+            <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
                 <h3 class="text-base font-semibold text-white mb-4">Tugas Menunggu</h3>
                 <div class="space-y-3">
                     <a href="{{ route('po.index') }}"
                         class="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:border-cyan-500/50 transition-colors">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">
-                                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
+                                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                 </svg>
@@ -143,15 +143,15 @@
                                 <p class="text-xs text-slate-400">Barang ready di supplier</p>
                             </div>
                         </div>
-                        <span class="text-lg font-bold text-amber-400">{{ $pendingPO }}</span>
+                        {{-- ✅ FIX: $poPending → $poReady --}}
+                        <span class="text-lg font-bold text-amber-400">{{ $poReady ?? 0 }}</span>
                     </a>
 
                     <a href="{{ route('gudang.picking') }}"
                         class="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:border-cyan-500/50 transition-colors">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                                <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
+                                <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                 </svg>
@@ -161,15 +161,15 @@
                                 <p class="text-xs text-slate-400">Ambil barang dari rak</p>
                             </div>
                         </div>
-                        <span class="text-lg font-bold text-purple-400">{{ $pendingPick }}</span>
+                        {{-- ✅ FIX: $pendingPick → $orderNeedPicking --}}
+                        <span class="text-lg font-bold text-purple-400">{{ $orderNeedPicking ?? 0 }}</span>
                     </a>
 
                     <a href="{{ route('gudang.packing') }}"
                         class="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:border-cyan-500/50 transition-colors">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
-                                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
+                                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                 </svg>
@@ -179,32 +179,32 @@
                                 <p class="text-xs text-slate-400">Kemas untuk pengiriman</p>
                             </div>
                         </div>
-                        <span class="text-lg font-bold text-cyan-400">{{ $pendingPack }}</span>
+                        {{-- ✅ FIX: $pendingPack → $orderNeedPacking --}}
+                        <span class="text-lg font-bold text-cyan-400">{{ $orderNeedPacking ?? 0 }}</span>
                     </a>
                 </div>
             </div>
 
             <!-- Low Stock Alerts -->
-            <div
-                class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
+            <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
                 <h3 class="text-base font-semibold text-white mb-4">Peringatan Stok Menipis</h3>
                 <div class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
-                    @forelse($lowStockItems as $item)
-                        <div
-                            class="flex items-center justify-between p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+                    {{-- ✅ FIX: $lowStockItems → $lowStockProducts --}}
+                    @forelse($lowStockProducts ?? [] as $item)
+                        <div class="flex items-center justify-between p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
                             <div class="min-w-0 flex-1">
                                 <p class="text-sm font-medium text-white font-mono truncate">{{ $item->sku }}</p>
                                 <p class="text-xs text-slate-400 truncate">{{ $item->product_name }}</p>
                             </div>
                             <div class="text-right ml-2">
-                                <p class="text-sm font-bold text-red-400">{{ $item->current_qty }}</p>
+                                {{-- ✅ FIX: current_qty → current_stock (computed column) --}}
+                                <p class="text-sm font-bold text-red-400">{{ $item->current_stock ?? 0 }}</p>
                                 <p class="text-[10px] text-slate-500">Min: {{ $item->min_stock }}</p>
                             </div>
                         </div>
                     @empty
                         <div class="text-center py-8">
-                            <svg class="w-12 h-12 text-emerald-400 mx-auto mb-2" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
+                            <svg class="w-12 h-12 text-emerald-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
@@ -215,16 +215,14 @@
             </div>
 
             <!-- Recent Movements -->
-            <div
-                class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
+            <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
                 <h3 class="text-base font-semibold text-white mb-4">Pergerakan Terakhir</h3>
                 <div class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
-                    @forelse($recentMovements as $movement)
-                        @php $isIn = $movement->type === 'INBOUND'; @endphp
+                    @forelse($recentMovements ?? [] as $movement)
+                        @php $isIn = in_array($movement->type, ['INBOUND', 'ADJUSTMENT_IN']); @endphp
                         <div class="flex items-center gap-3 p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg">
                             <div class="flex-shrink-0">
-                                <div
-                                    class="w-8 h-8 {{ $isIn ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400' }} rounded-lg flex items-center justify-center">
+                                <div class="w-8 h-8 {{ $isIn ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400' }} rounded-lg flex items-center justify-center">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="{{ $isIn ? 'M7 16V4m0 0L3 8m4-4l4 4' : 'M17 8V20m0 0l4-4m-4 4l-4-4' }}" />
@@ -233,10 +231,8 @@
                             </div>
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-mono text-white font-medium truncate">{{ $movement->sku }}</p>
-                                <p class="text-xs text-slate-400 truncate">{{ $movement->masterSku?->product_name }}
-                                </p>
-                                <p class="text-[10px] text-slate-500">{{ $movement->user?->name }} •
-                                    {{ $movement->created_at->diffForHumans() }}</p>
+                                <p class="text-xs text-slate-400 truncate">{{ $movement->masterSku?->product_name ?? '-' }}</p>
+                                <p class="text-[10px] text-slate-500">{{ $movement->user?->name ?? 'Sistem' }} • {{ $movement->created_at->diffForHumans() }}</p>
                             </div>
                             <div class="text-right">
                                 <span class="text-sm font-bold {{ $isIn ? 'text-emerald-400' : 'text-red-400' }}">

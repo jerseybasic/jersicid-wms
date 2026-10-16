@@ -6,24 +6,25 @@ use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvi
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Vite;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
     public function register(): void
     {
         //
     }
 
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
+        // ✅ FIX: Beritahu Laravel lokasi manifest plugin v2
+        Vite::useManifestFilename('.vite/manifest.json');
+        
+        URL::forceScheme('https');
+
         // ✅ FIX: Share notifications data ke semua view yang menggunakan app layout
         View::composer('layouts.app', function ($view) {
             $user = Auth::user();
