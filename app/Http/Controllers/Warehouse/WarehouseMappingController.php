@@ -226,7 +226,7 @@ class WarehouseMappingController extends Controller
                 'rack_id' => $rack->id,
                 'trace' => $e->getTraceAsString(),
             ]);
-            return back()->with('error', 'Gagal assign produk: ' . $e->getMessage());
+            return back()->with('error', 'Gagal assign produk: ' . safe_error_message($e));
         }
     }
 
@@ -261,7 +261,7 @@ class WarehouseMappingController extends Controller
 
             return back()->with('success', 'Produk berhasil dihapus dari rak ' . $rackCode);
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal menghapus produk: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menghapus produk: ' . safe_error_message($e));
         }
     }
 
@@ -309,7 +309,7 @@ class WarehouseMappingController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus produk: ' . $e->getMessage(),
+                'message' => 'Gagal menghapus produk: ' . safe_error_message($e),
             ], 500);
         }
     }

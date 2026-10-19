@@ -79,7 +79,7 @@ class BarcodeScannerController extends Controller
 
             return response()->json([
                 'valid' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -139,7 +139,7 @@ class BarcodeScannerController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -199,7 +199,7 @@ class BarcodeScannerController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -229,7 +229,7 @@ class BarcodeScannerController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -298,7 +298,7 @@ class BarcodeScannerController extends Controller
                         $processed++;
                     } catch (\Exception $e) {
                         $failed++;
-                        $errors[] = "{$item['barcode']}: " . $e->getMessage();
+                        $errors[] = "{$item['barcode']}: " . safe_error_message($e);
                         Log::error('Process Buffer Item Error: ' . $e->getMessage());
                     }
                 }
@@ -319,7 +319,7 @@ class BarcodeScannerController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -329,9 +329,10 @@ class BarcodeScannerController extends Controller
      */
     public function updateScan(Request $request, $id)
     {
-        try {
-            $scan = BarcodeScan::findOrFail($id);
+        $scan = BarcodeScan::findOrFail($id);
+        $this->authorizeScan($scan);
 
+        try {
             $validated = $request->validate([
                 'qty' => 'required|integer|min:1',
                 'bin_code' => 'nullable|string|max:50',
@@ -339,7 +340,17 @@ class BarcodeScannerController extends Controller
                 'notes' => 'nullable|string|max:500',
             ]);
 
+            $oldValues = $scan->only(array_keys($validated));
             $scan->update($validated);
+
+            AuditTrail::create([
+                'user_id' => auth()->id(),
+                'action' => 'UPDATE',
+                'module' => 'BARCODE_SCAN',
+                'old_values' => ['id' => $scan->id, 'sku' => $scan->sku] + $oldValues,
+                'new_values' => $validated,
+                'ip_address' => $request->ip(),
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -350,7 +361,7 @@ class BarcodeScannerController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -358,11 +369,22 @@ class BarcodeScannerController extends Controller
     /**
      * Delete scan record
      */
-    public function deleteScan($id)
+    public function deleteScan(Request $request, $id)
     {
+        $scan = BarcodeScan::findOrFail($id);
+        $this->authorizeScan($scan);
+
         try {
-            $scan = BarcodeScan::findOrFail($id);
+
             $scan->delete();
+
+            AuditTrail::create([
+                'user_id' => auth()->id(),
+                'action' => 'DELETE',
+                'module' => 'BARCODE_SCAN',
+                'old_values' => $scan->only(['id', 'sku', 'bin_code', 'qty', 'scan_type', 'user_id']),
+                'ip_address' => $request->ip(),
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -373,8 +395,20 @@ class BarcodeScannerController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
+        }
+    }
+
+    /**
+     * Staf hanya boleh mengubah scan miliknya sendiri; OWNER/SUPERVISOR boleh semua.
+     */
+    private function authorizeScan(BarcodeScan $scan): void
+    {
+        $user = auth()->user();
+
+        if (!in_array($user->role, ['OWNER', 'SUPERVISOR']) && $scan->user_id !== $user->id) {
+            abort(403, 'Anda hanya bisa mengubah data scan milik Anda sendiri.');
         }
     }
 

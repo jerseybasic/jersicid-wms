@@ -102,7 +102,7 @@ class PackingController extends Controller
             return redirect()->route('gudang.packing')
                 ->with('success', 'Packing session berhasil dibuat!');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal membuat packing session: ' . $e->getMessage());
+            return back()->with('error', 'Gagal membuat packing session: ' . safe_error_message($e));
         }
     }
 
@@ -170,7 +170,7 @@ class PackingController extends Controller
 
             return back()->with('success', 'Item berhasil dipacking!');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal packing item: ' . $e->getMessage());
+            return back()->with('error', 'Gagal packing item: ' . safe_error_message($e));
         }
     }
 
@@ -213,7 +213,7 @@ class PackingController extends Controller
 
             return back()->with('success', 'Packing selesai! Order siap dikirim.');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal menyelesaikan packing: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menyelesaikan packing: ' . safe_error_message($e));
         }
     }
 

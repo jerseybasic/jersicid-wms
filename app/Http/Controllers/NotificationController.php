@@ -7,6 +7,7 @@ use App\Models\PurchaseOrder;
 use App\Models\StockActive;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class NotificationController extends Controller
@@ -14,6 +15,16 @@ class NotificationController extends Controller
     public function index()
     {
         $user = auth()->user();
+
+        // Isi notifikasi hanya bergantung pada role, jadi di-cache per role
+        // agar polling dari banyak tab/staf tidak membebani database.
+        $payload = Cache::remember('notifications.role.' . $user->role, 60, fn () => $this->build($user));
+
+        return response()->json($payload);
+    }
+
+    private function build($user): array
+    {
         $notifications = [];
 
         // 1. Low Stock Alerts (Priority: HIGH)
@@ -101,7 +112,7 @@ class NotificationController extends Controller
             return strtotime($b['timestamp']) - strtotime($a['timestamp']);
         });
 
-        return response()->json([
+        return [
             'notifications' => $notifications,
             'unread_count' => count($notifications),
             'summary' => [
@@ -109,6 +120,6 @@ class NotificationController extends Controller
                 'info' => count(array_filter($notifications, fn($n) => $n['type'] === 'info')),
                 'success' => count(array_filter($notifications, fn($n) => $n['type'] === 'success')),
             ]
-        ]);
+        ];
     }
 }

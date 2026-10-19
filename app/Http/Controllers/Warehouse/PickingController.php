@@ -110,7 +110,7 @@ class PickingController extends Controller
             return redirect()->route('gudang.picking')
                 ->with('success', 'Picking session berhasil dibuat!');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal membuat picking session: ' . $e->getMessage());
+            return back()->with('error', 'Gagal membuat picking session: ' . safe_error_message($e));
         }
     }
 
@@ -212,7 +212,7 @@ class PickingController extends Controller
 
             return back()->with('success', 'Item berhasil dipicking!');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal picking item: ' . $e->getMessage());
+            return back()->with('error', 'Gagal picking item: ' . safe_error_message($e));
         }
     }
 

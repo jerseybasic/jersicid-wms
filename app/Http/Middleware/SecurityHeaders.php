@@ -14,9 +14,17 @@ class SecurityHeaders
         // Security headers untuk production
         $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
-        $response->headers->set('X-XSS-Protection', '1; mode=block');
+        // Header lama ini sudah usang dan bisa memicu bug di browser modern
+        $response->headers->set('X-XSS-Protection', '0');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+
+        $response->headers->remove('X-Powered-By');
+
+        // Halaman yang butuh login jangan disimpan di cache browser/proxy
+        if ($request->user()) {
+            $response->headers->set('Cache-Control', 'no-store, private');
+        }
 
         // HSTS untuk HTTPS
         if ($request->secure()) {

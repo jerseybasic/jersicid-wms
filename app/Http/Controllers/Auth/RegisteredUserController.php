@@ -71,7 +71,7 @@ class RegisteredUserController extends Controller
 
             return back()
                 ->withInput()
-                ->with('register_error', 'Terjadi kesalahan sistem: ' . $e->getMessage());
+                ->with('register_error', 'Terjadi kesalahan sistem: ' . safe_error_message($e));
         }
     }
 }

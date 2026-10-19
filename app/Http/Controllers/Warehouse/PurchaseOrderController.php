@@ -162,7 +162,7 @@ class PurchaseOrderController extends Controller
             return redirect()->route('po.index')
                 ->with('success', 'Purchase Order berhasil dibuat!');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal membuat PO: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Gagal membuat PO: ' . safe_error_message($e))->withInput();
         }
     }
 
@@ -247,7 +247,7 @@ class PurchaseOrderController extends Controller
             return redirect()->route('po.show', $po)
                 ->with('success', 'Purchase Order berhasil diupdate!');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal update PO: ' . $e->getMessage())->withInput();
+            return back()->with('error', 'Gagal update PO: ' . safe_error_message($e))->withInput();
         }
     }
 
@@ -325,17 +325,17 @@ class PurchaseOrderController extends Controller
             DB::transaction(function () use ($validated, $po, $user) {
                 foreach ($validated['items'] as $item) {
                     if ($item['received_qty'] > 0) {
-                        StockActive::updateOrCreate(
+                        $stock = StockActive::lockForUpdate()->firstOrCreate(
                             [
                                 'sku' => $item['sku'],
                                 'bin_code' => $item['bin_code'],
                             ],
-                            [
-                                'qty' => DB::raw('qty + ' . $item['received_qty']),
-                                'last_movement_at' => now(),
-                                'received_at' => now(),
-                            ]
+                            ['qty' => 0]
                         );
+                        $stock->increment('qty', (int) $item['received_qty'], [
+                            'last_movement_at' => now(),
+                            'received_at' => now(),
+                        ]);
 
                         StockMovement::create([
                             'id' => Str::uuid(),
@@ -361,7 +361,7 @@ class PurchaseOrderController extends Controller
             return redirect()->route('po.show', $po)
                 ->with('success', "PO {$po->po_number} berhasil diterima!");
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal menerima PO: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menerima PO: ' . safe_error_message($e));
         }
     }
 
@@ -472,7 +472,7 @@ class PurchaseOrderController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal membuat PO: ' . $e->getMessage(),
+                'message' => 'Gagal membuat PO: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -550,7 +550,7 @@ class PurchaseOrderController extends Controller
             );
 
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal update status: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal update status: ' . safe_error_message($e)]);
         }
     }
 } // ✅ TAMBAHKAN KURUNG KURAWAL INI DI BARIS PALING BAWAH

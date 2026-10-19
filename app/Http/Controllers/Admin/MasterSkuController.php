@@ -346,7 +346,7 @@ class MasterSkuController extends Controller
             });
             return redirect()->route('master-skus.index')->with('success', 'SKU berhasil ditambahkan!');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal menambah SKU: ' . $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => 'Gagal menambah SKU: ' . safe_error_message($e)])->withInput();
         }
     }
 
@@ -388,7 +388,7 @@ class MasterSkuController extends Controller
             });
             return redirect()->route('master-skus.index')->with('success', 'SKU berhasil diupdate!');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal mengupdate SKU: ' . $e->getMessage()])->withInput();
+            return back()->withErrors(['error' => 'Gagal mengupdate SKU: ' . safe_error_message($e)])->withInput();
         }
     }
 
@@ -401,7 +401,7 @@ class MasterSkuController extends Controller
             });
             return back()->with('success', 'SKU berhasil dihapus!');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal menghapus SKU: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal menghapus SKU: ' . safe_error_message($e)]);
         }
     }
 
@@ -509,7 +509,7 @@ class MasterSkuController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return back()->withErrors(['error' => 'Gagal import: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal import: ' . safe_error_message($e)]);
         }
     }
 
@@ -522,7 +522,7 @@ class MasterSkuController extends Controller
             });
             return back()->with('success', 'Semua data Master SKU dan stok berhasil dihapus! Silakan import ulang.');
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal mereset data: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal mereset data: ' . safe_error_message($e)]);
         }
     }
 }

@@ -95,9 +95,12 @@
             </h3>
             <p class="text-sm text-slate-400 mb-4">Tindakan di bawah ini tidak dapat dibatalkan. Harap berhati-hati.</p>
             <div class="flex gap-3">
-                <button onclick="if(confirm('Yakin ingin clear cache?')) window.location.href='{{ route('settings.clear-cache') }}'" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-lg border border-slate-700 transition-all">
-                    Clear Cache
-                </button>
+                <form method="POST" action="{{ route('settings.clear-cache') }}" onsubmit="return confirm('Yakin ingin clear cache?')">
+                    @csrf
+                    <button type="submit" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-lg border border-slate-700 transition-all">
+                        Clear Cache
+                    </button>
+                </form>
             </div>
         </div>
     </div>

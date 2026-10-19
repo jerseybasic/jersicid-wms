@@ -74,7 +74,7 @@ class ApprovalController extends Controller
             return redirect()->route('approvals.index')->with('success', 'Approval berhasil disetujui.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors(['error' => 'Gagal memproses approval: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal memproses approval: ' . safe_error_message($e)]);
         }
     }
 
@@ -102,7 +102,7 @@ class ApprovalController extends Controller
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors(['error' => 'Gagal menolak approval: ' . $e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal menolak approval: ' . safe_error_message($e)]);
         }
 
         return redirect()->route('approvals.index')->with('success', 'Approval ditolak.');
