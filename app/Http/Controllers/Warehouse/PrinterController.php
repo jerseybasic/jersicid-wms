@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Warehouse;
 
+use App\Rules\LanPrinterIp;
 use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
 use App\Models\PrinterTemplate;
@@ -61,7 +62,7 @@ class PrinterController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -125,7 +126,7 @@ class PrinterController extends Controller
         } catch (\Exception $e) {
             Log::error('Download PDF Error: ' . $e->getMessage());
 
-            return back()->with('error', 'Gagal generate PDF: ' . $e->getMessage());
+            return back()->with('error', 'Gagal generate PDF: ' . safe_error_message($e));
         }
     }
 
@@ -138,7 +139,7 @@ class PrinterController extends Controller
             $validated = $request->validate([
                 'sku' => 'required|exists:master_skus,sku',
                 'qty' => 'required|integer|min:1',
-                'printer_ip' => 'nullable|string',
+                'printer_ip' => ['nullable', 'string', new LanPrinterIp()],
             ]);
 
             $sku = MasterSku::where('sku', $validated['sku'])->firstOrFail();
@@ -161,7 +162,7 @@ class PrinterController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -191,7 +192,7 @@ class PrinterController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -205,7 +206,7 @@ class PrinterController extends Controller
                 'phone' => 'nullable|string',
                 'courier' => 'nullable|string',
                 'tracking_number' => 'required|string',
-                'printer_ip' => 'nullable|string',
+                'printer_ip' => ['nullable', 'string', new LanPrinterIp()],
             ]);
 
             $zpl = $this->printerService->generateShippingLabel($validated);
@@ -228,7 +229,7 @@ class PrinterController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -263,7 +264,7 @@ class PrinterController extends Controller
         } catch (\Exception $e) {
             Log::error('Save Template Error: ' . $e->getMessage());
 
-            return back()->with('error', 'Gagal menyimpan template: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menyimpan template: ' . safe_error_message($e));
         }
     }
 
@@ -291,7 +292,7 @@ class PrinterController extends Controller
         } catch (\Exception $e) {
             Log::error('Update Template Error: ' . $e->getMessage());
 
-            return back()->with('error', 'Gagal update template: ' . $e->getMessage());
+            return back()->with('error', 'Gagal update template: ' . safe_error_message($e));
         }
     }
 
@@ -313,7 +314,7 @@ class PrinterController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }
@@ -322,8 +323,8 @@ class PrinterController extends Controller
     {
         try {
             $validated = $request->validate([
-                'printer_ip' => 'required|string',
-                'port' => 'nullable|integer|between:1,65535',
+                'printer_ip' => ['required', 'string', new LanPrinterIp()],
+                'port' => 'nullable|integer|between:9100,9109',
             ]);
 
             $ip = $validated['printer_ip'];
@@ -352,7 +353,7 @@ class PrinterController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error: ' . $e->getMessage(),
+                'message' => 'Error: ' . safe_error_message($e),
             ], 500);
         }
     }

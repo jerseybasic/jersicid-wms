@@ -27,7 +27,6 @@
     @vite(['resources/css/app.css'])
     <!-- Preload critical scripts -->
     <link rel="modulepreload" href="{{ Vite::asset('resources/js/app.js') }}">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <style>
         [x-cloak] {
@@ -543,7 +542,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                 </svg>
-                                @if (isset($unreadNotifications) && $unreadNotifications > 0)
+                                @if (isset($unreadNotifications) && $unreadNotifications > 0 && Route::has('notifications.mark-all-read'))
                                     <span
                                         class="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-red-500 to-pink-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-slate-900 shadow-lg shadow-red-500/50 animate-pulse">
                                         {{ $unreadNotifications }}
@@ -638,7 +637,7 @@
                                                 d="M9 5l7 7-7 7" />
                                         </svg>
                                     </a>
-                                    @if (isset($unreadNotifications) && $unreadNotifications > 0)
+                                    @if (isset($unreadNotifications) && $unreadNotifications > 0 && Route::has('notifications.mark-all-read'))
                                         <form method="POST" action="{{ route('notifications.mark-all-read') }}">
                                             @csrf
                                             <button type="submit"

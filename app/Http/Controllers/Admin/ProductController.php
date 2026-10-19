@@ -172,7 +172,7 @@ class ProductController extends Controller
         } catch (\Exception $e) {
             Log::error('Import error: '.$e->getMessage());
 
-            return back()->with('error', 'Terjadi kesalahan: '.$e->getMessage());
+            return back()->with('error', 'Terjadi kesalahan: '.safe_error_message($e));
         }
     }
 }

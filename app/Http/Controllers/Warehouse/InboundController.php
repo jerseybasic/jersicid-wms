@@ -177,7 +177,7 @@ class InboundController extends Controller
         } catch (\Exception $e) {
             return back()
                 ->withInput()
-                ->with('error', 'Gagal memproses inbound: ' . $e->getMessage());
+                ->with('error', 'Gagal memproses inbound: ' . safe_error_message($e));
         }
     }
 

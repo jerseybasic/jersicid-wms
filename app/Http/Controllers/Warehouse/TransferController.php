@@ -153,7 +153,7 @@ class TransferController extends Controller
 
             return back()->with('success', "Berhasil memindahkan {$validated['qty']} unit dari {$validated['bin_from']} ke {$validated['bin_to']}!");
         } catch (\Exception $e) {
-            return back()->withInput()->with('error', 'Gagal transfer: ' . $e->getMessage());
+            return back()->withInput()->with('error', 'Gagal transfer: ' . safe_error_message($e));
         }
     }
 }

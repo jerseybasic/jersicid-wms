@@ -81,7 +81,7 @@ class StockOpnameController extends Controller
             return redirect()->route('gudang.opname')
                 ->with('success', 'Stock Opname berhasil dibuat! Silakan mulai penghitungan.');
         } catch (\Exception $e) {
-            return back()->withInput()->with('error', 'Gagal membuat Stock Opname: ' . $e->getMessage());
+            return back()->withInput()->with('error', 'Gagal membuat Stock Opname: ' . safe_error_message($e));
         }
     }
 
@@ -131,7 +131,7 @@ class StockOpnameController extends Controller
             });
             return back()->with('success', 'Data stok fisik berhasil disimpan sementara.');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal menyimpan data: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menyimpan data: ' . safe_error_message($e));
         }
     }
 
@@ -194,7 +194,7 @@ class StockOpnameController extends Controller
 
             return back()->with('success', 'Stock Opname Selesai! Stok sistem telah disesuaikan otomatis.');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal menyelesaikan opname: ' . $e->getMessage());
+            return back()->with('error', 'Gagal menyelesaikan opname: ' . safe_error_message($e));
         }
     }
 

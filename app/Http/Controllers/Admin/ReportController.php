@@ -150,7 +150,7 @@ class ReportController extends Controller
             }
             return back()->with('error', 'Gagal import: ' . $errorMsg);
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal import: ' . $e->getMessage());
+            return back()->with('error', 'Gagal import: ' . safe_error_message($e));
         }
     }
 

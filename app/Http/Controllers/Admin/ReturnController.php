@@ -89,7 +89,7 @@ class ReturnController extends Controller
             return redirect()->route('returns.index')->with('success', 'Permintaan retur berhasil dibuat! Menunggu inspeksi QC.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => safe_error_message($e)]);
         }
     }
 
@@ -161,7 +161,7 @@ class ReturnController extends Controller
             return redirect()->route('returns.index')->with('success', 'Inspeksi QC selesai dan stok telah disesuaikan.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => safe_error_message($e)]);
         }
     }
 }

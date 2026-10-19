@@ -33,10 +33,10 @@ Route::get('/', function () {
 });
 
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
-Route::post('/login', [LoginController::class, 'login']);
+Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:10,1');
 
 Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
-Route::post('/register', [RegisterController::class, 'register']);
+Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:5,10');
 
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
@@ -63,7 +63,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
         Route::get('/article/{productName}/{version}/skus', [MasterSkuController::class, 'getArticleSkus'])->name('master-skus.article-skus');
         Route::get('/export', [MasterSkuController::class, 'export'])->name('export');
         Route::post('/import', [MasterSkuController::class, 'import'])->name('import');
-        Route::post('/reset', [MasterSkuController::class, 'resetData'])->name('reset');
+        // Reset menghapus seluruh Master SKU + stok, jadi hanya OWNER
+        Route::post('/reset', [MasterSkuController::class, 'resetData'])->middleware('role:OWNER')->name('reset');
     });
 
 // ==================== SUPPLIER (OWNER & SUPERVISOR) ====================
@@ -226,7 +227,7 @@ Route::middleware(['auth', 'role:OWNER'])->prefix('settings')->name('settings.')
     Route::get('/', [SettingsController::class, 'index'])->name('index');
     Route::get('/profile', [SettingsController::class, 'profile'])->name('update-profile');
     Route::put('/profile', [SettingsController::class, 'updateProfile'])->name('profile.update');
-    Route::get('/clear-cache', function () {
+    Route::post('/clear-cache', function () {
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
         \Illuminate\Support\Facades\Artisan::call('view:clear');
         \Illuminate\Support\Facades\Artisan::call('config:clear');

@@ -57,9 +57,10 @@ class RegisterController extends Controller
             'password' => Hash::make($request->password),
             'role' => $request->role,
             'workspace_default' => $request->workspace_default,
-            'status' => 'AKTIF',
+            // Akun baru menunggu aktivasi OWNER sebelum bisa login
+            'status' => 'NONAKTIF',
         ]);
 
-        return redirect()->route('login')->with('success', 'Akun berhasil dibuat! Silakan login dengan akun baru Anda.');
+        return redirect()->route('login')->with('success', 'Akun berhasil dibuat dan menunggu aktivasi oleh OWNER. Hubungi OWNER agar akun Anda diaktifkan.');
     }
 }

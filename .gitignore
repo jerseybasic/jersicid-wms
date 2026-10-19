@@ -22,3 +22,9 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Dump database & installer jangan di-commit (berisi data user/hash password)
+*.sql
+*.sql.gz
+*.deb
+/storage/app/backups

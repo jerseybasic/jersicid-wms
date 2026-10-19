@@ -10,7 +10,6 @@ import '../css/app.css';
 class ThemeManager {
     constructor() {
         this.theme = localStorage.getItem('theme') || 'dark';
-        console.log('🎨 ThemeManager initialized with theme:', this.theme);
     }
 
     init() {
@@ -20,7 +19,6 @@ class ThemeManager {
                 this.applyTheme(e.newValue || 'dark');
             }
         });
-        console.log('✅ Theme.js loaded successfully');
     }
 
     applyTheme(theme) {
@@ -36,7 +34,6 @@ class ThemeManager {
         this.theme = theme;
         localStorage.setItem('theme', theme);
         this.updateToggleIcon(theme);
-        console.log('🎨 Theme changed to:', theme);
     }
 
     toggle() {
@@ -244,11 +241,6 @@ themeManagerInstance.init();
 
 // Start Alpine
 Alpine.start();
-
-console.log('✅ Alpine.js loaded:', typeof window.Alpine);
-console.log('🔧 layoutManager:', typeof window.layoutManager);
-console.log('🔧 themeManager:', typeof window.themeManager);
-console.log('🔧 toggleTheme:', typeof window.toggleTheme);
 
 // ============================================
 // AUTO-UPPERCASE UNTUK INPUT SKU

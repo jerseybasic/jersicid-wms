@@ -201,7 +201,7 @@ class StockRequestController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return back()->withErrors(['error' => 'Gagal update status: '.$e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal update status: '.safe_error_message($e)]);
         }
     }
 

@@ -98,7 +98,7 @@ class OutboundController extends Controller
 
             return redirect()->route('outbound.index')->with('success', 'Order berhasil dibuat!');
         } catch (\Exception $e) {
-            return back()->withInput()->with('error', 'Gagal membuat order: ' . $e->getMessage());
+            return back()->withInput()->with('error', 'Gagal membuat order: ' . safe_error_message($e));
         }
     }
 

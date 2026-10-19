@@ -67,3 +67,27 @@ if (!function_exists('product_image')) {
         return asset('storage/' . $imagePath);
     }
 }
+
+if (!function_exists('safe_error_message')) {
+    /**
+     * Pesan error yang aman ditampilkan ke user. Pesan bisnis (mis. "Stok tidak cukup")
+     * diteruskan apa adanya, sedangkan error database/PHP disembunyikan karena bisa
+     * membocorkan struktur tabel, query, atau path server.
+     */
+    function safe_error_message(\Throwable $e): string
+    {
+        $isInternal = $e instanceof \Illuminate\Database\QueryException
+            || $e instanceof \PDOException
+            || $e instanceof \ErrorException
+            || $e instanceof \Error
+            || str_contains($e->getMessage(), 'SQLSTATE');
+
+        if ($isInternal) {
+            report($e);
+
+            return 'Terjadi kesalahan sistem. Silakan coba lagi atau hubungi admin.';
+        }
+
+        return $e->getMessage();
+    }
+}

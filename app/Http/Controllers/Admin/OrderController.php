@@ -157,7 +157,7 @@ class OrderController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return back()->withErrors(['error' => 'Gagal membuat order: '.$e->getMessage()])->withInput();
+            return back()->withErrors(['error' => 'Gagal membuat order: '.safe_error_message($e)])->withInput();
         }
     }
 
@@ -483,7 +483,7 @@ class OrderController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
 
-            return back()->withErrors(['error' => 'Gagal membatalkan order: '.$e->getMessage()]);
+            return back()->withErrors(['error' => 'Gagal membatalkan order: '.safe_error_message($e)]);
         }
     }
 

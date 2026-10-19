@@ -70,7 +70,7 @@ class PickingListController extends Controller
             return redirect()->route('picking-lists.index')->with('success', 'Picking List berhasil dibuat!');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors(['error' => $e->getMessage()]);
+            return back()->withErrors(['error' => safe_error_message($e)]);
         }
     }
 
