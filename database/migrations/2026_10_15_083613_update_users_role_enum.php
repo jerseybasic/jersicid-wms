@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -11,11 +12,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Hapus role lama, tambah role baru
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('OWNER', 'SUPERVISOR', 'ADMIN_GUDANG', 'STAFF_GUDANG') NOT NULL");
-        
-        // Update user yang sebelumnya SUBLIM/KONVEKSI menjadi STAFF_GUDANG atau hapus (opsional)
+        // Pindahkan user SUBLIM/KONVEKSI ke STAFF_GUDANG dulu, baru persempit enum
         DB::table('users')->whereIn('role', ['SUBLIM', 'KONVEKSI'])->update(['role' => 'STAFF_GUDANG']);
+
+        // Hapus role lama, tambah role baru (Schema builder agar jalan di MySQL & SQLite)
+        Schema::table('users', function (Blueprint $table) {
+            $table->enum('role', ['OWNER', 'SUPERVISOR', 'ADMIN_GUDANG', 'STAFF_GUDANG'])->default('STAFF_GUDANG')->change();
+        });
     }
 
     /**

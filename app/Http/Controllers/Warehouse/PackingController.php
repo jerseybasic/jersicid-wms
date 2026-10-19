@@ -39,8 +39,8 @@ class PackingController extends Controller
 
     public function create()
     {
-        // Ambil order yang sudah selesai picking dan belum ada packing session
-        $availableOrders = Order::where('status', 'PICKING_COMPLETED')
+        // Order yang picking-nya sudah selesai (status PACKING) dan belum punya sesi packing
+        $availableOrders = Order::where('status', 'PACKING')
             ->whereDoesntHave('packingSession')
             ->with(['items', 'pickingSession'])
             ->orderBy('created_at', 'asc')
@@ -60,15 +60,18 @@ class PackingController extends Controller
         try {
             DB::transaction(function () use ($validated, $request) {
                 $user = auth()->user();
-                $order = Order::with('pickingSession')->findOrFail($validated['order_id']);
+                $order = Order::with('pickingSession.items')->lockForUpdate()->findOrFail($validated['order_id']);
+                if ($order->status !== 'PACKING' || $order->packingSession()->exists()) {
+                    throw new \RuntimeException('Order harus sudah selesai picking dan belum punya sesi packing.');
+                }
 
                 $session = PackingSession::create([
                     'order_id' => $validated['order_id'],
                     'picking_session_id' => $order->pickingSession?->id,
                     'user_id' => $user->id,
                     'status' => 'PENDING',
-                    'courier' => $validated['courier'],
-                    'notes' => $validated['notes'],
+                    'courier' => $validated['courier'] ?? null,
+                    'notes' => $validated['notes'] ?? null,
                 ]);
 
                 // Ambil items dari picking session
@@ -84,8 +87,6 @@ class PackingController extends Controller
                         ]);
                     }
                 }
-
-                $order->update(['status' => 'PACKING']);
 
                 AuditTrail::create([
                     'user_id' => $user->id,
@@ -146,17 +147,25 @@ class PackingController extends Controller
         ]);
 
         try {
-            DB::transaction(function () use ($sessionId, $itemId, $validated, $request) {
-                $item = PackingSessionItem::findOrFail($itemId);
+            DB::transaction(function () use ($sessionId, $itemId, $validated) {
+                $session = PackingSession::lockForUpdate()->findOrFail($sessionId);
+                $item = $session->items()->findOrFail($itemId);
                 $user = auth()->user();
 
+                if ($session->status !== 'IN_PROGRESS') {
+                    throw new \RuntimeException('Mulai sesi packing dulu sebelum mengemas barang.');
+                }
+
+                $qtyPacked = min((int) $validated['qty_packed'], $item->qty_ordered);
+
                 $item->update([
-                    'qty_packed' => $validated['qty_packed'],
-                    'status' => $validated['qty_packed'] >= $item->qty_ordered ? 'COMPLETED' : 'PARTIAL',
+                    'qty_packed' => $qtyPacked,
+                    'status' => $qtyPacked >= $item->qty_ordered ? 'COMPLETED' : 'PARTIAL',
                 ]);
 
-                $session = PackingSession::findOrFail($sessionId);
-                $allPacked = $session->items()->where('qty_packed', '<', DB::raw('qty_ordered'))->count() === 0;
+                $item->orderItem?->update(['qty_packed' => $qtyPacked]);
+
+                $allPacked = $session->items()->whereColumn('qty_packed', '<', 'qty_ordered')->doesntExist();
 
                 if ($allPacked) {
                     $session->update([
@@ -164,7 +173,13 @@ class PackingController extends Controller
                         'completed_at' => now(),
                     ]);
 
-                    $session->order->update(['status' => 'PACKING_COMPLETED']);
+                    // Semua barang sudah dikemas: order siap dikirim (resi diisi di Outbound)
+                    $session->order->update([
+                        'status' => 'READY_TO_SHIP',
+                        'packed_by' => $user->id,
+                        'packed_at' => now(),
+                        'courier' => $session->order->courier ?? $session->courier,
+                    ]);
                 }
             });
 

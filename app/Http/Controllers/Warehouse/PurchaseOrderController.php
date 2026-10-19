@@ -3,16 +3,11 @@
 namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditTrail;
+use App\Models\MasterSku;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
-use App\Models\MasterSku;
-use App\Models\Supplier; // ✅ TAMBAHKAN BARIS INI
-use App\Models\SystemSetting;
-use App\Models\User;
-use App\Notifications\POStatusUpdated;
-use App\Models\StockActive;
-use App\Models\StockMovement;
-use App\Models\AuditTrail; // ✅ Pastikan ini juga ada untuk method updateStatus
+use App\Models\Supplier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -20,537 +15,266 @@ use Illuminate\Support\Str;
 
 class PurchaseOrderController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+    /** Role yang boleh membuat, mengubah, menyetujui, dan membatalkan PO */
+    private const MANAGER_ROLES = ['OWNER', 'SUPERVISOR'];
+
     public function index(Request $request)
     {
-        $user = Auth::user();
+        $query = PurchaseOrder::with('items');
 
-        $query = PurchaseOrder::with(['supplier', 'user', 'items.masterSku']);
-
-        // Filter berdasarkan Role
-        if (in_array($user->role, ['SUBLIM', 'KONVEKSI'])) {
-            $query->where('workspace', $user->workspace_default ?? 'PO')
-                ->whereIn('status', ['DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION']);
-        }
-
-        // Filter Search
         if ($request->filled('search')) {
             $query->where('po_number', 'like', '%' . $request->search . '%');
         }
 
-        // Filter Status
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        // Filter Supplier
         if ($request->filled('supplier_id')) {
             $query->where('supplier_id', $request->supplier_id);
         }
 
-        $purchaseOrders = $query->orderBy('created_at', 'desc')->paginate(15);
-
-        // ==================== STATS ====================
-        $baseQuery = PurchaseOrder::query();
-
-        // Jika role SUBLIM/KONVEKSI, filter stats juga
-        if (in_array($user->role, ['SUBLIM', 'KONVEKSI'])) {
-            $baseQuery->where('workspace', $user->workspace_default ?? 'PO');
-        }
+        $purchaseOrders = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
 
         $stats = [
-            'total' => $baseQuery->count(),
-            'pending' => $baseQuery->clone()->whereIn('status', ['DRAFT', 'PENDING'])->count(),
-            'approved' => $baseQuery->clone()->where('status', 'APPROVED')->count(),
-            'in_production' => $baseQuery->clone()->where('status', 'IN_PRODUCTION')->count(),
+            'total' => PurchaseOrder::count(),
+            'pending' => PurchaseOrder::whereIn('status', ['DRAFT', 'PENDING'])->count(),
+            'approved' => PurchaseOrder::where('status', 'APPROVED')->count(),
+            'in_production' => PurchaseOrder::where('status', 'IN_PRODUCTION')->count(),
         ];
 
-        // ==================== STATUS OPTIONS ====================
-        $statusOptions = ['DRAFT', 'PENDING', 'APPROVED', 'SENT', 'RECEIVED', 'IN_PRODUCTION', 'CANCELLED'];
+        $statusOptions = PurchaseOrder::STATUS_LABELS;
+        unset($statusOptions['READY']);
 
-        // ==================== SUPPLIERS ====================
         $suppliers = Supplier::where('status', 'AKTIF')->orderBy('name')->get();
 
-        return view('warehouse.po.index', compact(
-            'purchaseOrders',
-            'stats',
-            'statusOptions',
-            'suppliers'
-        ));
+        return view('warehouse.po.index', compact('purchaseOrders', 'stats', 'statusOptions', 'suppliers'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
-        // Ambil semua supplier aktif
-        $suppliers = Supplier::where('status', 'AKTIF')->orderBy('name')->get();
+        $this->authorizeManager();
 
-        // Ambil semua SKU aktif untuk dropdown item
-        $skus = MasterSku::where('status', 'AKTIF')
-            ->orderBy('product_name')
-            ->orderBy('size')
-            ->get(['sku', 'product_name', 'price', 'size']);
-
-        // Default supplier type berdasarkan role user
-        $user = auth()->user();
-        $defaultSupplierType = match ($user->role) {
-            'SUBLIM' => 'SUBLIMASI',
-            'KONVEKSI' => 'KONVEKSI',
-            default => 'UMUM',
-        };
-
-        return view('warehouse.po.create', compact('suppliers', 'skus', 'defaultSupplierType'));
+        return view('warehouse.po.create', $this->formData(new PurchaseOrder()));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'supplier_id' => 'required|exists:suppliers,id',
-            'article' => 'required|string|max:50',
-            'expected_date' => 'required|date|after_or_equal:today',
-            'notes' => 'nullable|string|max:500',
-            'items' => 'required|array|min:1',
-            'items.*.sku' => 'required|exists:master_skus,sku',
-            'items.*.qty' => 'required|integer|min:1',
-            'items.*.unit_price' => 'required|numeric|min:0',
-        ]);
+        $this->authorizeManager();
+        $validated = $this->validatePo($request, true);
 
         try {
-            DB::transaction(function () use ($validated) {
-                $poNumber = 'PO-' . date('Ymd') . '-' . strtoupper(Str::random(4));
+            $po = DB::transaction(function () use ($validated) {
+                $supplier = Supplier::findOrFail($validated['supplier_id']);
 
                 $po = PurchaseOrder::create([
-                    'id' => Str::uuid(),
-                    'po_number' => $poNumber,
-                    'supplier_id' => $validated['supplier_id'],
-                    'user_id' => Auth::id(),
-                    'article' => $validated['article'],
+                    'po_number' => 'PO-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
+                    'supplier_id' => $supplier->id,
+                    'supplier_name' => $supplier->name,
+                    'supplier_type' => $validated['supplier_type'],
                     'expected_date' => $validated['expected_date'],
                     'status' => 'DRAFT',
+                    'created_by' => Auth::id(),
                     'notes' => $validated['notes'] ?? null,
-                    'total_amount' => 0,
                 ]);
 
-                $totalAmount = 0;
+                $this->syncItems($po, $validated['items']);
+                $this->audit('CREATE', $po, ['po_number' => $po->po_number]);
 
-                foreach ($validated['items'] as $item) {
-                    $sku = MasterSku::where('sku', $item['sku'])->first();
-                    $subtotal = $item['qty'] * $item['unit_price'];
-                    $totalAmount += $subtotal;
-
-                    PurchaseOrderItem::create([
-                        'id' => Str::uuid(),
-                        'purchase_order_id' => $po->id,
-                        'sku' => $item['sku'],
-                        'product_name' => $sku->product_name,
-                        'qty' => $item['qty'],
-                        'unit_price' => $item['unit_price'],
-                        'subtotal' => $subtotal,
-                    ]);
-                }
-
-                $po->update(['total_amount' => $totalAmount]);
+                return $po;
             });
 
-            return redirect()->route('po.index')
-                ->with('success', 'Purchase Order berhasil dibuat!');
+            return redirect()->route('po.show', $po->id)
+                ->with('success', "PO {$po->po_number} berhasil dibuat sebagai Draft.");
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal membuat PO: ' . safe_error_message($e))->withInput();
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($id)
     {
-        $po = PurchaseOrder::with(['vendor', 'items'])->findOrFail($id);
+        $po = PurchaseOrder::with(['items.masterSku', 'creator:id,name,role', 'approver:id,name'])->findOrFail($id);
+
         return view('warehouse.po.show', compact('po'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(PurchaseOrder $po)
+    public function edit($id)
     {
-        if (!in_array($po->status, ['DRAFT'])) {
-            return back()->with('error', 'Hanya PO dengan status DRAFT yang bisa diedit.');
+        $this->authorizeManager();
+        $po = PurchaseOrder::with('items')->findOrFail($id);
+
+        if ($po->status !== 'DRAFT') {
+            return redirect()->route('po.show', $po->id)->with('error', 'Hanya PO berstatus Draft yang bisa diedit.');
         }
 
-        $po->load(['items']);
-        $suppliers = Supplier::where('status', 'AKTIF')->orderBy('name')->get();
-        $masterSkus = MasterSku::where('status', 'AKTIF')
-            ->orderBy('product_name')
-            ->get(['id', 'sku', 'product_name', 'article', 'price']);
-
-        return view('warehouse.po.edit', compact('po', 'suppliers', 'masterSkus'));
+        return view('warehouse.po.create', $this->formData($po));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, PurchaseOrder $po)
+    public function update(Request $request, $id)
     {
-        if (!in_array($po->status, ['DRAFT'])) {
-            return back()->with('error', 'Hanya PO dengan status DRAFT yang bisa diupdate.');
+        $this->authorizeManager();
+        $po = PurchaseOrder::findOrFail($id);
+
+        if ($po->status !== 'DRAFT') {
+            return redirect()->route('po.show', $po->id)->with('error', 'Hanya PO berstatus Draft yang bisa diedit.');
         }
 
-        $validated = $request->validate([
-            'supplier_id' => 'required|exists:suppliers,id',
-            'article' => 'required|string|max:50',
-            'expected_date' => 'required|date',
-            'notes' => 'nullable|string|max:500',
-            'items' => 'required|array|min:1',
-            'items.*.sku' => 'required|exists:master_skus,sku',
-            'items.*.qty' => 'required|integer|min:1',
-            'items.*.unit_price' => 'required|numeric|min:0',
-        ]);
+        $validated = $this->validatePo($request, false);
 
         try {
             DB::transaction(function () use ($validated, $po) {
+                $supplier = Supplier::findOrFail($validated['supplier_id']);
+
                 $po->update([
-                    'supplier_id' => $validated['supplier_id'],
-                    'article' => $validated['article'],
+                    'supplier_id' => $supplier->id,
+                    'supplier_name' => $supplier->name,
+                    'supplier_type' => $validated['supplier_type'],
                     'expected_date' => $validated['expected_date'],
                     'notes' => $validated['notes'] ?? null,
                 ]);
 
                 $po->items()->delete();
-
-                $totalAmount = 0;
-                foreach ($validated['items'] as $item) {
-                    $sku = MasterSku::where('sku', $item['sku'])->first();
-                    $subtotal = $item['qty'] * $item['unit_price'];
-                    $totalAmount += $subtotal;
-
-                    PurchaseOrderItem::create([
-                        'id' => Str::uuid(),
-                        'purchase_order_id' => $po->id,
-                        'sku' => $item['sku'],
-                        'product_name' => $sku->product_name,
-                        'qty' => $item['qty'],
-                        'unit_price' => $item['unit_price'],
-                        'subtotal' => $subtotal,
-                    ]);
-                }
-
-                $po->update(['total_amount' => $totalAmount]);
+                $this->syncItems($po, $validated['items']);
+                $this->audit('UPDATE', $po, ['po_number' => $po->po_number]);
             });
 
-            return redirect()->route('po.show', $po)
-                ->with('success', 'Purchase Order berhasil diupdate!');
+            return redirect()->route('po.show', $po->id)->with('success', 'Purchase Order berhasil diupdate!');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal update PO: ' . safe_error_message($e))->withInput();
         }
     }
 
-    /**
-     * Approve Purchase Order
-     */
-    public function approve(PurchaseOrder $po)
+    public function destroy($id)
     {
-        $user = Auth::user();
-        if (!in_array($user->role, ['OWNER', 'SUPERVISOR'])) {
-            abort(403, 'Akses ditolak.');
-        }
-
-        if ($po->status !== 'DRAFT') {
-            return back()->with('error', 'Hanya PO DRAFT yang bisa di-approve.');
-        }
-
-        DB::transaction(function () use ($po) {
-            $po->update([
-                'status' => 'APPROVED',
-                'approved_by' => Auth::id(),
-                'approved_at' => now(),
-            ]);
-        });
-
-        return back()->with('success', "PO {$po->po_number} berhasil di-approve!");
-    }
-
-    /**
-     * Mark PO as Sent
-     */
-    public function markSent(PurchaseOrder $po)
-    {
-        $user = Auth::user();
-        if (!in_array($user->role, ['OWNER', 'SUPERVISOR'])) {
-            abort(403, 'Akses ditolak.');
-        }
-
-        if ($po->status !== 'APPROVED') {
-            return back()->with('error', 'Hanya PO APPROVED yang bisa ditandai SENT.');
-        }
-
-        DB::transaction(function () use ($po) {
-            $po->update([
-                'status' => 'SENT',
-                'sent_at' => now(),
-            ]);
-        });
-
-        return back()->with('success', "PO {$po->po_number} ditandai terkirim ke supplier!");
-    }
-
-    /**
-     * Receive PO
-     */
-    public function receive(Request $request, PurchaseOrder $po)
-    {
-        $user = Auth::user();
-        if (!in_array($user->role, ['OWNER', 'SUPERVISOR', 'STAFF_GUDANG'])) {
-            abort(403, 'Akses ditolak.');
-        }
-
-        if ($po->status !== 'SENT') {
-            return back()->with('error', 'Hanya PO SENT yang bisa diterima.');
-        }
-
-        $validated = $request->validate([
-            'items' => 'required|array',
-            'items.*.sku' => 'required|exists:master_skus,sku',
-            'items.*.received_qty' => 'required|integer|min:0',
-            'items.*.bin_code' => 'required|string',
-        ]);
-
-        try {
-            DB::transaction(function () use ($validated, $po, $user) {
-                foreach ($validated['items'] as $item) {
-                    if ($item['received_qty'] > 0) {
-                        $stock = StockActive::lockForUpdate()->firstOrCreate(
-                            [
-                                'sku' => $item['sku'],
-                                'bin_code' => $item['bin_code'],
-                            ],
-                            ['qty' => 0]
-                        );
-                        $stock->increment('qty', (int) $item['received_qty'], [
-                            'last_movement_at' => now(),
-                            'received_at' => now(),
-                        ]);
-
-                        StockMovement::create([
-                            'id' => Str::uuid(),
-                            'type' => 'INBOUND',
-                            'sku' => $item['sku'],
-                            'qty' => $item['received_qty'],
-                            'reference_type' => 'PO',
-                            'reference_id' => $po->id,
-                            'bin_code' => $item['bin_code'],
-                            'user_id' => $user->id,
-                            'notes' => "Penerimaan PO {$po->po_number}",
-                        ]);
-                    }
-                }
-
-                $po->update([
-                    'status' => 'RECEIVED',
-                    'received_at' => now(),
-                    'received_by' => $user->id,
-                ]);
-            });
-
-            return redirect()->route('po.show', $po)
-                ->with('success', "PO {$po->po_number} berhasil diterima!");
-        } catch (\Exception $e) {
-            return back()->with('error', 'Gagal menerima PO: ' . safe_error_message($e));
-        }
-    }
-
-    /**
-     * Cancel Purchase Order
-     */
-    public function cancel(PurchaseOrder $po)
-    {
-        $user = Auth::user();
-        if (!in_array($user->role, ['OWNER', 'SUPERVISOR'])) {
-            abort(403, 'Akses ditolak.');
-        }
-
-        if (in_array($po->status, ['RECEIVED', 'CANCELLED'])) {
-            return back()->with('error', 'PO tidak bisa dibatalkan.');
-        }
-
-        DB::transaction(function () use ($po) {
-            $po->update([
-                'status' => 'CANCELLED',
-                'cancelled_at' => now(),
-                'cancelled_by' => Auth::id(),
-            ]);
-        });
-
-        return back()->with('success', "PO {$po->po_number} dibatalkan.");
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(PurchaseOrder $po)
-    {
-        $user = Auth::user();
-        if ($user->role !== 'OWNER') {
+        if (Auth::user()->role !== 'OWNER') {
             abort(403, 'Hanya OWNER yang bisa menghapus PO.');
         }
 
+        $po = PurchaseOrder::findOrFail($id);
+
         if ($po->status !== 'DRAFT') {
-            return back()->with('error', 'Hanya PO DRAFT yang bisa dihapus.');
+            return back()->with('error', 'Hanya PO berstatus Draft yang bisa dihapus.');
         }
 
         DB::transaction(function () use ($po) {
             $po->items()->delete();
             $po->delete();
+            $this->audit('DELETE', $po, ['po_number' => $po->po_number]);
         });
 
-        return redirect()->route('po.index')
-            ->with('success', "PO {$po->po_number} berhasil dihapus.");
+        return redirect()->route('po.index')->with('success', "PO {$po->po_number} berhasil dihapus.");
     }
 
     /**
-     * ✅ NEW: Create PO dari Low Stock (via AJAX)
-     */
-    public function createFromLowStock(Request $request)
-    {
-        $validated = $request->validate([
-            'products' => 'required|array|min:1',
-            'products.*.sku' => 'required|exists:master_skus,sku',
-            'products.*.product_name' => 'required|string',
-            'products.*.qty_needed' => 'required|integer|min:1',
-        ]);
-
-        try {
-            DB::transaction(function () use ($validated) {
-                // Generate PO number
-                $poNumber = 'PO-' . date('Ymd') . '-' . strtoupper(Str::random(4));
-
-                // Create PO
-                $po = PurchaseOrder::create([
-                    'id' => (string) Str::uuid(),
-                    'po_number' => $poNumber,
-                    'supplier_id' => null, // Akan diisi manual nanti
-                    'user_id' => Auth::id(),
-                    'expected_date' => now()->addDays(14),
-                    'status' => 'DRAFT',
-                    'workspace' => 'GUDANG',
-                    'notes' => 'Auto-generated dari Low Stock Alert',
-                    'total_amount' => 0,
-                ]);
-
-                // Add items
-                $totalAmount = 0;
-                foreach ($validated['products'] as $product) {
-                    $masterSku = MasterSku::where('sku', $product['sku'])->first();
-                    $price = $masterSku->price ?? 0;
-                    $qty = $product['qty_needed'];
-                    $subtotal = $qty * $price;
-                    $totalAmount += $subtotal;
-
-                    $po->items()->create([
-                        'id' => (string) Str::uuid(),
-                        'sku' => $product['sku'],
-                        'qty' => $qty,
-                        'price' => $price,
-                        'subtotal' => $subtotal,
-                    ]);
-                }
-
-                $po->update(['total_amount' => $totalAmount]);
-            });
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Draft PO berhasil dibuat! Silakan lengkapi data supplier.',
-                'redirect_url' => route('po.index'),
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal membuat PO: ' . safe_error_message($e),
-            ], 500);
-        }
-    }
-
-        /**
-     * Update Status PO (Khusus Admin Gudang / Supervisor / Owner)
+     * Ubah status PO: ajukan, setujui, mulai produksi, siap diambil, batalkan.
+     * Status RECEIVED diisi otomatis oleh Inbound.
      */
     public function updateStatus(Request $request, $id)
     {
-        $user = auth()->user();
-        
-        // Validasi Role
-        if (!in_array($user->role, ['ADMIN_GUDANG', 'SUPERVISOR', 'OWNER'])) {
-            abort(403, 'Akses ditolak. Hanya Admin Gudang/Supervisor/Owner yang bisa update status.');
-        }
+        $user = Auth::user();
 
         $validated = $request->validate([
-            'status' => 'required|in:IN_PRODUCTION,READY_FOR_PICKUP,RECEIVED,CANCELLED',
+            'status' => 'required|in:PENDING,APPROVED,IN_PRODUCTION,READY_FOR_PICKUP,CANCELLED',
+            'production_notes' => 'nullable|string|max:1000',
             'defect_count' => 'nullable|integer|min:0',
             'defect_notes' => 'nullable|string|max:1000',
         ]);
 
-        $po = PurchaseOrder::with('vendor')->findOrFail($id);
-        $oldStatus = $po->status;
         $newStatus = $validated['status'];
 
-        // Cek apakah transisi status diizinkan
-        if (!$po->canTransitionTo($newStatus)) {
-            return back()->withErrors([
-                'status' => "Transisi dari '{$oldStatus}' ke '{$newStatus}' tidak diizinkan."
-            ]);
+        // Ajukan, setujui, dan batalkan hanya untuk OWNER/SUPERVISOR.
+        // ADMIN_GUDANG boleh memperbarui tahap produksi.
+        if (in_array($newStatus, ['PENDING', 'APPROVED', 'CANCELLED']) && !in_array($user->role, self::MANAGER_ROLES)) {
+            abort(403, 'Hanya Owner atau Supervisor yang bisa melakukan aksi ini.');
         }
 
-        try {
-            DB::transaction(function () use ($po, $validated, $newStatus) {
-                $updateData = ['status' => $newStatus];
-                
-                // Jika status READY_FOR_PICKUP, catat waktunya
-                if ($newStatus === 'READY_FOR_PICKUP') {
-                    $updateData['ready_at'] = now();
-                }
-                
-                // Update defect jika ada
-                if (isset($validated['defect_count'])) {
-                    $updateData['defect_count'] = $validated['defect_count'];
-                    $updateData['defect_notes'] = $validated['defect_notes'] ?? null;
-                }
+        $po = PurchaseOrder::findOrFail($id);
+        $oldStatus = $po->status;
 
-                $po->update($updateData);
+        if (!$po->canTransitionTo($newStatus)) {
+            return back()->with('error', "Status PO tidak bisa diubah dari {$po->status_label} ke " . PurchaseOrder::STATUS_LABELS[$newStatus] . '.');
+        }
 
-                // Audit trail
-                AuditTrail::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'UPDATE_PO_STATUS',
-                    'module' => 'PURCHASE_ORDER',
-                    'old_values' => json_encode(['status' => $oldStatus]),
-                    'new_values' => json_encode(array_merge(['status' => $newStatus], $updateData)),
-                    'ip_address' => request()->ip(),
-                ]);
-            });
+        $updateData = ['status' => $newStatus];
 
-            // ✅ KIRIM NOTIFIKASI
-            $this->sendStatusNotification($po, $oldStatus, $newStatus, $user);
+        if ($newStatus === 'APPROVED') {
+            $updateData['approved_by'] = $user->id;
+            $updateData['approved_at'] = now();
+        }
 
-            $statusLabels = [
-                'IN_PRODUCTION' => 'Sedang Diproduksi',
-                'READY_FOR_PICKUP' => 'Siap Diambil',
-                'RECEIVED' => 'Sudah Diterima',
-                'CANCELLED' => 'Dibatalkan',
-            ];
+        if ($newStatus === 'READY_FOR_PICKUP') {
+            $updateData['ready_at'] = now();
+        }
 
-            return back()->with('success', 
-                "Status PO berhasil diupdate menjadi '{$statusLabels[$newStatus]}'. " .
-                "Notifikasi terkirim ke Owner & Supervisor."
-            );
+        foreach (['production_notes', 'defect_count', 'defect_notes'] as $field) {
+            if (isset($validated[$field])) {
+                $updateData[$field] = $validated[$field];
+            }
+        }
 
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal update status: ' . safe_error_message($e)]);
+        DB::transaction(function () use ($po, $updateData, $oldStatus) {
+            $po->update($updateData);
+            $this->audit('UPDATE_PO_STATUS', $po, ['from' => $oldStatus, 'to' => $updateData['status']]);
+        });
+
+        return back()->with('success', "Status PO {$po->po_number} sekarang: {$po->status_label}.");
+    }
+
+    private function authorizeManager(): void
+    {
+        if (!in_array(Auth::user()->role, self::MANAGER_ROLES)) {
+            abort(403, 'Hanya Owner atau Supervisor yang bisa membuat dan mengubah PO.');
         }
     }
-} // ✅ TAMBAHKAN KURUNG KURAWAL INI DI BARIS PALING BAWAH
+
+    private function validatePo(Request $request, bool $isNew): array
+    {
+        return $request->validate([
+            'supplier_id' => 'required|exists:suppliers,id',
+            'supplier_type' => 'required|in:SUBLIMASI,KONVEKSI,UMUM',
+            'expected_date' => $isNew ? 'required|date|after_or_equal:today' : 'required|date',
+            'notes' => 'nullable|string|max:500',
+            'items' => 'required|array|min:1',
+            'items.*.sku' => 'required|exists:master_skus,sku',
+            'items.*.qty' => 'required|integer|min:1',
+            'items.*.price' => 'required|integer|min:0',
+        ]);
+    }
+
+    private function syncItems(PurchaseOrder $po, array $items): void
+    {
+        foreach ($items as $item) {
+            PurchaseOrderItem::create([
+                'id' => (string) Str::uuid(),
+                'purchase_order_id' => $po->id,
+                'sku' => $item['sku'],
+                'qty_ordered' => $item['qty'],
+                'qty_received' => 0,
+                'price' => $item['price'],
+            ]);
+        }
+    }
+
+    private function formData(PurchaseOrder $po): array
+    {
+        return [
+            'po' => $po,
+            'suppliers' => Supplier::where('status', 'AKTIF')->orderBy('name')->get(),
+            'skus' => MasterSku::where('status', 'AKTIF')
+                ->orderBy('product_name')
+                ->orderBy('size')
+                ->get(['sku', 'product_name', 'price', 'size']),
+        ];
+    }
+
+    private function audit(string $action, PurchaseOrder $po, array $values): void
+    {
+        AuditTrail::create([
+            'user_id' => Auth::id(),
+            'action' => $action,
+            'module' => 'PURCHASE_ORDER',
+            'new_values' => json_encode($values + ['po_id' => $po->id]),
+            'ip_address' => request()->ip(),
+        ]);
+    }
+}

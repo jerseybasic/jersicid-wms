@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditTrail;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\MasterSku;
@@ -39,7 +40,7 @@ class OutboundController extends Controller
             'total' => Order::count(),
             'pending' => Order::where('status', 'PENDING')->count(),
             'picking' => Order::whereIn('status', ['CONFIRMED', 'PICKING'])->count(),
-            'packing' => Order::where('status', 'PACKING')->count(),
+            'packing' => Order::whereIn('status', ['PACKING', 'READY_TO_SHIP'])->count(),
         ];
 
         return view('warehouse.outbound.index', compact('orders', 'stats'));
@@ -96,36 +97,62 @@ class OutboundController extends Controller
                 }
             });
 
-            return redirect()->route('outbound.index')->with('success', 'Order berhasil dibuat!');
+            return redirect()->route('gudang.outbound')->with('success', 'Order berhasil dibuat!');
         } catch (\Exception $e) {
             return back()->withInput()->with('error', 'Gagal membuat order: ' . safe_error_message($e));
         }
     }
 
+    /**
+     * Aksi manual di daftar order: konfirmasi, batalkan, kirim (input resi), selesai.
+     * Status PICKING, PACKING, dan READY_TO_SHIP diatur otomatis oleh sesi picking & packing.
+     */
     public function updateStatus(Request $request, $id)
     {
+        $validated = $request->validate([
+            'status' => ['required', 'in:CONFIRMED,CANCELLED,SHIPPED,COMPLETED'],
+            'tracking_number' => ['nullable', 'required_if:status,SHIPPED', 'string', 'max:255'],
+            'courier' => ['nullable', 'string', 'max:50'],
+        ], [
+            'tracking_number.required_if' => 'Nomor resi wajib diisi saat mengirim order.',
+        ]);
+
         $order = Order::findOrFail($id);
-        $newStatus = $request->status;
+        $newStatus = $validated['status'];
 
         $allowedTransitions = [
             'PENDING' => ['CONFIRMED', 'CANCELLED'],
-            'CONFIRMED' => ['PICKING'],
-            'PICKING' => ['PACKING'],
-            'PACKING' => ['READY_TO_SHIP', 'SHIPPED'],
+            'CONFIRMED' => ['CANCELLED'],
+            'READY_TO_SHIP' => ['SHIPPED'],
+            'SHIPPED' => ['COMPLETED'],
         ];
 
-        if (!isset($allowedTransitions[$order->status]) || !in_array($newStatus, $allowedTransitions[$order->status])) {
-            return back()->with('error', 'Transisi status tidak valid!');
+        if (!in_array($newStatus, $allowedTransitions[$order->status] ?? [])) {
+            return back()->with('error', "Order {$order->order_number} tidak bisa diubah dari {$order->status_label} ke " . Order::STATUS_LABELS[$newStatus] . '.');
         }
 
         $updateData = ['status' => $newStatus];
 
-        if ($newStatus === 'PICKING') $updateData['picked_at'] = now();
-        if ($newStatus === 'PACKING') $updateData['packed_at'] = now();
-        if ($newStatus === 'SHIPPED') $updateData['shipped_at'] = now();
+        if ($newStatus === 'SHIPPED') {
+            $updateData['tracking_number'] = $validated['tracking_number'];
+            $updateData['courier'] = $validated['courier'] ?? $order->courier;
+            $updateData['shipped_at'] = now();
+        }
 
-        $order->update($updateData);
+        DB::transaction(function () use ($order, $updateData, $request) {
+            $oldStatus = $order->status;
+            $order->update($updateData);
 
-        return back()->with('success', "Status order diubah menjadi {$newStatus}");
+            AuditTrail::create([
+                'user_id' => auth()->id(),
+                'action' => 'UPDATE_STATUS',
+                'module' => 'OUTBOUND',
+                'old_values' => json_encode(['status' => $oldStatus]),
+                'new_values' => json_encode($updateData + ['order_number' => $order->order_number]),
+                'ip_address' => $request->ip(),
+            ]);
+        });
+
+        return back()->with('success', "Order {$order->order_number} sekarang: {$order->status_label}.");
     }
 }

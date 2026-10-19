@@ -56,7 +56,7 @@ class InboundController extends Controller
             ->get(['id', 'code', 'color', 'rows_count']);
 
         // 4. Ambil Purchase Order yang siap diterima
-        $purchaseOrders = PurchaseOrder::whereIn('status', ['APPROVED', 'SENT'])
+        $purchaseOrders = PurchaseOrder::whereIn('status', ['APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'READY'])
             ->orderBy('po_number')
             ->get(['id', 'po_number', 'supplier_name']);
 

@@ -61,7 +61,7 @@ class StockOpnameController extends Controller
                     'warehouse_id' => $validated['warehouse_id'],
                     'status' => 'DRAFT',
                     'created_by' => $user->id,
-                    'notes' => $validated['notes'],
+                    'notes' => $validated['notes'] ?? null,
                 ]);
 
                 $activeStocks = StockActive::where('qty', '>', 0)->get();

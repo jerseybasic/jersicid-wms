@@ -19,7 +19,6 @@ use App\Http\Controllers\Warehouse\BarcodeScannerController;
 use App\Http\Controllers\Warehouse\PrinterController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\Auth\RegisterController;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,9 +33,6 @@ Route::get('/', function () {
 
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:10,1');
-
-Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
-Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:5,10');
 
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
@@ -78,7 +74,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('suppliers')->group
     Route::patch('/{id}/toggle-status', [SupplierController::class, 'toggleStatus'])->name('suppliers.toggle-status');
 });
 
-// ==================== PURCHASE ORDER (OWNER & SUPERVISOR) ====================
+// ==================== PURCHASE ORDER ====================
+// Buat/edit/approve: OWNER & SUPERVISOR (dicek di controller). ADMIN_GUDANG: lihat & update tahap produksi.
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG'])
     ->prefix('purchase-orders')
     ->name('po.')
@@ -90,13 +87,11 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG'])
         Route::get('/{id}/edit', [PurchaseOrderController::class, 'edit'])->name('edit');
         Route::put('/{id}', [PurchaseOrderController::class, 'update'])->name('update');
         Route::delete('/{id}', [PurchaseOrderController::class, 'destroy'])->name('destroy');
-        
-        // ✅ TAMBAHKAN INI: Route untuk update status
         Route::patch('/{id}/status', [PurchaseOrderController::class, 'updateStatus'])->name('update-status');
     });
 
 // ==================== INBOUND (GUDANG) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])->prefix('gudang/inbound')->group(function () {
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->prefix('gudang/inbound')->group(function () {
     Route::get('/', [InboundController::class, 'index'])->name('gudang.inbound');
     Route::get('/create', [InboundController::class, 'create'])->name('gudang.inbound.create');
     Route::post('/', [InboundController::class, 'store'])->name('gudang.inbound.store');
@@ -104,15 +99,15 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])->prefix('gudan
 });
 
 // ==================== OUTBOUND (GUDANG) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])->prefix('gudang/outbound')->name('gudang.')->group(function () {
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->prefix('gudang/outbound')->name('gudang.')->group(function () {
     Route::get('/', [OutboundController::class, 'index'])->name('outbound');
     Route::get('/create', [OutboundController::class, 'create'])->name('outbound.create');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
-    Route::get('/{id}', [OutboundController::class, 'show'])->name('outbound.show');
+    Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
 });
 
 // ==================== PICKING (GUDANG) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/picking')
     ->name('gudang.')
     ->group(function () {
@@ -126,7 +121,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
     });
 
 // ==================== PACKING (GUDANG) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/packing')
     ->name('gudang.')
     ->group(function () {
@@ -138,17 +133,16 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
         Route::post('/{sessionId}/items/{itemId}/pack', [PackingController::class, 'packItem'])->name('packing.pack');
         Route::post('/{id}/complete', [PackingController::class, 'complete'])->name('packing.complete');
         Route::delete('/{id}', [PackingController::class, 'destroy'])->name('packing.destroy');
-        Route::patch('/{id}/status', [PurchaseOrderController::class, 'updateStatus'])->name('po.update-status');
     });
 
 // ==================== TRANSFER STOK (GUDANG) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])->prefix('gudang/transfer')->group(function () {
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->prefix('gudang/transfer')->group(function () {
     Route::get('/', [TransferController::class, 'index'])->name('gudang.transfer');
     Route::post('/', [TransferController::class, 'store'])->name('gudang.transfer.store');
 });
 
 // ==================== STOCK OPNAME (GUDANG) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])->prefix('gudang/opname')->group(function () {
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->prefix('gudang/opname')->group(function () {
     Route::get('/', [StockOpnameController::class, 'index'])->name('gudang.opname');
     Route::get('/create', [StockOpnameController::class, 'create'])->name('gudang.opname.create');
     Route::post('/', [StockOpnameController::class, 'store'])->name('gudang.opname.store');
@@ -160,7 +154,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])->prefix('gudan
 });
 
 // ==================== WAREHOUSE MAPPING (GUDANG) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/mapping')
     ->group(function () {
         Route::get('/', [WarehouseMappingController::class, 'index'])->name('gudang.mapping');
@@ -174,7 +168,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
     });
 
 // Barcode Scanner - dengan CRUD
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/scanner')
     ->name('gudang.')
     ->group(function () {
@@ -193,7 +187,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
     });
 
 // Thermal Printer
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR,STAFF_GUDANG'])
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/printer')
     ->name('gudang.')
     ->group(function () {
@@ -222,11 +216,15 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('reports')->group(f
     Route::get('/download-template', [ReportController::class, 'downloadTemplate'])->name('reports.download-template');
 });
 
+// ==================== PROFIL (SEMUA USER: ubah profil sendiri) ====================
+Route::middleware(['auth'])->prefix('settings')->name('settings.')->group(function () {
+    Route::get('/profile', [SettingsController::class, 'profile'])->name('update-profile');
+    Route::put('/profile', [SettingsController::class, 'updateProfile'])->name('profile.update');
+});
+
 // ==================== SETTINGS (OWNER ONLY) ====================
 Route::middleware(['auth', 'role:OWNER'])->prefix('settings')->name('settings.')->group(function () {
     Route::get('/', [SettingsController::class, 'index'])->name('index');
-    Route::get('/profile', [SettingsController::class, 'profile'])->name('update-profile');
-    Route::put('/profile', [SettingsController::class, 'updateProfile'])->name('profile.update');
     Route::post('/clear-cache', function () {
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
         \Illuminate\Support\Facades\Artisan::call('view:clear');

@@ -37,12 +37,10 @@ return new class extends Migration
             }
         });
 
-        // 4. Update status enum dengan aman
-        try {
-            DB::statement("ALTER TABLE purchase_orders MODIFY COLUMN status ENUM('DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'RECEIVED', 'CANCELLED') NOT NULL DEFAULT 'DRAFT'");
-        } catch (\Exception $e) {
-            \Log::warning('Failed to update PO status enum: ' . $e->getMessage());
-        }
+        // 4. Update status enum (Schema builder agar jalan di MySQL & SQLite)
+        Schema::table('purchase_orders', function (Blueprint $table) {
+            $table->enum('status', ['DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'RECEIVED', 'CANCELLED'])->default('DRAFT')->change();
+        });
     }
 
     public function down(): void
