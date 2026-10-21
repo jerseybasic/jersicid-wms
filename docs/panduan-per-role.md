@@ -19,6 +19,12 @@ Di semua role, ikon **lonceng** di kanan atas menunjukkan pekerjaan yang sedang 
 2. Periksa order berstatus baru, lalu klik **Konfirmasi** agar order masuk ke daftar picking.
 3. Setelah order siap kirim, klik **Kirim** dan isi nomor resi.
 
+### Import pesanan marketplace (BigSeller)
+1. Di BigSeller, ekspor pesanan per SKU ke Excel.
+2. Buka **Outbound**, klik **Import BigSeller**, upload filenya, lalu klik **Lihat Pratinjau**.
+3. Periksa daftarnya. Pesanan yang SKU-nya belum ada di Master SKU, sudah pernah diimpor, atau dibatalkan akan dilewati, lengkap dengan alasannya.
+4. Klik **Import**. Jika **Langsung konfirmasi** dicentang, pesanan langsung masuk ke daftar picking. Nomor resi marketplace ikut tersimpan.
+
 ### Mengambil barang untuk order (Picking)
 1. Buka **Tugas Saya** atau **Picking**, lalu pilih order yang perlu diambil.
 2. Mulai sesi, pergi ke rak yang disarankan, scan rak, lalu scan setiap barang.
