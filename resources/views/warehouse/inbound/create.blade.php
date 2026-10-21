@@ -196,9 +196,9 @@
 
                                 <!-- Bin Code -->
                                 <div class="md:col-span-2">
-                                    <label class="block text-xs font-medium text-slate-400 mb-2">Lokasi Bin *</label>
+                                    <label class="block text-xs font-medium text-slate-400 mb-2">Lokasi Bin * <span class="text-slate-500 font-normal">(RAK-BARIS-SLOT)</span></label>
                                     <input type="text" x-model="item.bin_code" 
-                                           placeholder="RAK-A-01"
+                                           placeholder="A-01-01"
                                            class="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm font-mono placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"/>
                                 </div>
 

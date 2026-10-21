@@ -43,28 +43,21 @@ class WarehouseRack extends Model
     }
 
     /**
-     * Relasi many-to-many ke MasterSku
+     * Kode rak dari kode bin: "A-01-01" dan "RAK-A-01" masuk ke rak "A".
      */
-    public function products()
+    public static function codeFromBin(?string $binCode): ?string
     {
-        return $this->belongsToMany(MasterSku::class, 'rack_products', 'warehouse_rack_id', 'sku')
-            ->withPivot('current_qty', 'max_capacity', 'bin_location')
-            ->withTimestamps();
-    }
+        $bin = strtoupper(trim((string) $binCode));
+        if ($bin === '') {
+            return null;
+        }
 
-    /**
-     * Relasi one-to-many ke RackProduct (pivot model)
-     */
-    public function rackProductMappings()
-    {
-        return $this->hasMany(RackProduct::class, 'warehouse_rack_id', 'id');
-    }
+        if (str_starts_with($bin, 'RAK-')) {
+            $bin = substr($bin, 4);
+        }
 
-    /**
-     * Hitung total produk di rak
-     */
-    public function productsCount()
-    {
-        return $this->products()->count();
+        $code = explode('-', $bin)[0];
+
+        return $code === '' ? null : $code;
     }
 }

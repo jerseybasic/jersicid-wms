@@ -3,47 +3,72 @@
 namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
-use App\Models\WarehouseRack;
-use App\Models\MasterSku;
-use App\Models\StockActive;
 use App\Models\AuditTrail;
+use App\Models\MasterSku;
+use App\Models\WarehouseRack;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
+/**
+ * Peta rak gudang.
+ *
+ * Qty yang tampil selalu diambil dari stock_actives (stok asli per bin),
+ * sehingga peta rak sama dengan hasil inbound, picking, dan stock opname.
+ * Bin masuk ke sebuah rak bila kodenya diawali kode rak, misalnya A-01-01
+ * (atau format lama RAK-A-01) masuk ke rak A.
+ * Tabel rack_products hanya menyimpan SKU yang "ditetapkan" ke rak beserta
+ * kapasitas maksimalnya, bukan qty.
+ */
 class WarehouseMappingController extends Controller
 {
     /**
-     * Tampilkan denah gudang
+     * Denah gudang dengan jumlah SKU dan unit per rak
      */
     public function index()
     {
-        $racks = WarehouseRack::select('warehouse_racks.*')
-            ->selectSub(function ($query) {
-                $query->selectRaw('COUNT(*)')
-                    ->from('rack_products')
-                    ->whereColumn('rack_products.warehouse_rack_id', 'warehouse_racks.id');
-            }, 'products_count')
-            ->orderBy('position_y', 'asc')
-            ->orderBy('position_x', 'asc')
+        $racks = WarehouseRack::orderBy('position_y')->orderBy('position_x')->get();
+
+        $stockByRack = [];
+        $stocks = DB::table('stock_actives')
+            ->where('qty', '>', 0)
+            ->select('sku', 'bin_code', 'qty')
             ->get();
+
+        foreach ($stocks as $stock) {
+            $code = WarehouseRack::codeFromBin($stock->bin_code);
+            if ($code === null) {
+                continue;
+            }
+            $stockByRack[$code]['skus'][$stock->sku] = true;
+            $stockByRack[$code]['qty'] = ($stockByRack[$code]['qty'] ?? 0) + $stock->qty;
+        }
+
+        $assignedByRack = DB::table('rack_products')
+            ->select('warehouse_rack_id', 'sku')
+            ->get()
+            ->groupBy('warehouse_rack_id');
+
+        foreach ($racks as $rack) {
+            $skus = array_keys($stockByRack[$rack->code]['skus'] ?? []);
+            $assigned = ($assignedByRack[$rack->id] ?? collect())->pluck('sku')->all();
+
+            $rack->products_count = count(array_unique(array_merge($skus, $assigned)));
+            $rack->total_qty = $stockByRack[$rack->code]['qty'] ?? 0;
+        }
 
         return view('warehouse.mapping.index', compact('racks'));
     }
 
     /**
-     * Tampilkan detail rak
+     * Detail rak: SKU yang ada stoknya di bin rak ini, ditambah SKU yang
+     * ditetapkan ke rak ini walau stoknya sedang kosong.
      */
     public function show($rackCode)
     {
         $rack = WarehouseRack::where('code', $rackCode)->firstOrFail();
 
-        Log::info('Showing rack', [
-            'code' => $rackCode,
-            'rack_id' => $rack->id,
-        ]);
-
-        // Ambil semua SKU aktif dengan stok saat ini (untuk dropdown keranjang)
+        // Semua SKU aktif dengan total stok (untuk pencarian di keranjang)
         $allSkus = MasterSku::where('status', 'AKTIF')
             ->leftJoin('stock_actives', 'master_skus.sku', '=', 'stock_actives.sku')
             ->select(
@@ -56,182 +81,100 @@ class WarehouseMappingController extends Controller
                 'master_skus.sub_version',
                 DB::raw('COALESCE(SUM(stock_actives.qty), 0) as current_stock')
             )
-            ->groupBy('master_skus.id')
-            ->orderBy('master_skus.product_name')
-            ->get();
-
-        // ✅ FIX: Ambil produk di rak ini dengan info lengkap
-        $rackProducts = DB::table('rack_products')
-            ->join('master_skus', 'rack_products.sku', '=', 'master_skus.sku')
-            ->where('rack_products.warehouse_rack_id', '=', $rack->id)
-            ->select(
-                'master_skus.id as sku_id',
+            ->groupBy(
                 'master_skus.sku',
                 'master_skus.product_name',
                 'master_skus.article',
-                'master_skus.version',
-                'master_skus.sub_version',
                 'master_skus.size',
                 'master_skus.size_category',
-                'master_skus.status',
-                'rack_products.current_qty',
-                'rack_products.max_capacity',
-                'rack_products.bin_location'
+                'master_skus.version',
+                'master_skus.sub_version'
             )
             ->orderBy('master_skus.product_name')
-            ->orderBy('master_skus.size')
             ->get();
 
-        // ✅ FIX: Group by product_name + version untuk accordion
+        $rackProducts = $this->rackProducts($rack);
+
         $groupedProducts = $rackProducts->groupBy(function ($product) {
             return $product->product_name . '|' . ($product->version ?? '');
         });
 
-        // Hitung total SKU dan total qty
         $totalSku = $rackProducts->count();
         $totalQty = $rackProducts->sum('current_qty');
 
-        // ✅ FIX: Kirim SEMUA variabel yang dibutuhkan view
         return view('warehouse.mapping.show', compact(
             'rack',
             'allSkus',
-            'rackProducts',        // ✅ Untuk kompatibilitas
-            'groupedProducts',     // ✅ Untuk accordion baru
+            'rackProducts',
+            'groupedProducts',
             'totalSku',
             'totalQty'
         ));
     }
 
     /**
-     * ✅ NEW: Get SKU details for a product in specific rack (AJAX)
-     */
-    public function getRackProductSkus(Request $request, $rackCode, $productName, $version)
-    {
-        $rack = WarehouseRack::where('code', $rackCode)->firstOrFail();
-
-        $skus = DB::table('rack_products')
-            ->join('master_skus', 'rack_products.sku', '=', 'master_skus.sku')
-            ->where('rack_products.warehouse_rack_id', '=', $rack->id)
-            ->where('master_skus.product_name', '=', $productName)
-            ->where('master_skus.version', '=', $version)
-            ->select(
-                'master_skus.id as sku_id',
-                'master_skus.sku',
-                'master_skus.product_name',
-                'master_skus.article',
-                'master_skus.version',
-                'master_skus.sub_version',
-                'master_skus.size',
-                'master_skus.size_category',
-                'master_skus.status',
-                'rack_products.current_qty',
-                'rack_products.max_capacity',
-                'rack_products.bin_location'
-            )
-            ->orderBy('master_skus.size')
-            ->get();
-
-        return response()->json($skus);
-    }
-
-    /**
-     * ✅ FIX: Assign multiple produk ke rak dengan UUID yang benar
+     * Tetapkan SKU ke rak beserta kapasitas maksimalnya.
+     * Qty tidak diisi di sini: stok masuk lewat Inbound atau Stock Opname.
      */
     public function assign(Request $request, $rackCode)
     {
         $validated = $request->validate([
             'products' => 'required|array|min:1',
             'products.*.sku' => 'required|exists:master_skus,sku',
-            'products.*.current_qty' => 'required|integer|min:0',
             'products.*.max_capacity' => 'required|integer|min:1',
         ]);
 
-        // ✅ FIX: Pastikan mengambil rak dengan benar
         $rack = WarehouseRack::where('code', $rackCode)->firstOrFail();
-
-        // ✅ FIX: Validasi bahwa ID rak adalah UUID yang valid
-        if (empty($rack->id) || $rack->id === '0') {
-            Log::error('Invalid rack ID', [
-                'rack_code' => $rackCode,
-                'rack_id' => $rack->id,
-            ]);
-            return back()->with('error', 'ID rak tidak valid. Silakan cek data rak di database.');
-        }
-
-        Log::info('Assigning products to rack', [
-            'rack_code' => $rackCode,
-            'rack_id' => $rack->id,
-            'rack_id_type' => gettype($rack->id),
-            'products_count' => count($validated['products']),
-        ]);
 
         try {
             DB::transaction(function () use ($rack, $validated) {
-                $assignedCount = 0;
-
                 foreach ($validated['products'] as $product) {
-                    // ✅ FIX: Cek dengan warehouse_rack_id yang benar (UUID)
                     $exists = DB::table('rack_products')
-                        ->where('warehouse_rack_id', '=', $rack->id)
-                        ->where('sku', '=', $product['sku'])
+                        ->where('warehouse_rack_id', $rack->id)
+                        ->where('sku', $product['sku'])
                         ->exists();
 
                     if ($exists) {
-                        // Update qty
                         DB::table('rack_products')
-                            ->where('warehouse_rack_id', '=', $rack->id)
-                            ->where('sku', '=', $product['sku'])
+                            ->where('warehouse_rack_id', $rack->id)
+                            ->where('sku', $product['sku'])
                             ->update([
-                                'current_qty' => $product['current_qty'],
                                 'max_capacity' => $product['max_capacity'],
                                 'updated_at' => now(),
                             ]);
                     } else {
-                        // ✅ FIX: Insert dengan UUID yang benar
                         DB::table('rack_products')->insert([
-                            'warehouse_rack_id' => $rack->id, // ✅ UUID, bukan 0
+                            'warehouse_rack_id' => $rack->id,
                             'sku' => $product['sku'],
-                            'current_qty' => $product['current_qty'],
+                            'current_qty' => 0,
                             'max_capacity' => $product['max_capacity'],
                             'bin_location' => $rack->code . '-01-01',
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
                     }
-
-                    $assignedCount++;
                 }
 
-                // Audit trail
-                if (class_exists(AuditTrail::class)) {
-                    AuditTrail::create([
-                        'user_id' => auth()->id(),
-                        'action' => 'BULK_ASSIGN',
-                        'module' => 'WAREHOUSE_MAPPING',
-                        'new_values' => json_encode([
-                            'rack' => $rack->code,
-                            'rack_id' => $rack->id,
-                            'products_count' => $assignedCount,
-                            'skus' => array_column($validated['products'], 'sku'),
-                        ]),
-                        'ip_address' => request()->ip(),
-                    ]);
-                }
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'BULK_ASSIGN',
+                    'module' => 'WAREHOUSE_MAPPING',
+                    'new_values' => json_encode([
+                        'rack' => $rack->code,
+                        'skus' => array_column($validated['products'], 'sku'),
+                    ]),
+                    'ip_address' => request()->ip(),
+                ]);
             });
 
-            return back()->with('success', count($validated['products']) . ' produk berhasil di-assign ke rak ' . $rackCode);
+            return back()->with('success', count($validated['products']) . ' produk berhasil ditetapkan ke rak ' . $rackCode);
         } catch (\Exception $e) {
-            Log::error('Assign failed', [
-                'error' => $e->getMessage(),
-                'rack_id' => $rack->id,
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return back()->with('error', 'Gagal assign produk: ' . safe_error_message($e));
+            return back()->with('error', 'Gagal menetapkan produk: ' . safe_error_message($e));
         }
     }
 
     /**
-     * Unassign produk dari rak
+     * Lepas SKU dari rak. Stok di bin tidak berubah.
      */
     public function unassign($rackCode, $sku)
     {
@@ -240,77 +183,71 @@ class WarehouseMappingController extends Controller
         try {
             DB::transaction(function () use ($rack, $sku) {
                 DB::table('rack_products')
-                    ->where('warehouse_rack_id', '=', $rack->id)
-                    ->where('sku', '=', $sku)
+                    ->where('warehouse_rack_id', $rack->id)
+                    ->where('sku', $sku)
                     ->delete();
 
-                if (class_exists(AuditTrail::class)) {
-                    AuditTrail::create([
-                        'user_id' => auth()->id(),
-                        'action' => 'UNASSIGN',
-                        'module' => 'WAREHOUSE_MAPPING',
-                        'new_values' => json_encode([
-                            'rack' => $rack->code,
-                            'rack_id' => $rack->id,
-                            'sku' => $sku,
-                        ]),
-                        'ip_address' => request()->ip(),
-                    ]);
-                }
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'UNASSIGN',
+                    'module' => 'WAREHOUSE_MAPPING',
+                    'new_values' => json_encode(['rack' => $rack->code, 'sku' => $sku]),
+                    'ip_address' => request()->ip(),
+                ]);
             });
 
-            return back()->with('success', 'Produk berhasil dihapus dari rak ' . $rackCode);
+            return back()->with('success', 'Produk dilepas dari rak ' . $rackCode . '. Stok di bin tidak berubah.');
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal menghapus produk: ' . safe_error_message($e));
+            return back()->with('error', 'Gagal melepas produk: ' . safe_error_message($e));
         }
     }
 
     /**
-     * Bulk delete produk dari rak
+     * Baris produk di rak: qty asli dari stock_actives per bin rak ini,
+     * digabung dengan SKU yang ditetapkan ke rak (kapasitas).
      */
-    public function bulkDelete(Request $request, $rackCode)
+    private function rackProducts(WarehouseRack $rack): Collection
     {
-        $validated = $request->validate([
-            'skus' => 'required|array|min:1',
-            'skus.*' => 'exists:master_skus,sku',
-        ]);
+        $stocks = DB::table('stock_actives')
+            ->where('qty', '>', 0)
+            ->select('sku', 'bin_code', 'qty')
+            ->get()
+            ->filter(fn ($stock) => WarehouseRack::codeFromBin($stock->bin_code) === $rack->code)
+            ->groupBy('sku');
 
-        $rack = WarehouseRack::where('code', $rackCode)->firstOrFail();
+        $assigned = DB::table('rack_products')
+            ->where('warehouse_rack_id', $rack->id)
+            ->pluck('max_capacity', 'sku');
 
-        try {
-            DB::transaction(function () use ($rack, $validated) {
-                foreach ($validated['skus'] as $sku) {
-                    DB::table('rack_products')
-                        ->where('warehouse_rack_id', '=', $rack->id)
-                        ->where('sku', '=', $sku)
-                        ->delete();
-                }
+        $skuCodes = $stocks->keys()->merge($assigned->keys())->unique()->values();
 
-                if (class_exists(AuditTrail::class)) {
-                    AuditTrail::create([
-                        'user_id' => auth()->id(),
-                        'action' => 'BULK_UNASSIGN',
-                        'module' => 'WAREHOUSE_MAPPING',
-                        'new_values' => json_encode([
-                            'rack' => $rack->code,
-                            'rack_id' => $rack->id,
-                            'skus' => $validated['skus'],
-                            'count' => count($validated['skus']),
-                        ]),
-                        'ip_address' => request()->ip(),
-                    ]);
-                }
-            });
-
-            return response()->json([
-                'success' => true,
-                'message' => count($validated['skus']) . ' produk berhasil dihapus dari rak ' . $rackCode,
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menghapus produk: ' . safe_error_message($e),
-            ], 500);
+        if ($skuCodes->isEmpty()) {
+            return collect();
         }
+
+        return MasterSku::whereIn('sku', $skuCodes)
+            ->orderBy('product_name')
+            ->orderBy('size')
+            ->get(['id', 'sku', 'product_name', 'article', 'version', 'sub_version', 'size', 'size_category', 'status'])
+            ->map(function ($sku) use ($stocks, $assigned) {
+                $bins = $stocks->get($sku->sku, collect());
+
+                return (object) [
+                    'sku_id' => $sku->id,
+                    'sku' => $sku->sku,
+                    'product_name' => $sku->product_name,
+                    'article' => $sku->article,
+                    'version' => $sku->version,
+                    'sub_version' => $sku->sub_version,
+                    'size' => $sku->size,
+                    'size_category' => $sku->size_category,
+                    'status' => $sku->status,
+                    'current_qty' => (int) $bins->sum('qty'),
+                    'max_capacity' => $assigned->get($sku->sku),
+                    'bin_location' => $bins->pluck('bin_code')->unique()->sort()->implode(', '),
+                    'is_assigned' => $assigned->has($sku->sku),
+                ];
+            })
+            ->values();
     }
 }
