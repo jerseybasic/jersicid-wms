@@ -58,16 +58,6 @@ class MasterSku extends Model
     }
 
     /**
-     * ✅ FIX: Hitung total stok di semua rak
-     */
-    public function getTotalRackStockAttribute()
-    {
-        return DB::table('rack_products')
-            ->where('sku', $this->sku)
-            ->sum('current_qty');
-    }
-
-    /**
      * Cek apakah SKU low stock
      */
     public function getIsLowStockAttribute()

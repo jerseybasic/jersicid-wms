@@ -210,9 +210,8 @@
                             </div>
                             <div class="flex items-center gap-3">
                                 <div class="text-right">
-                                    <p class="text-xs text-slate-400">Qty</p>
-                                    <input type="number" x-model="item.current_qty" min="0"
-                                        class="w-20 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-white text-sm text-right focus:border-cyan-400 focus:outline-none">
+                                    <p class="text-xs text-slate-400">Stok total</p>
+                                    <p class="w-20 px-2 py-1 text-emerald-400 text-sm font-semibold" x-text="item.current_stock"></p>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-xs text-slate-400">Kapasitas</p>
@@ -238,8 +237,6 @@
                     <template x-for="(item, index) in cart" :key="'hidden-' + index">
                         <div>
                             <input type="hidden" :name="'products[' + index + '][sku]'" :value="item.sku">
-                            <input type="hidden" :name="'products[' + index + '][current_qty]'"
-                                :value="item.current_qty">
                             <input type="hidden" :name="'products[' + index + '][max_capacity]'"
                                 :value="item.max_capacity">
                         </div>
@@ -296,9 +293,9 @@
                             $sizeCount = $products->count();
                         @endphp
 
-                        <div x-data="{ expanded: false, skus: [], loading: false }" class="border border-slate-800 rounded-xl overflow-hidden">
+                        <div x-data="{ expanded: false, skus: @js($products->values()) }" class="border border-slate-800 rounded-xl overflow-hidden">
                             <!-- Product Header (Klik untuk expand) -->
-                            <div @click="toggleRackProduct('{{ addslashes($productName) }}', '{{ addslashes($version) }}', '{{ $rack->code }}', $data)"
+                            <div @click="expanded = !expanded"
                                 class="flex items-center gap-3 p-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors cursor-pointer group">
 
                                 <!-- Expand Icon -->
@@ -346,14 +343,7 @@
 
                             <!-- Expanded SKU List -->
                             <div x-show="expanded" x-transition class="bg-slate-950/50 border-t border-slate-800">
-                                <div x-show="loading" class="p-4 text-center">
-                                    <div
-                                        class="inline-block w-6 h-6 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin">
-                                    </div>
-                                    <p class="text-xs text-slate-400 mt-2">Memuat detail size...</p>
-                                </div>
-
-                                <div x-show="!loading && skus.length > 0" class="p-2 space-y-1">
+                                <div x-show="skus.length > 0" class="p-2 space-y-1">
                                     <template x-for="sku in skus" :key="sku.sku">
                                         <div
                                             class="flex items-center justify-between p-2 bg-slate-900/50 rounded-lg border border-slate-800/50 hover:border-cyan-500/30 transition-all">
@@ -370,13 +360,15 @@
                                                         <span x-show="sku.sub_version"> • <span
                                                                 x-text="sku.sub_version"></span></span>
                                                     </p>
+                                                    <p class="text-[10px] font-mono text-slate-400 truncate"
+                                                        x-text="sku.bin_location ? 'Bin: ' + sku.bin_location : 'Belum ada stok di rak ini'"></p>
                                                 </div>
                                             </div>
                                             <div class="flex items-center gap-3">
                                                 <div class="text-right">
                                                     <p class="text-xs font-bold text-emerald-400"
                                                         x-text="sku.current_qty"></p>
-                                                    <p class="text-[9px] text-slate-500">Max: <span
+                                                    <p class="text-[9px] text-slate-500" x-show="sku.max_capacity">Max: <span
                                                             x-text="sku.max_capacity"></span></p>
                                                 </div>
                                                 <form :action="'/gudang/mapping/{{ $rack->code }}/' + sku.sku"
@@ -400,7 +392,7 @@
                                     </template>
                                 </div>
 
-                                <div x-show="!loading && skus.length === 0" class="p-4 text-center">
+                                <div x-show="skus.length === 0" class="p-4 text-center">
                                     <p class="text-xs text-slate-500">Tidak ada SKU untuk produk ini</p>
                                 </div>
                             </div>
@@ -415,49 +407,13 @@
                             d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                     </svg>
                     <p class="text-sm text-slate-400 font-medium">Belum ada produk di rak ini</p>
-                    <p class="text-xs text-slate-500 mt-1">Gunakan keranjang di atas untuk assign produk</p>
+                    <p class="text-xs text-slate-500 mt-1">Stok muncul di sini setelah barang masuk ke bin rak ini (contoh bin: {{ $rack->code }}-01-01)</p>
                 </div>
             @endif
         </div>
     </div>
 
     <script>
-        // ✅ FIX: Buat fungsi global yang bisa dipanggil dari mana saja
-        window.toggleRackProduct = async function(productName, version, rackCode, component) {
-            console.log('Toggle clicked:', productName, version, rackCode);
-
-            component.expanded = !component.expanded;
-
-            if (component.expanded && component.skus.length === 0) {
-                component.loading = true;
-                try {
-                    const url =
-                        `/gudang/mapping/${rackCode}/product/${encodeURIComponent(productName)}/${encodeURIComponent(version)}/skus`;
-                    console.log('Fetching:', url);
-
-                    const response = await fetch(url, {
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-
-                    const data = await response.json();
-                    console.log('SKU data:', data);
-                    component.skus = data;
-                } catch (error) {
-                    console.error('Error loading SKUs:', error);
-                    alert('Gagal memuat data SKU: ' + error.message);
-                } finally {
-                    component.loading = false;
-                }
-            }
-        }
-
         function assignProductForm(allSkus) {
             return {
                 allSkus: allSkus,
@@ -504,7 +460,6 @@
                         article: sku.article,
                         size: sku.size,
                         current_stock: sku.current_stock,
-                        current_qty: sku.current_stock || 0,
                         max_capacity: this.defaultCapacity
                     });
 

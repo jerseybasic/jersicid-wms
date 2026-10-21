@@ -161,10 +161,6 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::get('/{rackCode}', [WarehouseMappingController::class, 'show'])->name('gudang.mapping.show');
         Route::post('/{rackCode}/assign', [WarehouseMappingController::class, 'assign'])->name('gudang.mapping.assign');
         Route::delete('/{rackCode}/{sku}', [WarehouseMappingController::class, 'unassign'])->name('gudang.mapping.unassign');
-        Route::get('/{rackCode}/product/{productName}/{version}/skus', [WarehouseMappingController::class, 'getRackProductSkus'])
-            ->name('gudang.mapping.product-skus');
-        Route::get('/{rackCode}/product/{productName}/versions', [WarehouseMappingController::class, 'getRackProductVersions'])
-            ->name('gudang.mapping.product-versions');
     });
 
 // Barcode Scanner - dengan CRUD

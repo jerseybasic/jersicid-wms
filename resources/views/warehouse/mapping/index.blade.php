@@ -23,6 +23,7 @@
                     @php
                         $rack = $racks->firstWhere('code', $rackCode);
                         $productCount = $rack ? $rack->products_count : 0;
+                        $rackQty = $rack ? $rack->total_qty : 0;
                     @endphp
                     <a href="{{ route('gudang.mapping.show', $rackCode) }}"
                         class="w-20 h-24 bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-slate-700 hover:border-cyan-500/50 rounded-xl flex flex-col items-center justify-center transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20 group relative">
@@ -34,7 +35,7 @@
                         <span class="text-lg font-bold text-white">{{ $rackCode }}</span>
                         <span
                             class="text-[10px] {{ $productCount > 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400' }}">
-                            {{ $productCount }} produk
+                            {{ $productCount }} SKU · {{ number_format($rackQty) }} pcs
                         </span>
                         @if ($productCount > 0)
                             <div
@@ -62,6 +63,7 @@
                         @php
                             $rack = $racks->firstWhere('code', $rackCode);
                             $productCount = $rack ? $rack->products_count : 0;
+                        $rackQty = $rack ? $rack->total_qty : 0;
                         @endphp
                         <a href="{{ route('gudang.mapping.show', $rackCode) }}"
                             class="w-20 h-24 bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-slate-700 hover:border-cyan-500/50 rounded-xl flex flex-col items-center justify-center transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20 group relative {{ in_array($rackCode, ['E', 'Y']) ? 'ring-2 ring-amber-500/30' : '' }}">
@@ -73,7 +75,7 @@
                             <span class="text-lg font-bold text-white">{{ $rackCode }}</span>
                             <span
                                 class="text-[10px] {{ $productCount > 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400' }}">
-                                {{ $productCount }} produk
+                                {{ $productCount }} SKU · {{ number_format($rackQty) }} pcs
                             </span>
                             @if (in_array($rackCode, ['E', 'Y']))
                                 <span class="text-[8px] text-amber-400 mt-0.5">Ujung</span>
@@ -94,6 +96,7 @@
                         @php
                             $rack = $racks->firstWhere('code', $rackCode);
                             $productCount = $rack ? $rack->products_count : 0;
+                        $rackQty = $rack ? $rack->total_qty : 0;
                         @endphp
                         <a href="{{ route('gudang.mapping.show', $rackCode) }}"
                             class="w-20 h-24 bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-slate-700 hover:border-cyan-500/50 rounded-xl flex flex-col items-center justify-center transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20 group relative {{ in_array($rackCode, ['F', 'Z']) ? 'ring-2 ring-amber-500/30' : '' }}">
@@ -105,7 +108,7 @@
                             <span class="text-lg font-bold text-white">{{ $rackCode }}</span>
                             <span
                                 class="text-[10px] {{ $productCount > 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400' }}">
-                                {{ $productCount }} produk
+                                {{ $productCount }} SKU · {{ number_format($rackQty) }} pcs
                             </span>
                             @if (in_array($rackCode, ['F', 'Z']))
                                 <span class="text-[8px] text-amber-400 mt-0.5">Ujung</span>
@@ -126,6 +129,7 @@
                         @php
                             $rack = $racks->firstWhere('code', $rackCode);
                             $productCount = $rack ? $rack->products_count : 0;
+                        $rackQty = $rack ? $rack->total_qty : 0;
                         @endphp
                         <a href="{{ route('gudang.mapping.show', $rackCode) }}"
                             class="w-20 h-24 bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-slate-700 hover:border-cyan-500/50 rounded-xl flex flex-col items-center justify-center transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20 group relative {{ in_array($rackCode, ['G', 'AA']) ? 'ring-2 ring-amber-500/30' : '' }}">
@@ -137,7 +141,7 @@
                             <span class="text-lg font-bold text-white">{{ $rackCode }}</span>
                             <span
                                 class="text-[10px] {{ $productCount > 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400' }}">
-                                {{ $productCount }} produk
+                                {{ $productCount }} SKU · {{ number_format($rackQty) }} pcs
                             </span>
                             @if (in_array($rackCode, ['G', 'AA']))
                                 <span class="text-[8px] text-amber-400 mt-0.5">Ujung</span>
@@ -158,6 +162,7 @@
                         @php
                             $rack = $racks->firstWhere('code', $rackCode);
                             $productCount = $rack ? $rack->products_count : 0;
+                        $rackQty = $rack ? $rack->total_qty : 0;
                         @endphp
                         <a href="{{ route('gudang.mapping.show', $rackCode) }}"
                             class="w-20 h-24 bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-slate-700 hover:border-cyan-500/50 rounded-xl flex flex-col items-center justify-center transition-all hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20 group relative {{ in_array($rackCode, ['H', 'AB']) ? 'ring-2 ring-amber-500/30' : '' }}">
@@ -169,7 +174,7 @@
                             <span class="text-lg font-bold text-white">{{ $rackCode }}</span>
                             <span
                                 class="text-[10px] {{ $productCount > 0 ? 'text-emerald-400 font-semibold' : 'text-slate-400' }}">
-                                {{ $productCount }} produk
+                                {{ $productCount }} SKU · {{ number_format($rackQty) }} pcs
                             </span>
                             @if (in_array($rackCode, ['H', 'AB']))
                                 <span class="text-[8px] text-amber-400 mt-0.5">Ujung</span>
