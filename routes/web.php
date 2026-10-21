@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\MasterSkuController;
 use App\Http\Controllers\Admin\SupplierController;
+use App\Http\Controllers\Admin\InsightReportController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
@@ -214,6 +215,10 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('reports')->group(f
     Route::get('/stock', [ReportController::class, 'stock'])->name('reports.stock');
     Route::get('/movement', [ReportController::class, 'movement'])->name('reports.movement');
     Route::get('/opname', [ReportController::class, 'opname'])->name('reports.opname');
+    Route::get('/kinerja', [InsightReportController::class, 'performance'])->name('reports.performance');
+    Route::get('/barang-lambat', [InsightReportController::class, 'slowMoving'])->name('reports.slow-moving');
+    Route::get('/akurasi-opname', [InsightReportController::class, 'opnameAccuracy'])->name('reports.opname-accuracy');
+    Route::get('/nilai-stok', [InsightReportController::class, 'stockValue'])->name('reports.stock-value');
     Route::get('/import-sku', function () {
         return view('reports.import-sku');
     })->name('reports.import-sku-form');
