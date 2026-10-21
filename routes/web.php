@@ -19,6 +19,7 @@ use App\Http\Controllers\Warehouse\BarcodeScannerController;
 use App\Http\Controllers\Warehouse\PrinterController;
 use App\Http\Controllers\Warehouse\LabelController;
 use App\Http\Controllers\Warehouse\TaskController;
+use App\Http\Controllers\Warehouse\ReturnController;
 use App\Http\Controllers\Auth\LoginController;
 
 /*
@@ -58,7 +59,6 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
         Route::get('/export', [MasterSkuController::class, 'export'])->name('export');
         Route::post('/import', [MasterSkuController::class, 'import'])->name('import');
         // Reset menghapus seluruh Master SKU + stok, jadi hanya OWNER
-        Route::post('/reset', [MasterSkuController::class, 'resetData'])->middleware('role:OWNER')->name('reset');
     });
 
 // ==================== SUPPLIER (OWNER & SUPERVISOR) ====================
@@ -102,6 +102,14 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::get('/create', [OutboundController::class, 'create'])->name('outbound.create');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
+});
+
+// ==================== RETUR (GUDANG) ====================
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->prefix('gudang/retur')->name('gudang.')->group(function () {
+    Route::get('/', [ReturnController::class, 'index'])->name('retur');
+    Route::get('/create', [ReturnController::class, 'create'])->name('retur.create');
+    Route::post('/', [ReturnController::class, 'store'])->name('retur.store');
+    Route::get('/{id}', [ReturnController::class, 'show'])->name('retur.show');
 });
 
 // ==================== PICKING (GUDANG) ====================

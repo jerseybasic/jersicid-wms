@@ -512,17 +512,4 @@ class MasterSkuController extends Controller
             return back()->withErrors(['error' => 'Gagal import: ' . safe_error_message($e)]);
         }
     }
-
-    public function resetData()
-    {
-        try {
-            DB::transaction(function () {
-                MasterSku::query()->forceDelete();
-                StockActive::query()->delete();
-            });
-            return back()->with('success', 'Semua data Master SKU dan stok berhasil dihapus! Silakan import ulang.');
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal mereset data: ' . safe_error_message($e)]);
-        }
-    }
 }

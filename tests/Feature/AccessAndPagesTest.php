@@ -19,6 +19,8 @@ class AccessAndPagesTest extends TestCase
         'gudang.inbound.create',
         'gudang.outbound',
         'gudang.outbound.create',
+        'gudang.retur',
+        'gudang.retur.create',
         'gudang.picking',
         'gudang.picking.create',
         'gudang.packing',
@@ -118,10 +120,11 @@ class AccessAndPagesTest extends TestCase
         }
     }
 
-    public function test_only_owner_can_reset_master_sku(): void
+    public function test_master_sku_reset_endpoint_is_gone(): void
     {
-        $this->actingAs($this->userWithRole('SUPERVISOR'))
-            ->post(route('master-skus.reset'))
-            ->assertForbidden();
+        // Dulu bisa menghapus semua SKU dan stok dengan satu POST; tidak ada tombolnya, jadi dihapus
+        $this->actingAs($this->userWithRole('OWNER'))
+            ->post('/master-skus/reset')
+            ->assertStatus(405);
     }
 }
