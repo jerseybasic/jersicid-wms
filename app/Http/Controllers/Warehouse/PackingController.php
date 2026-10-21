@@ -149,43 +149,102 @@ class PackingController extends Controller
         try {
             DB::transaction(function () use ($sessionId, $itemId, $validated) {
                 $session = PackingSession::lockForUpdate()->findOrFail($sessionId);
-                $item = $session->items()->findOrFail($itemId);
-                $user = auth()->user();
+                $item = $session->items()->lockForUpdate()->findOrFail($itemId);
 
-                if ($session->status !== 'IN_PROGRESS') {
-                    throw new \RuntimeException('Mulai sesi packing dulu sebelum mengemas barang.');
-                }
-
-                $qtyPacked = min((int) $validated['qty_packed'], $item->qty_ordered);
-
-                $item->update([
-                    'qty_packed' => $qtyPacked,
-                    'status' => $qtyPacked >= $item->qty_ordered ? 'COMPLETED' : 'PARTIAL',
-                ]);
-
-                $item->orderItem?->update(['qty_packed' => $qtyPacked]);
-
-                $allPacked = $session->items()->whereColumn('qty_packed', '<', 'qty_ordered')->doesntExist();
-
-                if ($allPacked) {
-                    $session->update([
-                        'status' => 'COMPLETED',
-                        'completed_at' => now(),
-                    ]);
-
-                    // Semua barang sudah dikemas: order siap dikirim (resi diisi di Outbound)
-                    $session->order->update([
-                        'status' => 'READY_TO_SHIP',
-                        'packed_by' => $user->id,
-                        'packed_at' => now(),
-                        'courier' => $session->order->courier ?? $session->courier,
-                    ]);
-                }
+                $this->applyPack($session, $item, (int) $validated['qty_packed']);
             });
 
             return back()->with('success', 'Item berhasil dipacking!');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal packing item: ' . safe_error_message($e));
+        }
+    }
+
+    /**
+     * Scan di layar packing: setiap scan SKU menambah 1 qty dikemas.
+     * SKU yang bukan bagian order ditolak supaya barang salah tidak ikut terkirim.
+     */
+    public function scan(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:100'],
+        ]);
+
+        $code = strtoupper(trim($validated['code']));
+
+        try {
+            $result = DB::transaction(function () use ($id, $code) {
+                $session = PackingSession::lockForUpdate()->findOrFail($id);
+
+                if ($session->status !== 'IN_PROGRESS') {
+                    throw new \RuntimeException('Mulai sesi packing dulu sebelum scan.');
+                }
+
+                $item = $session->items()
+                    ->where('sku', $code)
+                    ->whereColumn('qty_packed', '<', 'qty_ordered')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$item) {
+                    throw new \RuntimeException($session->items()->where('sku', $code)->exists()
+                        ? "SKU {$code} sudah lengkap dikemas. Jangan dimasukkan lagi."
+                        : "{$code} bukan bagian dari order ini. Jangan dikemas.");
+                }
+
+                $this->applyPack($session, $item, $item->qty_packed + 1);
+
+                $item->refresh();
+                $session->refresh();
+
+                return [
+                    'ok' => true,
+                    'type' => 'sku',
+                    'message' => "{$code}: {$item->qty_packed}/{$item->qty_ordered}",
+                    'items' => [['id' => $item->id, 'qty' => $item->qty_packed, 'status' => $item->status]],
+                    'completed' => $session->status === 'COMPLETED',
+                ];
+            });
+
+            return response()->json($result);
+        } catch (\Exception $e) {
+            return response()->json(['ok' => false, 'message' => safe_error_message($e)], 422);
+        }
+    }
+
+    /**
+     * Set total qty dikemas untuk satu item. Dipanggil di dalam transaksi.
+     */
+    private function applyPack(PackingSession $session, PackingSessionItem $item, int $qtyPacked): void
+    {
+        if ($session->status !== 'IN_PROGRESS') {
+            throw new \RuntimeException('Mulai sesi packing dulu sebelum mengemas barang.');
+        }
+
+        $qtyPacked = min($qtyPacked, $item->qty_ordered);
+
+        $item->update([
+            'qty_packed' => $qtyPacked,
+            'status' => $qtyPacked >= $item->qty_ordered ? 'COMPLETED' : 'PARTIAL',
+        ]);
+
+        $item->orderItem?->update(['qty_packed' => $qtyPacked]);
+
+        $allPacked = $session->items()->whereColumn('qty_packed', '<', 'qty_ordered')->doesntExist();
+
+        if ($allPacked) {
+            $session->update([
+                'status' => 'COMPLETED',
+                'completed_at' => now(),
+            ]);
+
+            // Semua barang sudah dikemas: order siap dikirim (resi diisi di Outbound)
+            $session->order->update([
+                'status' => 'READY_TO_SHIP',
+                'packed_by' => auth()->id(),
+                'packed_at' => now(),
+                'courier' => $session->order->courier ?? $session->courier,
+            ]);
         }
     }
 

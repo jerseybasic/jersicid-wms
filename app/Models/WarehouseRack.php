@@ -60,4 +60,18 @@ class WarehouseRack extends Model
 
         return $code === '' ? null : $code;
     }
+
+    /**
+     * True bila kode adalah bin yang sudah berisi stok, atau diawali kode rak yang terdaftar.
+     */
+    public static function isKnownBin(?string $code): bool
+    {
+        $code = strtoupper(trim((string) $code));
+        if ($code === '') {
+            return false;
+        }
+
+        return StockActive::where('bin_code', $code)->exists()
+            || static::where('code', static::codeFromBin($code))->exists();
+    }
 }

@@ -54,6 +54,11 @@
             @endif
         </div>
 
+        @if($session->status === 'IN_PROGRESS')
+            <x-scan-box :endpoint="route('gudang.packing.scan', $session->id)" storage-key="packing-{{ $session->id }}"
+                :with-bin="false" hint="Scan setiap barang yang dimasukkan ke paket. Barang yang bukan pesanan ini akan ditolak." />
+        @endif
+
         <!-- Items List -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
             <div class="p-4 border-b border-slate-800">
@@ -69,6 +74,7 @@
                                 <p class="text-xs text-slate-400">{{ $item->masterSku?->product_name }}</p>
                             </div>
                             <div class="text-right">
+                                <p class="text-sm text-slate-300">Dikemas: <span class="font-bold text-emerald-400" data-scan-qty="{{ $item->id }}">{{ $item->qty_packed }}</span> / {{ $item->qty_ordered }}</p>
                                 <p class="text-xs text-slate-400">Status: <span class="{{ $item->status === 'COMPLETED' ? 'text-emerald-400' : 'text-amber-400' }}">{{ $item->status }}</span></p>
                             </div>
                         </div>

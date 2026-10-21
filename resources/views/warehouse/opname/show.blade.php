@@ -73,6 +73,11 @@
             </div>
         </div>
 
+        @if($opname->status === 'IN_PROGRESS')
+            <x-scan-box storage-key="opname-bin-{{ $opname->id }}"
+                hint="Scan lokasi bin, lalu scan setiap barang yang ada di bin itu. Setiap scan menambah 1 stok fisik. Klik Simpan Sementara secara berkala." />
+        @endif
+
         <!-- Form Utama -->
         <form method="POST" action="{{ route('gudang.opname.update', $opname->id) }}" id="mainOpnameForm">
             @csrf
@@ -111,6 +116,8 @@
                                                @if($opname->status === 'COMPLETED') disabled @endif
                                                class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-center font-bold focus:border-cyan-400 focus:outline-none physical-input"
                                                data-system="{{ $item->system_qty }}"
+                                               data-sku="{{ $item->sku }}"
+                                               data-bin="{{ strtoupper($item->bin_code) }}"
                                                data-index="{{ $index }}">
                                     </td>
                                     <td class="py-3 px-4 text-center">
@@ -147,6 +154,32 @@
 
     {{-- Script Kalkulasi Real-time --}}
     <script>
+        // Scan barcode: kode bin memilih lokasi, kode SKU menambah 1 stok fisik di baris yang cocok
+        window.addEventListener('scan-code', function (event) {
+            const { code, bin, respond } = event.detail;
+            const inputs = Array.from(document.querySelectorAll('.physical-input'));
+
+            if (inputs.some(input => input.dataset.bin === code)) {
+                return respond({ ok: true, type: 'bin', bin_code: code, message: 'Lokasi ' + code + ' dipilih. Sekarang scan barangnya.' });
+            }
+
+            const sameSku = inputs.filter(input => input.dataset.sku === code);
+            if (sameSku.length === 0) {
+                return respond({ ok: false, message: code + ' tidak ada di daftar opname halaman ini.' });
+            }
+
+            const target = bin ? sameSku.find(input => input.dataset.bin === bin) : (sameSku.length === 1 ? sameSku[0] : null);
+            if (!target) {
+                return respond({ ok: false, message: bin
+                    ? code + ' tidak tercatat di bin ' + bin + '. Catat di keterangan atau pindahkan barangnya.'
+                    : code + ' ada di beberapa bin. Scan lokasi bin dulu.' });
+            }
+
+            target.value = (parseInt(target.value) || 0) + 1;
+            target.dispatchEvent(new Event('input'));
+            respond({ ok: true, message: code + ' di ' + target.dataset.bin + ': fisik ' + target.value + ' (sistem ' + target.dataset.system + ')' });
+        });
+
         document.addEventListener('DOMContentLoaded', function() {
             const inputs = document.querySelectorAll('.physical-input');
             

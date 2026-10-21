@@ -55,12 +55,57 @@ class InboundController extends Controller
         $racks = WarehouseRack::orderBy('code')
             ->get(['id', 'code', 'color', 'rows_count']);
 
-        // 4. Ambil Purchase Order yang siap diterima
+        // 4. Purchase Order yang siap diterima, beserta sisa qty per item
         $purchaseOrders = PurchaseOrder::whereIn('status', ['APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'READY'])
+            ->with('items.masterSku:sku,product_name,size,price')
             ->orderBy('po_number')
-            ->get(['id', 'po_number', 'supplier_name']);
+            ->get();
 
-        return view('warehouse.inbound.create', compact('skus', 'warehouses', 'racks', 'purchaseOrders'));
+        // 5. Saran bin per SKU: bin yang stoknya paling banyak, atau rak tempat SKU ditetapkan
+        $suggestedBins = $this->suggestedBins();
+
+        $poData = $purchaseOrders->mapWithKeys(fn ($po) => [$po->id => [
+            'supplier_name' => $po->supplier_name,
+            'items' => $po->items
+                ->filter(fn ($item) => $item->qty_received < $item->qty_ordered)
+                ->map(fn ($item) => [
+                    'sku' => $item->sku,
+                    'product_name' => $item->masterSku?->product_name,
+                    'size' => $item->masterSku?->size,
+                    'price' => $item->masterSku?->price,
+                    'remaining' => $item->qty_ordered - $item->qty_received,
+                    'bin_code' => $suggestedBins[$item->sku] ?? '',
+                ])
+                ->values(),
+        ]]);
+
+        return view('warehouse.inbound.create', compact('skus', 'warehouses', 'racks', 'purchaseOrders', 'poData', 'suggestedBins'));
+    }
+
+    /**
+     * @return array<string, string> sku => kode bin
+     */
+    private function suggestedBins(): array
+    {
+        $bins = [];
+
+        DB::table('rack_products')
+            ->join('warehouse_racks', 'warehouse_racks.id', '=', 'rack_products.warehouse_rack_id')
+            ->select('rack_products.sku', 'warehouse_racks.code')
+            ->get()
+            ->each(function ($row) use (&$bins) {
+                $bins[$row->sku] = $row->code . '-01-01';
+            });
+
+        StockActive::where('qty', '>', 0)
+            ->orderBy('qty')
+            ->get(['sku', 'bin_code'])
+            ->each(function ($stock) use (&$bins) {
+                // diurutkan naik, jadi bin dengan stok terbanyak menimpa yang lain
+                $bins[$stock->sku] = $stock->bin_code;
+            });
+
+        return $bins;
     }
 
     public function store(Request $request)
@@ -91,7 +136,7 @@ class InboundController extends Controller
 
                 foreach ($validated['items'] as $item) {
                     $sku = $item['sku'];
-                    $binCode = $item['bin_code'];
+                    $binCode = strtoupper(trim($item['bin_code']));
                     $qtyReceived = $item['qty_received'];
                     $qtyRejected = $item['qty_rejected'] ?? 0;
                     $qtyExpected = $item['qty_expected'] ?? $qtyReceived;
@@ -135,7 +180,7 @@ class InboundController extends Controller
                         'qty_before' => $qtyBefore,
                         'qty_after' => $qtyAfter,
                         'reference_no' => $receiptNo,
-                        'notes' => $validated['notes'] ?? null,
+                        'notes' => trim(($validated['notes'] ?? '') . ($qtyRejected > 0 ? " (reject {$qtyRejected} pcs)" : '')) ?: null,
                         'ip_address' => $request->ip(),
                     ]);
 

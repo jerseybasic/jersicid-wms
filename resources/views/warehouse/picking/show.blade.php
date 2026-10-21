@@ -54,6 +54,10 @@
             @endif
         </div>
 
+        @if($session->status === 'IN_PROGRESS')
+            <x-scan-box :endpoint="route('gudang.picking.scan', $session->id)" storage-key="picking-bin-{{ $session->id }}" />
+        @endif
+
         <!-- Items List -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
             <div class="p-4 border-b border-slate-800">
@@ -70,6 +74,7 @@
                             </div>
                             <div class="text-right">
                                 <p class="text-xs text-slate-400">Bin: <span class="font-mono text-white">{{ $item->bin_code }}</span></p>
+                                <p class="text-sm text-slate-300">Diambil: <span class="font-bold text-emerald-400" data-scan-qty="{{ $item->id }}">{{ $item->qty_picked }}</span> / {{ $item->qty_ordered }}</p>
                                 <p class="text-xs text-slate-400">Status: <span class="{{ $item->status === 'COMPLETED' ? 'text-emerald-400' : 'text-amber-400' }}">{{ $item->status }}</span></p>
                             </div>
                         </div>
@@ -79,7 +84,7 @@
                                 @csrf
                                 <div class="flex-1">
                                     <label class="block text-xs text-slate-400 mb-1">Qty Picked</label>
-                                    <input type="number" name="qty_picked" value="{{ $item->qty_picked }}" min="0" max="{{ $item->qty_ordered }}" required
+                                    <input type="number" name="qty_picked" value="{{ $item->qty_picked }}" data-scan-qty="{{ $item->id }}" min="0" max="{{ $item->qty_ordered }}" required
                                            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>
                                 </div>
                                 <div class="flex-1">

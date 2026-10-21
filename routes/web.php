@@ -117,6 +117,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::get('/{id}', [PickingController::class, 'show'])->name('picking.show');
         Route::post('/{id}/start', [PickingController::class, 'start'])->name('picking.start');
         Route::post('/{sessionId}/items/{itemId}/pick', [PickingController::class, 'pickItem'])->name('picking.pick');
+        Route::post('/{id}/scan', [PickingController::class, 'scan'])->name('picking.scan');
         Route::delete('/{id}', [PickingController::class, 'destroy'])->name('picking.destroy');
     });
 
@@ -131,6 +132,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::get('/{id}', [PackingController::class, 'show'])->name('packing.show');
         Route::post('/{id}/start', [PackingController::class, 'start'])->name('packing.start');
         Route::post('/{sessionId}/items/{itemId}/pack', [PackingController::class, 'packItem'])->name('packing.pack');
+        Route::post('/{id}/scan', [PackingController::class, 'scan'])->name('packing.scan');
         Route::post('/{id}/complete', [PackingController::class, 'complete'])->name('packing.complete');
         Route::delete('/{id}', [PackingController::class, 'destroy'])->name('packing.destroy');
     });
@@ -163,23 +165,13 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::delete('/{rackCode}/{sku}', [WarehouseMappingController::class, 'unassign'])->name('gudang.mapping.unassign');
     });
 
-// Barcode Scanner - dengan CRUD
+// Cek barang & lokasi (hanya baca, tidak mengubah stok)
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/scanner')
     ->name('gudang.')
     ->group(function () {
         Route::get('/', [BarcodeScannerController::class, 'index'])->name('scanner');
-        Route::post('/validate', [BarcodeScannerController::class, 'validate'])->name('scanner.validate');
-        Route::post('/buffer', [BarcodeScannerController::class, 'addToBuffer'])->name('scanner.buffer.add');
-        Route::get('/buffer', [BarcodeScannerController::class, 'getBuffer'])->name('scanner.buffer.get');
-        Route::put('/buffer/{id}', [BarcodeScannerController::class, 'updateBuffer'])->name('scanner.buffer.update');
-        Route::delete('/buffer/{id}', [BarcodeScannerController::class, 'deleteBuffer'])->name('scanner.buffer.delete');
-        Route::post('/buffer/clear', [BarcodeScannerController::class, 'clearBuffer'])->name('scanner.buffer.clear');
-        Route::post('/buffer/confirm', [BarcodeScannerController::class, 'confirmBuffer'])->name('scanner.buffer.confirm');
-        Route::put('/scans/{id}', [BarcodeScannerController::class, 'updateScan'])->name('scanner.scan.update');
-        Route::delete('/scans/{id}', [BarcodeScannerController::class, 'deleteScan'])->name('scanner.scan.delete');
-        Route::get('/recent', [BarcodeScannerController::class, 'recentScans'])->name('scanner.recent');
-        Route::get('/device', [BarcodeScannerController::class, 'checkDevice'])->name('scanner.device');
+        Route::get('/lookup', [BarcodeScannerController::class, 'lookup'])->name('scanner.lookup');
     });
 
 // Thermal Printer
