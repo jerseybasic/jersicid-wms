@@ -70,6 +70,27 @@
             border-radius: 2px;
         }
 
+        /* Daftar Tugas Hari Ini di lonceng: lebar penuh di HP, kotak kecil di bawah lonceng di layar lebar.
+           Ditulis di sini (bukan kelas Tailwind) supaya tampil benar walau CSS belum di-build ulang. */
+        .work-dropdown {
+            position: fixed;
+            left: 1rem;
+            right: 1rem;
+            top: 5rem;
+            z-index: 1000;
+        }
+
+        @media (min-width: 640px) {
+            .work-dropdown {
+                position: absolute;
+                left: auto;
+                right: 0;
+                top: 100%;
+                margin-top: 0.75rem;
+                width: 24rem;
+            }
+        }
+
         /* Notification Badge Pulse */
         @keyframes pulse-ring {
             0% {
@@ -594,8 +615,8 @@
                                 x-transition:leave="transition ease-in duration-150"
                                 x-transition:leave-start="opacity-100 scale-100"
                                 x-transition:leave-end="opacity-0 scale-95"
-                                class="fixed left-4 right-4 top-20 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-3 sm:w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden"
-                                style="z-index: 1000;" x-cloak>
+                                class="work-dropdown bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden"
+                                x-cloak>
                                 <div class="bg-gradient-to-br from-slate-800 to-slate-900 border-b border-slate-700 px-5 py-4">
                                     <h3 class="text-sm font-bold text-white">Tugas Hari Ini</h3>
                                     <p class="text-xs text-slate-400">
