@@ -15,6 +15,19 @@
     </x-slot>
 
     <div class="max-w-6xl mx-auto space-y-6">
+        @if(session('success'))
+            <div class="p-4 bg-emerald-900/30 border border-emerald-500/50 text-emerald-400 rounded-xl">{{ session('success') }}</div>
+        @endif
+
+        <!-- Cetak label SKU untuk barang yang baru diterima -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-3">
+            <p class="flex-1 text-sm text-slate-300">Tempel label SKU di setiap barang sebelum disimpan ke rak, supaya bisa di-scan saat picking dan opname.</p>
+            <a href="{{ route('gudang.label.sku', ['ref' => $inbound->reference_no]) }}" target="_blank"
+                class="px-4 py-3 bg-cyan-500 hover:bg-cyan-400 text-slate-900 text-sm font-bold rounded-xl text-center">Cetak label SKU ({{ $items->sum('qty') }})</a>
+            <a href="{{ route('gudang.label.sku', ['ref' => $inbound->reference_no, 'ukuran' => 'a4']) }}" target="_blank"
+                class="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl text-center">Versi kertas A4</a>
+        </div>
+
         <!-- Info Card -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">

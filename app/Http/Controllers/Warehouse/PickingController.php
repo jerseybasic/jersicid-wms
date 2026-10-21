@@ -60,10 +60,11 @@ class PickingController extends Controller
         $validated = $request->validate([
             'order_id' => ['required', 'exists:orders,id'],
             'notes' => ['nullable', 'string', 'max:500'],
+            'start_now' => ['nullable', 'boolean'],
         ]);
 
         try {
-            DB::transaction(function () use ($validated, $request) {
+            $session = DB::transaction(function () use ($validated, $request) {
                 $user = auth()->user();
 
                 $order = Order::with('items')->lockForUpdate()->findOrFail($validated['order_id']);
@@ -110,7 +111,19 @@ class PickingController extends Controller
                     ]),
                     'ip_address' => $request->ip(),
                 ]);
+
+                // Dari layar Tugas: sesi langsung dimulai dan staf dibawa ke layar scan
+                if (!empty($validated['start_now'])) {
+                    $session->update(['status' => 'IN_PROGRESS', 'started_at' => now()]);
+                }
+
+                return $session;
             });
+
+            if (!empty($validated['start_now'])) {
+                return redirect()->route('gudang.picking.show', $session->id)
+                    ->with('success', 'Tugas diambil. Mulai scan barang.');
+            }
 
             return redirect()->route('gudang.picking')
                 ->with('success', 'Picking session berhasil dibuat!');

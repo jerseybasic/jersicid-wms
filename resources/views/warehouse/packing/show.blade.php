@@ -59,6 +59,14 @@
                 :with-bin="false" hint="Scan setiap barang yang dimasukkan ke paket. Barang yang bukan pesanan ini akan ditolak." />
         @endif
 
+        @if($session->status === 'COMPLETED' && $session->order)
+            <div class="bg-emerald-900/20 border border-emerald-500/40 rounded-xl p-4 flex flex-col md:flex-row md:items-center gap-3">
+                <p class="flex-1 text-sm text-emerald-300">Packing selesai. Cetak label kirim lalu tempel di paket.</p>
+                <a href="{{ route('gudang.label.shipping', $session->order->id) }}" target="_blank"
+                    class="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-sm font-bold rounded-xl text-center">Cetak label kirim</a>
+            </div>
+        @endif
+
         <!-- Items List -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
             <div class="p-4 border-b border-slate-800">
@@ -80,9 +88,9 @@
                         </div>
 
                         @if($session->status === 'IN_PROGRESS' && $item->status !== 'COMPLETED')
-                            <form method="POST" action="{{ route('gudang.packing.pack', [$session->id, $item->id]) }}" class="flex items-center gap-3">
+                            <form method="POST" action="{{ route('gudang.packing.pack', [$session->id, $item->id]) }}" class="flex flex-wrap items-end gap-3">
                                 @csrf
-                                <div class="flex-1">
+                                <div class="flex-1 min-w-[8rem]">
                                     <label class="block text-xs text-slate-400 mb-1">Qty Dikemas</label>
                                     <input type="number" name="qty_packed" value="{{ $item->qty_packed ?: $item->qty_ordered }}" min="0" max="{{ $item->qty_ordered }}" required
                                            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>

@@ -97,7 +97,8 @@
 </head>
 
 <body class="font-sans antialiased bg-slate-950 text-slate-200" x-data="{
-    sidebarOpen: true,
+    // Di HP/tablet sidebar tertutup dan muncul sebagai lapisan di atas konten
+    sidebarOpen: window.innerWidth >= 1024,
     currentTime: '',
     currentDate: '',
     init() {
@@ -125,9 +126,11 @@
     <div class="flex h-screen overflow-hidden">
 
         <!-- ==================== SIDEBAR ==================== -->
+        <div x-show="sidebarOpen" x-cloak @click="sidebarOpen = false" class="fixed inset-0 z-[45] bg-black/60 lg:hidden"></div>
         <aside
-            class="flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col overflow-hidden transition-all duration-300 ease-in-out"
-            :class="sidebarOpen ? 'w-64' : 'w-16'" style="height: 100vh;">
+            class="fixed inset-y-0 left-0 z-50 lg:static lg:z-auto flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col overflow-hidden duration-300 ease-in-out -translate-x-full lg:translate-x-0"
+            x-init="$nextTick(() => $el.classList.add('transition-all'))"
+            :class="sidebarOpen ? 'w-64 !translate-x-0' : 'w-16'" style="height: 100vh;">
 
             <!-- Logo & Toggle Button -->
             <div class="flex items-center justify-center px-4 py-4 border-b border-slate-800 flex-shrink-0">
@@ -424,6 +427,17 @@
                             ],
                         ],
                     ];
+
+                    // Tugas Saya (daftar kerja ringkas untuk HP) tepat di bawah Dashboard untuk semua role
+                    foreach ($menus as $menuRole => $groups) {
+                        $menus[$menuRole] = array_slice($groups, 0, 1, true) + [
+                            'Tugas Saya' => [
+                                'route' => 'gudang.tugas',
+                                'icon' =>
+                                    'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+                            ],
+                        ] + array_slice($groups, 1, null, true);
+                    }
 
                     $currentMenus = $menus[$role] ?? [];
                 @endphp
@@ -749,7 +763,7 @@
             </header>
 
             <!-- Page Content (Scrollable) -->
-            <main id="main-content" class="flex-1 overflow-y-auto bg-slate-950 p-6">
+            <main id="main-content" class="flex-1 overflow-y-auto bg-slate-950 p-4 lg:p-6">
                 @isset($slot)
                     {{ $slot }}
                 @else
