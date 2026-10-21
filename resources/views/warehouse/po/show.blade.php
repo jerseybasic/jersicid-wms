@@ -91,6 +91,21 @@
                             class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-all"
                             onclick="return confirm('Approve PO ini?')">Approve PO</button>
                     </form>
+
+                    <div x-data="{ open: false }" class="contents">
+                        <button type="button" @click="open = !open" x-show="!open"
+                            class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl transition-all">Tolak</button>
+                        <form x-show="open" x-cloak method="POST" action="{{ route('po.update-status', $po->id) }}"
+                            class="flex flex-wrap items-center gap-2 w-full">
+                            @csrf @method('PATCH')
+                            <input type="hidden" name="status" value="DRAFT">
+                            <input type="text" name="reason" required maxlength="500" placeholder="Alasan ditolak (wajib)"
+                                class="flex-1 min-w-[12rem] px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-amber-400 focus:outline-none">
+                            <button type="submit"
+                                class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl transition-all">Kembalikan ke Draft</button>
+                            <button type="button" @click="open = false" class="text-sm text-slate-400 hover:text-white">Batal</button>
+                        </form>
+                    </div>
                 @endif
 
                 @if ($canUpdateStage && $po->status === 'APPROVED')
@@ -189,7 +204,7 @@
                 @if ($po->notes)
                     <div>
                         <p class="text-xs text-slate-400 mb-1">Catatan PO:</p>
-                        <p class="text-sm text-slate-300">{{ $po->notes }}</p>
+                        <p class="text-sm text-slate-300 whitespace-pre-line">{{ $po->notes }}</p>
                     </div>
                 @endif
                 @if ($po->production_notes)

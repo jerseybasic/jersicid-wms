@@ -75,6 +75,9 @@
                 @if ($senderPhone)
                     <span> · {{ $senderPhone }}</span>
                 @endif
+                @if ($senderAddress)
+                    <div>{{ $senderAddress }}</div>
+                @endif
             </div>
 
             <table>

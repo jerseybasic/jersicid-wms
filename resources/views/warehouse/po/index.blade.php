@@ -82,6 +82,9 @@
                         </svg>
                         Buat PO Baru
                     </a>
+                    <a href="{{ route('po.create', ['dari' => 'stok-menipis']) }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-semibold rounded-xl border border-amber-500/40 transition-all text-sm">
+                        PO dari Stok Menipis
+                    </a>
                 @endif
             </form>
         </div>

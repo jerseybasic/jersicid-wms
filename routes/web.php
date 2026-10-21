@@ -19,7 +19,6 @@ use App\Http\Controllers\Warehouse\BarcodeScannerController;
 use App\Http\Controllers\Warehouse\PrinterController;
 use App\Http\Controllers\Warehouse\LabelController;
 use App\Http\Controllers\Warehouse\TaskController;
-use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Auth\LoginController;
 
 /*
@@ -43,9 +42,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard/owner', [DashboardController::class, 'owner'])->name('dashboard.owner');
     Route::get('/dashboard/gudang', [DashboardController::class, 'gudang'])->name('dashboard.gudang');
 });
-
-// ==================== NOTIFICATIONS ====================
-Route::middleware(['auth'])->get('/api/notifications', [NotificationController::class, 'index'])->name('notifications.index');
 
 // ==================== MASTER SKU (OWNER & SUPERVISOR) ====================
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
@@ -225,6 +221,7 @@ Route::middleware(['auth'])->prefix('settings')->name('settings.')->group(functi
 // ==================== SETTINGS (OWNER ONLY) ====================
 Route::middleware(['auth', 'role:OWNER'])->prefix('settings')->name('settings.')->group(function () {
     Route::get('/', [SettingsController::class, 'index'])->name('index');
+    Route::put('/', [SettingsController::class, 'update'])->name('update');
     Route::post('/clear-cache', function () {
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
         \Illuminate\Support\Facades\Artisan::call('view:clear');

@@ -8,6 +8,7 @@ use App\Models\MasterSku;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
+use App\Services\LowStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,9 @@ class PurchaseOrderController extends Controller
 {
     /** Role yang boleh membuat, mengubah, menyetujui, dan membatalkan PO */
     private const MANAGER_ROLES = ['OWNER', 'SUPERVISOR'];
+
+    /** Batas jumlah SKU yang diisi otomatis dari daftar stok menipis */
+    private const LOW_STOCK_PREFILL_LIMIT = 50;
 
     public function index(Request $request)
     {
@@ -51,11 +55,29 @@ class PurchaseOrderController extends Controller
         return view('warehouse.po.index', compact('purchaseOrders', 'stats', 'statusOptions', 'suppliers'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $this->authorizeManager();
 
-        return view('warehouse.po.create', $this->formData(new PurchaseOrder()));
+        $data = $this->formData(new PurchaseOrder());
+
+        // "Buat PO dari stok menipis": item terisi otomatis dengan saran jumlah pesan ulang
+        if ($request->query('dari') === 'stok-menipis') {
+            $lowStock = LowStock::query()
+                ->orderBy('current_stock')
+                ->limit(self::LOW_STOCK_PREFILL_LIMIT)
+                ->get();
+
+            $data['prefillRows'] = $lowStock->map(fn ($sku) => [
+                'sku' => $sku->sku,
+                'qty' => LowStock::suggestedQty((int) $sku->current_stock, (int) $sku->limit_qty),
+                'price' => (int) $sku->price,
+                'stock' => (int) $sku->current_stock,
+                'limit' => (int) $sku->limit_qty,
+            ])->all();
+        }
+
+        return view('warehouse.po.create', $data);
     }
 
     public function store(Request $request)
@@ -166,7 +188,7 @@ class PurchaseOrderController extends Controller
     }
 
     /**
-     * Ubah status PO: ajukan, setujui, mulai produksi, siap diambil, batalkan.
+     * Ubah status PO: ajukan, setujui, tolak (kembali ke Draft), mulai produksi, siap diambil, batalkan.
      * Status RECEIVED diisi otomatis oleh Inbound.
      */
     public function updateStatus(Request $request, $id)
@@ -174,17 +196,20 @@ class PurchaseOrderController extends Controller
         $user = Auth::user();
 
         $validated = $request->validate([
-            'status' => 'required|in:PENDING,APPROVED,IN_PRODUCTION,READY_FOR_PICKUP,CANCELLED',
+            'status' => 'required|in:DRAFT,PENDING,APPROVED,IN_PRODUCTION,READY_FOR_PICKUP,CANCELLED',
+            'reason' => 'required_if:status,DRAFT|nullable|string|max:500',
             'production_notes' => 'nullable|string|max:1000',
             'defect_count' => 'nullable|integer|min:0',
             'defect_notes' => 'nullable|string|max:1000',
+        ], [
+            'reason.required_if' => 'Alasan penolakan wajib diisi.',
         ]);
 
         $newStatus = $validated['status'];
 
-        // Ajukan, setujui, dan batalkan hanya untuk OWNER/SUPERVISOR.
+        // Ajukan, setujui, tolak, dan batalkan hanya untuk OWNER/SUPERVISOR.
         // ADMIN_GUDANG boleh memperbarui tahap produksi.
-        if (in_array($newStatus, ['PENDING', 'APPROVED', 'CANCELLED']) && !in_array($user->role, self::MANAGER_ROLES)) {
+        if (in_array($newStatus, ['DRAFT', 'PENDING', 'APPROVED', 'CANCELLED']) && !in_array($user->role, self::MANAGER_ROLES)) {
             abort(403, 'Hanya Owner atau Supervisor yang bisa melakukan aksi ini.');
         }
 
@@ -206,16 +231,27 @@ class PurchaseOrderController extends Controller
             $updateData['ready_at'] = now();
         }
 
+        // Ditolak: alasan dicatat di atas catatan PO supaya pembuat PO langsung melihatnya
+        if ($newStatus === 'DRAFT') {
+            $rejection = 'Ditolak oleh ' . $user->name . ' (' . now()->format('d/m/Y H:i') . '): ' . $validated['reason'];
+            $updateData['notes'] = trim($rejection . "\n" . $po->notes);
+        }
+
         foreach (['production_notes', 'defect_count', 'defect_notes'] as $field) {
             if (isset($validated[$field])) {
                 $updateData[$field] = $validated[$field];
             }
         }
 
-        DB::transaction(function () use ($po, $updateData, $oldStatus) {
+        DB::transaction(function () use ($po, $updateData, $oldStatus, $validated) {
             $po->update($updateData);
-            $this->audit('UPDATE_PO_STATUS', $po, ['from' => $oldStatus, 'to' => $updateData['status']]);
+            $this->audit('UPDATE_PO_STATUS', $po, ['from' => $oldStatus, 'to' => $updateData['status']]
+                + (isset($validated['reason']) ? ['reason' => $validated['reason']] : []));
         });
+
+        if ($newStatus === 'DRAFT') {
+            return back()->with('success', "PO {$po->po_number} ditolak dan dikembalikan ke Draft untuk diperbaiki.");
+        }
 
         return back()->with('success', "Status PO {$po->po_number} sekarang: {$po->status_label}.");
     }
@@ -233,7 +269,7 @@ class PurchaseOrderController extends Controller
             'supplier_id' => 'required|exists:suppliers,id',
             'supplier_type' => 'required|in:SUBLIMASI,KONVEKSI,UMUM',
             'expected_date' => $isNew ? 'required|date|after_or_equal:today' : 'required|date',
-            'notes' => 'nullable|string|max:500',
+            'notes' => 'nullable|string|max:2000',
             'items' => 'required|array|min:1',
             'items.*.sku' => 'required|exists:master_skus,sku',
             'items.*.qty' => 'required|integer|min:1',

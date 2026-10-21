@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use App\Services\WorkQueue;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,23 +26,13 @@ class AppServiceProvider extends ServiceProvider
         
         URL::forceScheme('https');
 
-        // ✅ FIX: Share notifications data ke semua view yang menggunakan app layout
+        // Lonceng di header: jumlah pekerjaan yang menunggu (Tugas Hari Ini)
         View::composer('layouts.app', function ($view) {
             $user = Auth::user();
+            $items = $user ? WorkQueue::for($user) : [];
 
-            if ($user) {
-                // Ambil notifikasi yang belum dibaca
-                $unreadNotifications = $user->unreadNotifications()->count();
-
-                // Ambil 5 notifikasi terbaru
-                $notifications = $user->notifications()->take(5)->get();
-            } else {
-                $unreadNotifications = 0;
-                $notifications = collect();
-            }
-
-            $view->with('unreadNotifications', $unreadNotifications);
-            $view->with('notifications', $notifications);
+            $view->with('workItems', $items);
+            $view->with('workTotal', array_sum(array_column($items, 'count')));
         });
 
         RateLimiter::for('api', function (Request $request) {
