@@ -14,7 +14,8 @@
         </div>
     </x-slot>
 
-    <div class="max-w-7xl mx-auto space-y-6" x-data="inboundForm()" x-init="init(@json($skus), @json($racks))">
+    <div class="max-w-7xl mx-auto space-y-6" x-data="inboundForm()" x-init="init(@js($skus), @js($racks), @js($poData), @js($suggestedBins), @js((string) old('po_id', request('po_id'))), @js((string) old('supplier_name')))"
+        @scan-code.window="onScan($event.detail)">
 
         @if(session('success'))
             <div class="p-4 bg-emerald-900/30 border border-emerald-500/50 text-emerald-400 rounded-xl flex items-start gap-3">
@@ -75,7 +76,7 @@
                         <label class="block text-sm font-medium text-slate-300 mb-2">
                             Nama Supplier <span class="text-red-400">*</span>
                         </label>
-                        <input type="text" name="supplier_name" value="{{ old('supplier_name') }}" required
+                        <input type="text" name="supplier_name" x-model="supplierName" required
                                placeholder="Nama supplier"
                                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"/>
                     </div>
@@ -90,11 +91,11 @@
 
                     <div>
                         <label class="block text-sm font-medium text-slate-300 mb-2">PO Terkait</label>
-                        <select name="po_id" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all">
+                        <select name="po_id" x-model="poId" @change="selectPo()" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all">
                             <option value="">-- Tidak Ada --</option>
                             @if(isset($purchaseOrders))
                                 @foreach($purchaseOrders as $po)
-                                    <option value="{{ $po->id }}" {{ old('po_id', request('po_id')) == $po->id ? 'selected' : '' }}>
+                                    <option value="{{ $po->id }}">
                                         {{ $po->po_number }} - {{ $po->supplier_name }}
                                     </option>
                                 @endforeach
@@ -134,6 +135,11 @@
                         </svg>
                         Tambah Item
                     </button>
+                </div>
+
+                <div class="mb-6">
+                    <x-scan-box storage-key="inbound-bin"
+                        hint="Scan lokasi rak tujuan, lalu scan setiap barang yang diterima. Setiap scan menambah 1 qty diterima." />
                 </div>
 
                 <!-- Summary Cards -->
@@ -204,7 +210,7 @@
 
                                 <!-- Qty Expected -->
                                 <div class="md:col-span-2">
-                                    <label class="block text-xs font-medium text-slate-400 mb-2">Order</label>
+                                    <label class="block text-xs font-medium text-slate-400 mb-2" x-text="poId ? 'Sisa PO' : 'Order'">Order</label>
                                     <input type="number" x-model="item.qty_expected" min="0"
                                            class="w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>
                                 </div>
@@ -236,7 +242,7 @@
                 </div>
 
                 <!-- Hidden Inputs -->
-                <template x-for="(item, index) in items" :key="'hidden-'+index">
+                <template x-for="(item, index) in submitItems" :key="'hidden-'+index">
                     <div>
                         <input type="hidden" :name="'items['+index+'][sku]'" :value="item.sku">
                         <input type="hidden" :name="'items['+index+'][qty_expected]'" :value="item.qty_expected">
@@ -284,17 +290,29 @@
                 items: [],
                 skus: [],
                 racks: [],
+                poData: {},
+                suggestedBins: {},
+                poId: '',
+                supplierName: '',
 
-                init(skus, racks) {
+                init(skus, racks, poData, suggestedBins, poId, supplierName) {
                     this.skus = skus;
                     this.racks = racks;
-                    this.addItem();
+                    this.poData = poData || {};
+                    this.suggestedBins = suggestedBins || {};
+                    this.supplierName = supplierName || '';
+                    this.poId = poId && this.poData[poId] ? poId : '';
+                    if (this.poId) {
+                        this.selectPo();
+                    } else {
+                        this.addItem();
+                    }
                 },
 
-                addItem() {
-                    this.items.push({
+                blankItem(overrides = {}) {
+                    return Object.assign({
                         sku: '',
-                        qty_expected: 1,
+                        qty_expected: 0,
                         qty_received: 0,
                         qty_rejected: 0,
                         bin_code: '',
@@ -302,12 +320,38 @@
                         product_name: '',
                         size: '',
                         price: 0
-                    });
+                    }, overrides);
+                },
+
+                addItem() {
+                    this.items.push(this.blankItem({ qty_expected: 1 }));
                 },
 
                 removeItem(index) {
                     if (this.items.length > 1) {
                         this.items.splice(index, 1);
+                    }
+                },
+
+                // Pilih PO: isi supplier dan semua item yang belum diterima penuh
+                selectPo() {
+                    const po = this.poData[this.poId];
+                    if (!po) {
+                        this.items = [];
+                        this.addItem();
+                        return;
+                    }
+                    this.supplierName = po.supplier_name;
+                    this.items = po.items.map((item) => this.blankItem({
+                        sku: item.sku,
+                        qty_expected: item.remaining,
+                        bin_code: item.bin_code,
+                        product_name: item.product_name,
+                        size: item.size,
+                        price: item.price
+                    }));
+                    if (this.items.length === 0) {
+                        this.addItem();
                     }
                 },
 
@@ -318,11 +362,63 @@
                         item.product_name = skuData.product_name;
                         item.size = skuData.size;
                         item.price = skuData.price;
+                        if (!item.bin_code && this.suggestedBins[item.sku]) {
+                            item.bin_code = this.suggestedBins[item.sku];
+                        }
                     } else {
                         item.product_name = '';
                         item.size = '';
                         item.price = 0;
                     }
+                },
+
+                rackCodeFromBin(code) {
+                    const bin = code.startsWith('RAK-') ? code.slice(4) : code;
+                    return bin.split('-')[0];
+                },
+
+                onScan({ code, bin, respond }) {
+                    const sku = this.skus.find(s => s.sku === code);
+
+                    if (!sku) {
+                        if (this.racks.some(r => r.code === this.rackCodeFromBin(code))) {
+                            return respond({ ok: true, type: 'bin', bin_code: code, message: 'Lokasi ' + code + ' dipilih. Sekarang scan barangnya.' });
+                        }
+                        return respond({ ok: false, message: 'Kode ' + code + ' tidak dikenal sebagai SKU maupun lokasi rak.' });
+                    }
+
+                    if (this.poId && !this.items.some(i => i.sku === code)) {
+                        return respond({ ok: false, message: code + ' tidak ada di PO ini. Pisahkan barangnya.' });
+                    }
+
+                    let row = this.items.find(i => i.sku === code && (!bin || !i.bin_code || i.bin_code === bin));
+                    if (!row) {
+                        row = this.items.find(i => i.sku === '');
+                        const fields = { sku: code, product_name: sku.product_name, size: sku.size, price: sku.price, bin_code: bin || this.suggestedBins[code] || '' };
+                        if (row) {
+                            Object.assign(row, fields);
+                        } else {
+                            this.items.push(this.blankItem(fields));
+                            row = this.items[this.items.length - 1];
+                        }
+                    }
+
+                    if (!row.bin_code) {
+                        row.bin_code = bin || this.suggestedBins[code] || '';
+                    }
+                    row.qty_received = parseInt(row.qty_received || 0) + 1;
+
+                    const expected = this.poId ? parseInt(row.qty_expected || 0) : 0;
+                    let message = code + ': ' + row.qty_received + (expected ? '/' + expected : '') + ' pcs di ' + (row.bin_code || '(bin belum diisi)');
+                    if (expected && row.qty_received > expected) {
+                        message += '. Melebihi jumlah PO, cek lagi.';
+                    }
+                    respond({ ok: true, message: message });
+                },
+
+                // Hanya item yang benar-benar diterima yang dikirim
+                get submitItems() {
+                    return this.items.filter(item => item.sku && parseInt(item.qty_received || 0) > 0);
                 },
 
                 get totalQty() {

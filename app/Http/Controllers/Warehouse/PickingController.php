@@ -9,6 +9,8 @@ use App\Models\PickingSession;
 use App\Models\PickingSessionItem;
 use App\Models\StockActive;
 use App\Models\StockMovement;
+use App\Models\MasterSku;
+use App\Models\WarehouseRack;
 use App\Models\AuditTrail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -119,7 +121,7 @@ class PickingController extends Controller
 
     public function show($id)
     {
-        $session = PickingSession::with(['order', 'items.masterSku', 'user:id,name'])
+        $session = PickingSession::with(['order', 'items' => fn ($q) => $q->orderBy('bin_code')->orderBy('sku'), 'items.masterSku', 'user:id,name'])
             ->findOrFail($id);
 
         return view('warehouse.picking.show', compact('session'));
@@ -161,83 +163,157 @@ class PickingController extends Controller
             DB::transaction(function () use ($sessionId, $itemId, $validated, $request) {
                 $session = PickingSession::lockForUpdate()->findOrFail($sessionId);
                 $item = $session->items()->lockForUpdate()->findOrFail($itemId);
-                $user = auth()->user();
 
-                if ($session->status !== 'IN_PROGRESS') {
-                    throw new \RuntimeException('Mulai sesi picking dulu sebelum mengambil barang.');
-                }
-
-                // qty_picked adalah total yang sudah diambil untuk item ini,
-                // jadi stok hanya dikurangi sebesar tambahannya.
-                $newQty = min((int) $validated['qty_picked'], $item->qty_ordered);
-                $delta = $newQty - $item->qty_picked;
-
-                if ($delta < 0) {
-                    throw new \RuntimeException('Jumlah yang sudah diambil tidak bisa dikurangi. Hapus sesi picking untuk mengulang.');
-                }
-
-                if ($delta > 0) {
-                    $stock = StockActive::where('sku', $item->sku)
-                        ->where('bin_code', $validated['bin_code'])
-                        ->lockForUpdate()
-                        ->first();
-
-                    if (!$stock || $stock->qty < $delta) {
-                        throw new \RuntimeException("Stok {$item->sku} di bin {$validated['bin_code']} tidak cukup (tersedia " . ($stock?->qty ?? 0) . ').');
-                    }
-
-                    $oldQty = $stock->qty;
-                    $stock->update([
-                        'qty' => $oldQty - $delta,
-                        'last_movement_at' => now(),
-                    ]);
-
-                    StockMovement::create([
-                        'user_id' => $user->id,
-                        'sku' => $item->sku,
-                        'bin_code' => $validated['bin_code'],
-                        'type' => 'OUTBOUND',
-                        'qty' => $delta,
-                        'qty_before' => $oldQty,
-                        'qty_after' => $oldQty - $delta,
-                        'reference_no' => $session->session_number,
-                        'reference_type' => 'PICKING',
-                        'notes' => 'Picking ' . $session->session_number,
-                        'ip_address' => $request->ip(),
-                    ]);
-                }
-
-                $item->update([
-                    'qty_picked' => $newQty,
-                    'bin_code' => $validated['bin_code'],
-                    'status' => $newQty >= $item->qty_ordered ? 'COMPLETED' : 'PARTIAL',
-                ]);
-
-                $item->orderItem?->update([
-                    'qty_picked' => $newQty,
-                    'bin_code' => $validated['bin_code'],
-                ]);
-
-                $allPicked = $session->items()->whereColumn('qty_picked', '<', 'qty_ordered')->doesntExist();
-
-                if ($allPicked) {
-                    $session->update([
-                        'status' => 'COMPLETED',
-                        'completed_at' => now(),
-                    ]);
-
-                    // Semua barang sudah diambil: order lanjut ke packing
-                    $session->order->update([
-                        'status' => 'PACKING',
-                        'picked_by' => $user->id,
-                        'picked_at' => now(),
-                    ]);
-                }
+                $this->applyPick($session, $item, (int) $validated['qty_picked'], trim($validated['bin_code']), $request);
             });
 
             return back()->with('success', 'Item berhasil dipicking!');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal picking item: ' . safe_error_message($e));
+        }
+    }
+
+    /**
+     * Scan di layar picking. Kode lokasi (mis. A-01-01) memilih bin,
+     * kode SKU menambah 1 qty diambil untuk item yang cocok.
+     */
+    public function scan(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:100'],
+            'bin_code' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $code = strtoupper(trim($validated['code']));
+
+        try {
+            $result = DB::transaction(function () use ($id, $code, $validated, $request) {
+                $session = PickingSession::lockForUpdate()->findOrFail($id);
+
+                if ($session->status !== 'IN_PROGRESS') {
+                    throw new \RuntimeException('Mulai sesi picking dulu sebelum scan.');
+                }
+
+                if (!MasterSku::where('sku', $code)->exists()) {
+                    if (WarehouseRack::isKnownBin($code)) {
+                        return ['ok' => true, 'type' => 'bin', 'bin_code' => $code, 'message' => "Lokasi {$code} dipilih. Sekarang scan barangnya."];
+                    }
+                    throw new \RuntimeException("Kode {$code} tidak dikenal sebagai SKU maupun lokasi rak.");
+                }
+
+                $item = $session->items()
+                    ->where('sku', $code)
+                    ->whereColumn('qty_picked', '<', 'qty_ordered')
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$item) {
+                    throw new \RuntimeException($session->items()->where('sku', $code)->exists()
+                        ? "SKU {$code} sudah lengkap diambil."
+                        : "SKU {$code} bukan bagian dari order ini. Jangan diambil.");
+                }
+
+                $binCode = strtoupper(trim($validated['bin_code'] ?? '')) ?: $item->bin_code;
+                $this->applyPick($session, $item, $item->qty_picked + 1, $binCode, $request);
+
+                $item->refresh();
+                $session->refresh();
+
+                return [
+                    'ok' => true,
+                    'type' => 'sku',
+                    'message' => "{$code} dari {$binCode}: {$item->qty_picked}/{$item->qty_ordered}",
+                    'items' => [['id' => $item->id, 'qty' => $item->qty_picked, 'status' => $item->status]],
+                    'completed' => $session->status === 'COMPLETED',
+                ];
+            });
+
+            return response()->json($result);
+        } catch (\Exception $e) {
+            return response()->json(['ok' => false, 'message' => safe_error_message($e)], 422);
+        }
+    }
+
+    /**
+     * Set total qty diambil untuk satu item. Stok hanya dikurangi sebesar
+     * tambahannya. Harus dipanggil di dalam transaksi dengan sesi dan item terkunci.
+     */
+    private function applyPick(PickingSession $session, PickingSessionItem $item, int $qtyPicked, string $binCode, Request $request): void
+    {
+        $user = auth()->user();
+
+        if ($session->status !== 'IN_PROGRESS') {
+            throw new \RuntimeException('Mulai sesi picking dulu sebelum mengambil barang.');
+        }
+
+        $newQty = min($qtyPicked, $item->qty_ordered);
+        $delta = $newQty - $item->qty_picked;
+
+        if ($delta < 0) {
+            throw new \RuntimeException('Jumlah yang sudah diambil tidak bisa dikurangi. Hapus sesi picking untuk mengulang.');
+        }
+
+        // Satu item diambil dari satu bin, supaya stok bisa dikembalikan ke bin yang benar
+        if ($item->qty_picked > 0 && $binCode !== $item->bin_code) {
+            throw new \RuntimeException("{$item->sku} sudah mulai diambil dari bin {$item->bin_code}. Lanjutkan dari bin yang sama.");
+        }
+
+        if ($delta > 0) {
+            $stock = StockActive::where('sku', $item->sku)
+                ->where('bin_code', $binCode)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$stock || $stock->qty < $delta) {
+                throw new \RuntimeException("Stok {$item->sku} di bin {$binCode} tidak cukup (tersedia " . ($stock?->qty ?? 0) . ').');
+            }
+
+            $oldQty = $stock->qty;
+            $stock->update([
+                'qty' => $oldQty - $delta,
+                'last_movement_at' => now(),
+            ]);
+
+            StockMovement::create([
+                'user_id' => $user->id,
+                'sku' => $item->sku,
+                'bin_code' => $binCode,
+                'type' => 'OUTBOUND',
+                'qty' => $delta,
+                'qty_before' => $oldQty,
+                'qty_after' => $oldQty - $delta,
+                'reference_no' => $session->session_number,
+                'reference_type' => 'PICKING',
+                'notes' => 'Picking ' . $session->session_number,
+                'ip_address' => $request->ip(),
+            ]);
+        }
+
+        $item->update([
+            'qty_picked' => $newQty,
+            'bin_code' => $binCode,
+            'status' => $newQty >= $item->qty_ordered ? 'COMPLETED' : 'PARTIAL',
+        ]);
+
+        $item->orderItem?->update([
+            'qty_picked' => $newQty,
+            'bin_code' => $binCode,
+        ]);
+
+        $allPicked = $session->items()->whereColumn('qty_picked', '<', 'qty_ordered')->doesntExist();
+
+        if ($allPicked) {
+            $session->update([
+                'status' => 'COMPLETED',
+                'completed_at' => now(),
+            ]);
+
+            // Semua barang sudah diambil: order lanjut ke packing
+            $session->order->update([
+                'status' => 'PACKING',
+                'picked_by' => $user->id,
+                'picked_at' => now(),
+            ]);
         }
     }
 
