@@ -8,13 +8,13 @@
                 </a>
                 <div>
                     <h2 class="font-semibold text-xl text-white leading-tight">Opname: {{ $opname->opname_number }}</h2>
-                    <p class="text-sm text-slate-400 mt-1">{{ $opname->warehouse->name }} • {{ $opname->created_at->format('d M Y') }}</p>
+                    <p class="text-sm text-slate-400 mt-1">{{ $opname->scope_label }} • {{ $opname->warehouse?->name }} • {{ $opname->created_at->format('d M Y') }}</p>
                 </div>
             </div>
             
             <!-- Status Badge -->
             <span class="px-3 py-1 rounded-full text-sm font-bold {{ $opname->status_color }}">
-                {{ $opname->status }}
+                {{ $opname->status_label }}
             </span>
         </div>
     </x-slot>
@@ -38,9 +38,10 @@
         <!-- Action Bar -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
             <div class="text-sm text-slate-400">
-                Total Item: <span class="text-white font-bold">{{ $items->total() }}</span> | 
-                Terhitung: <span class="text-emerald-400 font-bold">{{ $items->where('physical_qty', '!=', null)->count() }}</span> |
-                Belum: <span class="text-amber-400 font-bold">{{ $items->where('physical_qty', null)->count() }}</span>
+                Lokasi: <span class="text-white font-bold">{{ $summary['total'] }}</span> |
+                Terhitung: <span class="text-emerald-400 font-bold">{{ $summary['counted'] }}</span> |
+                Belum: <span class="text-amber-400 font-bold">{{ $summary['total'] - $summary['counted'] }}</span> |
+                Selisih: <span class="{{ $summary['diff'] ? 'text-red-400' : 'text-slate-500' }} font-bold">{{ $summary['diff'] }}</span>
             </div>
             
             <div class="flex gap-2">
@@ -78,6 +79,18 @@
                 hint="Scan lokasi bin, lalu scan setiap barang yang ada di bin itu. Setiap scan menambah 1 stok fisik. Klik Simpan Sementara secara berkala." />
         @endif
 
+        @if ($racksInOpname->count() > 1)
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs text-slate-400">Tampilkan rak:</span>
+                <a href="{{ route('gudang.opname.show', $opname->id) }}"
+                    class="px-3 py-1.5 rounded-lg text-sm font-semibold {{ $rackFilter === '' ? 'bg-cyan-500 text-slate-900' : 'bg-slate-800 text-slate-300 hover:bg-slate-700' }}">Semua</a>
+                @foreach ($racksInOpname as $rack)
+                    <a href="{{ route('gudang.opname.show', ['id' => $opname->id, 'rak' => $rack]) }}"
+                        class="px-3 py-1.5 rounded-lg text-sm font-semibold {{ $rackFilter === $rack ? 'bg-cyan-500 text-slate-900' : 'bg-slate-800 text-slate-300 hover:bg-slate-700' }}">{{ $rack }}</a>
+                @endforeach
+            </div>
+        @endif
+
         <!-- Form Utama -->
         <form method="POST" action="{{ route('gudang.opname.update', $opname->id) }}" id="mainOpnameForm">
             @csrf
@@ -113,7 +126,7 @@
                                                name="items[{{ $index }}][physical_qty]" 
                                                value="{{ $item->physical_qty }}" 
                                                min="0"
-                                               @if($opname->status === 'COMPLETED') disabled @endif
+                                               @if($opname->status !== 'IN_PROGRESS') disabled @endif
                                                class="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-center font-bold focus:border-cyan-400 focus:outline-none physical-input"
                                                data-system="{{ $item->system_qty }}"
                                                data-sku="{{ $item->sku }}"
@@ -129,7 +142,7 @@
                                         <input type="text" 
                                                name="items[{{ $index }}][notes]" 
                                                value="{{ $item->notes }}" 
-                                               @if($opname->status === 'COMPLETED') disabled @endif
+                                               @if($opname->status !== 'IN_PROGRESS') disabled @endif
                                                placeholder="Catatan..." 
                                                class="w-full px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-white focus:border-cyan-400 focus:outline-none">
                                     </td>
@@ -150,6 +163,22 @@
                 @endif
             </div>
         </form>
+
+        @if ($opname->status === 'IN_PROGRESS')
+            <form method="POST" action="{{ route('gudang.opname.add-item', $opname->id) }}" id="addItemForm"
+                class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+                @csrf
+                <div class="flex-1">
+                    <p class="text-sm font-semibold text-white">Barang ada di rak tapi tidak ada di daftar?</p>
+                    <p class="text-xs text-slate-400">Simpan Sementara dulu, lalu tambahkan di sini dan isi stok fisiknya.</p>
+                </div>
+                <input type="text" name="sku" id="addItemSku" required placeholder="SKU"
+                    class="sm:w-48 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono uppercase focus:border-cyan-400 focus:outline-none">
+                <input type="text" name="bin_code" id="addItemBin" required placeholder="Lokasi, mis. A-01-01"
+                    class="sm:w-40 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono uppercase focus:border-cyan-400 focus:outline-none">
+                <button type="submit" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-lg">Tambah barang</button>
+            </form>
+        @endif
     </div>
 
     {{-- Script Kalkulasi Real-time --}}
@@ -165,7 +194,13 @@
 
             const sameSku = inputs.filter(input => input.dataset.sku === code);
             if (sameSku.length === 0) {
-                return respond({ ok: false, message: code + ' tidak ada di daftar opname halaman ini.' });
+                // Siapkan form "Tambah barang" supaya staf cukup klik tombolnya
+                const skuField = document.getElementById('addItemSku');
+                if (skuField) {
+                    skuField.value = code;
+                    document.getElementById('addItemBin').value = bin || '';
+                }
+                return respond({ ok: false, message: code + ' tidak ada di daftar halaman ini. Jika barangnya memang ada di rak, pakai "Tambah barang" di bawah.' });
             }
 
             const target = bin ? sameSku.find(input => input.dataset.bin === bin) : (sameSku.length === 1 ? sameSku[0] : null);
@@ -175,13 +210,28 @@
                     : code + ' ada di beberapa bin. Scan lokasi bin dulu.' });
             }
 
+            if (target.disabled) {
+                return respond({ ok: false, message: 'Klik Mulai Opname dulu.' });
+            }
             target.value = (parseInt(target.value) || 0) + 1;
             target.dispatchEvent(new Event('input'));
             respond({ ok: true, message: code + ' di ' + target.dataset.bin + ': fisik ' + target.value + ' (sistem ' + target.dataset.system + ')' });
         });
 
+        // Ingatkan jika pindah halaman/rak sebelum hitungan disimpan
+        let opnameDirty = false;
+        window.addEventListener('beforeunload', function (event) {
+            if (opnameDirty) {
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', function() {
             const inputs = document.querySelectorAll('.physical-input');
+            const mainForm = document.getElementById('mainOpnameForm');
+            mainForm.addEventListener('input', () => { opnameDirty = true; });
+            mainForm.addEventListener('submit', () => { opnameDirty = false; });
             
             inputs.forEach(input => {
                 input.addEventListener('input', function() {

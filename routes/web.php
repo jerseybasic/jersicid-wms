@@ -157,6 +157,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::get('/{id}', [StockOpnameController::class, 'show'])->name('gudang.opname.show');
     Route::post('/{id}/start', [StockOpnameController::class, 'start'])->name('gudang.opname.start');
     Route::post('/{id}/update', [StockOpnameController::class, 'updatePhysicalQty'])->name('gudang.opname.update');
+    Route::post('/{id}/item', [StockOpnameController::class, 'addItem'])->name('gudang.opname.add-item');
     Route::post('/{id}/complete', [StockOpnameController::class, 'complete'])->name('gudang.opname.complete');
     Route::delete('/{id}', [StockOpnameController::class, 'destroy'])->name('gudang.opname.destroy');
 });

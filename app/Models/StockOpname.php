@@ -18,6 +18,7 @@ class StockOpname extends Model
         'id',
         'opname_number',
         'warehouse_id',
+        'rack_codes',
         'status',
         'notes',
         'created_by',
@@ -44,6 +45,19 @@ class StockOpname extends Model
         });
     }
 
+    /**
+     * Rak yang dihitung di opname ini; array kosong = seluruh gudang.
+     */
+    public function getRacksAttribute(): array
+    {
+        return $this->rack_codes ? explode(',', $this->rack_codes) : [];
+    }
+
+    public function getScopeLabelAttribute(): string
+    {
+        return $this->racks ? 'Rak ' . implode(', ', $this->racks) : 'Seluruh gudang';
+    }
+
     // ✅ Relasi ke Warehouse (meskipun bukan foreign key constraint)
     public function warehouse()
     {
@@ -63,6 +77,18 @@ class StockOpname extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public const STATUS_LABELS = [
+        'DRAFT' => 'Draft',
+        'IN_PROGRESS' => 'Sedang dihitung',
+        'COMPLETED' => 'Selesai',
+        'CANCELLED' => 'Dibatalkan',
+    ];
+
+    public function getStatusLabelAttribute(): string
+    {
+        return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 
     public function getStatusColorAttribute()

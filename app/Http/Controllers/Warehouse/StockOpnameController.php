@@ -3,70 +3,99 @@
 namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
-use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Models\StockOpname;
 use App\Models\StockOpnameItem;
 use App\Models\StockMovement;
 use App\Models\AuditTrail;
 use App\Models\Warehouse;
+use App\Models\WarehouseRack;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class StockOpnameController extends Controller
 {
+    /** Opname yang masih terbuka: raknya tidak boleh ikut opname lain */
+    private const OPEN_STATUSES = ['DRAFT', 'IN_PROGRESS'];
+
     public function index(Request $request)
     {
-        $query = StockOpname::with(['creator:id,name', 'warehouse:id,name'])
-            ->orderBy('created_at', 'desc');
+        $opnames = StockOpname::with(['creator:id,name', 'warehouse:id,name'])
+            ->withCount('items')
+            ->withCount(['items as counted_count' => fn ($q) => $q->whereNotNull('physical_qty')])
+            ->withCount(['items as diff_count' => fn ($q) => $q->whereNotNull('physical_qty')->where('difference', '!=', 0)])
+            ->when($request->filled('search'), fn ($q) => $q->where('opname_number', 'like', "%{$request->search}%"))
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->status))
+            ->orderBy('created_at', 'desc')
+            ->paginate(15)
+            ->withQueryString();
 
-        if ($request->filled('search')) {
-            $query->where('opname_number', 'like', "%{$request->search}%");
-        }
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        $opnames = $query->paginate(15);
-
-        // Variabel tambahan untuk view
-        $skus = MasterSku::where('status', 'AKTIF')->orderBy('product_name')->get();
-
-        // Pre-fetch stock data di controller agar tidak memanggil @json() dengan expression berisi koma
-        // (Blade @json() melakukan explode(',', ...) sehingga koma dalam string ikut dipecah)
-        $stockData = StockActive::with('masterSku:sku,product_name')->get();
-
-        return view('warehouse.opname.index', compact('opnames', 'skus', 'stockData'));
+        return view('warehouse.opname.index', compact('opnames'));
     }
 
     public function create()
     {
         $warehouses = Warehouse::where('status', 'AKTIF')->get();
-        return view('warehouse.opname.create', compact('warehouses'));
+        $busyRacks = $this->racksInOpenOpname();
+
+        // Rak dari denah + rak yang muncul di lokasi stok, beserta jumlah lokasi berisi barang
+        $binsPerRack = StockActive::where('qty', '>', 0)->pluck('bin_code')
+            ->groupBy(fn ($bin) => WarehouseRack::codeFromBin($bin))
+            ->map->count();
+        $racks = WarehouseRack::orderBy('code')->pluck('code')
+            ->merge($binsPerRack->keys())
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->map(fn ($code) => [
+                'code' => $code,
+                'bins' => $binsPerRack[$code] ?? 0,
+                'busy' => in_array($code, $busyRacks) || in_array('*', $busyRacks),
+            ]);
+
+        return view('warehouse.opname.create', compact('warehouses', 'racks', 'busyRacks'));
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'racks' => ['nullable', 'array'],
+            'racks.*' => ['string', 'max:20'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        try {
-            DB::transaction(function () use ($validated, $request) {
-                $user = auth()->user();
+        $racks = collect($validated['racks'] ?? [])->map(fn ($r) => strtoupper(trim($r)))->filter()->unique()->sort()->values()->all();
 
+        // Satu rak hanya boleh dihitung oleh satu opname yang masih terbuka
+        $busy = $this->racksInOpenOpname();
+        $clash = in_array('*', $busy) ? ($racks ?: ['*']) : ($racks ? array_intersect($racks, $busy) : $busy);
+        if ($clash) {
+            $label = in_array('*', $clash) ? 'seluruh gudang' : 'rak ' . implode(', ', $clash);
+            return back()->withInput()->with('error', "Masih ada opname yang belum selesai untuk {$label}. Selesaikan atau hapus opname itu dulu.");
+        }
+
+        $stocks = StockActive::where('qty', '>', 0)->orderBy('bin_code')->orderBy('sku')->get();
+        if ($racks) {
+            $stocks = $stocks->filter(fn ($stock) => in_array(WarehouseRack::codeFromBin($stock->bin_code), $racks));
+        }
+
+        if ($stocks->isEmpty()) {
+            return back()->withInput()->with('error', 'Tidak ada stok di rak yang dipilih.');
+        }
+
+        try {
+            $opname = DB::transaction(function () use ($validated, $racks, $stocks) {
                 $opname = StockOpname::create([
                     'warehouse_id' => $validated['warehouse_id'],
+                    'rack_codes' => $racks ? implode(',', $racks) : null,
                     'status' => 'DRAFT',
-                    'created_by' => $user->id,
+                    'created_by' => auth()->id(),
                     'notes' => $validated['notes'] ?? null,
                 ]);
 
-                $activeStocks = StockActive::where('qty', '>', 0)->get();
-
-                foreach ($activeStocks as $stock) {
+                foreach ($stocks as $stock) {
                     StockOpnameItem::create([
                         'stock_opname_id' => $opname->id,
                         'sku' => $stock->sku,
@@ -76,27 +105,97 @@ class StockOpnameController extends Controller
                         'difference' => 0,
                     ]);
                 }
+
+                return $opname;
             });
 
-            return redirect()->route('gudang.opname')
-                ->with('success', 'Stock Opname berhasil dibuat! Silakan mulai penghitungan.');
+            return redirect()->route('gudang.opname.show', $opname->id)
+                ->with('success', "Opname {$opname->opname_number} dibuat ({$stocks->count()} lokasi). Klik Mulai Opname untuk mulai menghitung.");
         } catch (\Exception $e) {
             return back()->withInput()->with('error', 'Gagal membuat Stock Opname: ' . safe_error_message($e));
         }
     }
 
-    // Di method show()
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $opname = StockOpname::with(['creator:id,name', 'warehouse:id,name'])
-            ->findOrFail($id);
+        $opname = StockOpname::with(['creator:id,name', 'warehouse:id,name'])->findOrFail($id);
 
-        // ✅ PASTIKAN TIDAK ADA SPASI
+        // Ringkasan dihitung dari semua item, bukan hanya halaman yang tampil
+        $summary = [
+            'total' => $opname->items()->count(),
+            'counted' => $opname->items()->whereNotNull('physical_qty')->count(),
+            'diff' => $opname->items()->whereNotNull('physical_qty')->where('difference', '!=', 0)->count(),
+        ];
+
+        // Pilihan rak untuk menyaring daftar, supaya staf bisa menghitung rak per rak
+        $rackFilter = strtoupper((string) $request->query('rak', ''));
+        $racksInOpname = $opname->items()->distinct()->pluck('bin_code')
+            ->map(fn ($bin) => WarehouseRack::codeFromBin($bin))->unique()->sort()->values();
+
         $items = $opname->items()
-            ->with('masterSku:sku,product_name')  // ← TANPA SPASI!
-            ->paginate(50);
+            ->with('masterSku:sku,product_name,size')
+            ->when($rackFilter !== '', function ($q) use ($opname, $rackFilter) {
+                $bins = $opname->items()->distinct()->pluck('bin_code')
+                    ->filter(fn ($bin) => WarehouseRack::codeFromBin($bin) === $rackFilter);
+                $q->whereIn('bin_code', $bins);
+            })
+            ->orderBy('bin_code')
+            ->orderBy('sku')
+            ->paginate(50)
+            ->withQueryString();
 
-        return view('warehouse.opname.show', compact('opname', 'items'));
+        return view('warehouse.opname.show', compact('opname', 'items', 'summary', 'racksInOpname', 'rackFilter'));
+    }
+
+    /**
+     * Barang ditemukan di rak tapi tidak ada di daftar opname: tambahkan dengan stok sistem saat ini (biasanya 0).
+     */
+    public function addItem(Request $request, $id)
+    {
+        $opname = StockOpname::findOrFail($id);
+        if ($opname->status !== 'IN_PROGRESS') {
+            return back()->with('error', 'Barang hanya bisa ditambahkan saat opname sedang dihitung.');
+        }
+
+        $validated = $request->validate([
+            'sku' => ['required', 'exists:master_skus,sku'],
+            'bin_code' => ['required', 'string', 'max:50'],
+        ], [
+            'sku.exists' => 'SKU tidak terdaftar di Master SKU.',
+        ]);
+        $bin = strtoupper(trim($validated['bin_code']));
+
+        if ($opname->racks && !in_array(WarehouseRack::codeFromBin($bin), $opname->racks)) {
+            return back()->with('error', "Lokasi {$bin} di luar rak opname ini ({$opname->scope_label}).");
+        }
+
+        if ($opname->items()->where('sku', $validated['sku'])->where('bin_code', $bin)->exists()) {
+            return back()->with('error', "{$validated['sku']} di {$bin} sudah ada di daftar.");
+        }
+
+        StockOpnameItem::create([
+            'stock_opname_id' => $opname->id,
+            'sku' => $validated['sku'],
+            'bin_code' => $bin,
+            'system_qty' => (int) StockActive::where('sku', $validated['sku'])->where('bin_code', $bin)->value('qty'),
+            'physical_qty' => null,
+            'difference' => 0,
+        ]);
+
+        return redirect()->route('gudang.opname.show', ['id' => $opname->id, 'rak' => WarehouseRack::codeFromBin($bin)])
+            ->with('success', "{$validated['sku']} di {$bin} ditambahkan. Isi stok fisiknya.");
+    }
+
+    /**
+     * Rak yang sedang dihitung opname lain yang belum selesai. '*' = ada opname seluruh gudang.
+     */
+    private function racksInOpenOpname(): array
+    {
+        return StockOpname::whereIn('status', self::OPEN_STATUSES)->get(['rack_codes'])
+            ->flatMap(fn ($o) => $o->rack_codes ? explode(',', $o->rack_codes) : ['*'])
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function start($id)
@@ -112,6 +211,11 @@ class StockOpnameController extends Controller
 
     public function updatePhysicalQty(Request $request, $id)
     {
+        $opname = StockOpname::findOrFail($id);
+        if ($opname->status !== 'IN_PROGRESS') {
+            return back()->with('error', 'Stok fisik hanya bisa diisi saat opname sedang dihitung.');
+        }
+
         $validated = $request->validate([
             'items' => ['required', 'array'],
             'items.*.id' => ['required', 'exists:stock_opname_items,id'],
@@ -120,9 +224,9 @@ class StockOpnameController extends Controller
         ]);
 
         try {
-            DB::transaction(function () use ($validated) {
+            DB::transaction(function () use ($validated, $opname) {
                 foreach ($validated['items'] as $itemData) {
-                    $item = StockOpnameItem::findOrFail($itemData['id']);
+                    $item = $opname->items()->findOrFail($itemData['id']);
                     $item->physical_qty = $itemData['physical_qty'];
                     $item->notes = $itemData['notes'] ?? null;
                     $item->calculateDifference();
@@ -155,9 +259,11 @@ class StockOpnameController extends Controller
                     $diff = $item->physical_qty - $item->system_qty;
 
                     if ($diff !== 0) {
-                        $stock = StockActive::where('sku', $item->sku)
-                            ->where('bin_code', $item->bin_code)
-                            ->first();
+                        // Barang yang ditemukan di lokasi baru belum punya baris stok
+                        $stock = StockActive::firstOrCreate(
+                            ['sku' => $item->sku, 'bin_code' => $item->bin_code],
+                            ['qty' => 0, 'reserved_qty' => 0]
+                        );
 
                         if ($stock) {
                             $oldQty = $stock->qty;
