@@ -226,6 +226,11 @@
                                         'icon' => 'M17 8V20m0 0l4-4m-4 4l-4-4M7 16V4m0 0L3 8m4-4l4 4',
                                     ],
                                     [
+                                        'name' => 'Retur',
+                                        'route' => 'gudang.retur',
+                                        'icon' => 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6',
+                                    ],
+                                    [
                                         'name' => 'Picking',
                                         'route' => 'gudang.picking',
                                         'icon' =>
@@ -312,6 +317,11 @@
                                         'icon' => 'M17 8V20m0 0l4-4m-4 4l-4-4M7 16V4m0 0L3 8m4-4l4 4',
                                     ],
                                     [
+                                        'name' => 'Retur',
+                                        'route' => 'gudang.retur',
+                                        'icon' => 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6',
+                                    ],
+                                    [
                                         'name' => 'Picking',
                                         'route' => 'gudang.picking',
                                         'icon' =>
@@ -396,6 +406,11 @@
                                         'name' => 'Outbound',
                                         'route' => 'gudang.outbound',
                                         'icon' => 'M17 8V20m0 0l4-4m-4 4l-4-4M7 16V4m0 0L3 8m4-4l4 4',
+                                    ],
+                                    [
+                                        'name' => 'Retur',
+                                        'route' => 'gudang.retur',
+                                        'icon' => 'M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6',
                                     ],
                                     [
                                         'name' => 'Picking',

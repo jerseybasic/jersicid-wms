@@ -70,6 +70,11 @@ class Order extends Model
         return $this->hasMany(OrderItem::class, 'order_id');
     }
 
+    public function returns(): HasMany
+    {
+        return $this->hasMany(OrderReturn::class, 'order_id');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

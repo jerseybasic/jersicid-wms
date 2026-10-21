@@ -20,7 +20,7 @@ class LabelController extends Controller
     private const MAX_LABELS = 300;
 
     /**
-     * Label SKU. ?ref=<no. surat jalan inbound> mencetak 1 label per pcs yang diterima,
+     * Label SKU. ?ref=<no. surat jalan inbound atau no. retur> mencetak 1 label per pcs yang masuk,
      * atau ?sku=<SKU>&qty=<jumlah> untuk satu SKU.
      * ?ukuran=a4 mencetak grid di kertas A4 untuk printer biasa; default stiker 50×30 mm.
      */
@@ -36,7 +36,7 @@ class LabelController extends Controller
         $lines = collect();
 
         if (!empty($validated['ref'])) {
-            $lines = StockMovement::where('type', 'INBOUND')
+            $lines = StockMovement::whereIn('type', ['INBOUND', 'RETURN'])
                 ->where('reference_no', $validated['ref'])
                 ->with('masterSku')
                 ->orderBy('created_at')
