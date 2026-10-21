@@ -1,59 +1,93 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# JERSIC.ID WMS
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Sistem gudang JERSIC.ID: stok per lokasi rak, purchase order ke supplier, barang masuk, order keluar (picking, packing, kirim), retur, transfer, stock opname, cetak label, dan laporan.
 
-## About Laravel
+Panduan pemakaian untuk tiap role ada di [docs/panduan-per-role.md](docs/panduan-per-role.md).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Teknologi
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Laravel 12, PHP 8.3
+- MySQL (produksi), SQLite (tes otomatis)
+- Blade, Alpine.js, Tailwind CSS (dibangun dengan Vite)
+- maatwebsite/excel untuk import dan export Excel
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Pasang pertama kali
 
-## Learning Laravel
+```bash
+git clone https://github.com/jerseybasic/jersicid-wms.git
+cd jersicid-wms
+composer install
+npm install
+cp .env.example .env
+php artisan key:generate
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+Isi `.env` minimal:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```
+APP_NAME="JERSIC.ID WMS"
+APP_URL=https://alamat-wms-anda
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_DATABASE=jersicid_wms
+DB_USERNAME=...
+DB_PASSWORD=...
+```
 
-## Laravel Sponsors
+Untuk server produksi tambahkan juga `APP_ENV=production`, `APP_DEBUG=false`, `SESSION_SECURE_COOKIE=true`, `SESSION_ENCRYPT=true`, dan `LOG_LEVEL=warning`.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Lalu siapkan database dan tampilan:
 
-### Premium Partners
+```bash
+php artisan migrate --seed
+npm run build
+php artisan optimize
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+`--seed` membuat akun owner pertama (`owner@jersic.id`), gudang, denah rak, dan pengaturan awal. Kata sandi awal ada di `database/seeders/OwnerUserSeeder.php`. **Segera ganti setelah login pertama.** User lain dibuat owner dari menu **Kelola User**.
 
-## Contributing
+## Update ke versi baru
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+git pull
+composer install --no-dev
+php artisan migrate
+npm run build
+php artisan optimize:clear
+php artisan optimize
+```
 
-## Code of Conduct
+`npm run build` wajib dijalankan setiap kali ada perubahan tampilan, karena folder `public/build` tidak ikut di Git.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Tes otomatis
 
-## Security Vulnerabilities
+```bash
+php artisan test
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Tes memakai database SQLite di memori, jadi tidak menyentuh data asli. GitHub Actions menjalankan tes yang sama di setiap pull request (`.github/workflows`).
 
-## License
+## Role
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+| Role | Untuk siapa | Akses utama |
+|---|---|---|
+| OWNER | Pemilik | Semua menu, termasuk Kelola User, Pengaturan, dan menghapus PO |
+| SUPERVISOR | Kepala gudang | Semua operasional, membuat dan menyetujui PO, Laporan, Riwayat Aktivitas. Master SKU dan Supplier boleh dibuka (`/master-skus`, `/suppliers`) tapi belum ada di menunya |
+| ADMIN_GUDANG | Admin gudang | Semua operasional gudang, melihat PO dan mengisi tahap produksi |
+| STAFF_GUDANG | Staf gudang | Barang masuk, order keluar, picking, packing, retur, transfer, opname, cek barang, cetak label |
+
+## Alur utama
+
+- **Order:** PENDING → CONFIRMED → PICKING → PACKING → READY_TO_SHIP → SHIPPED → COMPLETED. Status picking dan packing berubah otomatis dari sesi picking dan packing.
+- **Purchase order:** DRAFT → PENDING → APPROVED → IN_PRODUCTION → READY_FOR_PICKUP → RECEIVED. Status RECEIVED terisi otomatis saat barangnya diterima lewat Inbound. PO yang menunggu persetujuan bisa ditolak kembali ke DRAFT dengan alasan.
+- **Stok:** tersimpan per SKU per lokasi rak (`stock_actives`). Setiap perubahan stok dicatat di `stock_movements` (INBOUND, OUTBOUND, TRANSFER, ADJUSTMENT, RETURN).
+
+## Struktur kode
+
+| Folder | Isi |
+|---|---|
+| `app/Http/Controllers/Warehouse` | Operasional gudang: inbound, outbound, picking, packing, retur, transfer, opname, PO, label, printer |
+| `app/Http/Controllers/Admin` | Dashboard, master SKU, supplier, user, laporan, pengaturan |
+| `app/Services` | Logika bersama: daftar tugas (`WorkQueue`), stok menipis (`LowStock`), printer |
+| `resources/views/warehouse`, `resources/views/reports` | Tampilan |
+| `tests/Feature` | Tes alur utama |
