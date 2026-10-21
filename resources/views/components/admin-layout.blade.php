@@ -240,7 +240,7 @@
 
                             <div class="py-1">
                                 <a 
-                                    href="{{ route('profile.edit') }}" 
+                                    href="{{ route('settings.update-profile') }}" 
                                     class="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
                                 >
                                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

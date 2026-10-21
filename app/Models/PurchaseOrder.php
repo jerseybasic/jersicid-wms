@@ -14,10 +14,21 @@ class PurchaseOrder extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'id', 'po_number', 'supplier_id', 'vendor_id', 'user_id',
-        'expected_date', 'status', 'workspace', 'notes', 'total_amount',
+        'id', 'po_number', 'supplier_id', 'supplier_name', 'supplier_type', 'vendor_id',
+        'expected_date', 'status', 'created_by', 'notes', 'production_notes',
         'defect_count', 'defect_notes', 'ready_at',
-        'approved_by', 'approved_at', 'rejection_reason',
+        'approved_by', 'approved_at',
+    ];
+
+    public const STATUS_LABELS = [
+        'DRAFT' => 'Draft',
+        'PENDING' => 'Menunggu Approval',
+        'APPROVED' => 'Disetujui',
+        'IN_PRODUCTION' => 'Sedang Diproduksi',
+        'READY_FOR_PICKUP' => 'Siap Diambil',
+        'READY' => 'Siap Diambil',
+        'RECEIVED' => 'Sudah Diterima',
+        'CANCELLED' => 'Dibatalkan',
     ];
 
     protected $casts = [
@@ -50,21 +61,25 @@ class PurchaseOrder extends Model
     }
 
     // ✅ Relasi ke User (pembuat PO)
-    public function user()
+    public function creator()
     {
-        return $this->belongsTo(User::class, 'user_id');
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     // ✅ Relasi ke Items
     public function items()
     {
-        return $this->hasMany(PurchaseOrderItem::class, 'po_id');
+        return $this->hasMany(PurchaseOrderItem::class, 'purchase_order_id');
     }
 
-    // ✅ Helper: Cek apakah bisa diupdate
-    public function canUpdateStatus($userRole)
+    public function getTotalAmountAttribute(): int
     {
-        return in_array($userRole, ['ADMIN_GUDANG', 'SUPERVISOR', 'OWNER']);
+        return (int) $this->items->sum(fn ($item) => $item->qty_ordered * $item->price);
     }
 
     // ✅ Helper: Cek apakah status bisa transisi
@@ -75,7 +90,7 @@ class PurchaseOrder extends Model
             'PENDING' => ['APPROVED', 'CANCELLED'],
             'APPROVED' => ['IN_PRODUCTION', 'CANCELLED'],
             'IN_PRODUCTION' => ['READY_FOR_PICKUP', 'CANCELLED'],
-            'READY_FOR_PICKUP' => ['RECEIVED'],
+            // RECEIVED diisi otomatis oleh Inbound saat semua item sudah diterima
         ];
 
         return isset($allowedTransitions[$this->status]) 
@@ -91,9 +106,15 @@ class PurchaseOrder extends Model
             'APPROVED' => 'bg-blue-500/20 text-blue-400',
             'IN_PRODUCTION' => 'bg-purple-500/20 text-purple-400',
             'READY_FOR_PICKUP' => 'bg-emerald-500/20 text-emerald-400',
+            'READY' => 'bg-emerald-500/20 text-emerald-400',
             'RECEIVED' => 'bg-cyan-500/20 text-cyan-400',
             'CANCELLED' => 'bg-red-500/20 text-red-400',
             default => 'bg-slate-500/20 text-slate-400',
         };
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 }

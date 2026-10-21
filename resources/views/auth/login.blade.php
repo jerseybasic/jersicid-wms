@@ -37,19 +37,6 @@
                         </div>
                     @endif
 
-                    @if(session('register_error'))
-                        <div class="mb-4 p-4 bg-red-900/30 border border-red-500/50 text-red-400 rounded-xl text-sm flex items-start gap-3 animate-fade-in">
-                            <div class="w-20 h-20 bg-gradient-to-br from-transparent-400 to-transparent-600 rounded-xl flex items-center justify-center shadow-lg shadow-transparent-500/30">
-                                <img src="{{ asset('images/icon-logo-jersic.webp') }}" alt="JERSIC.ID WMS" 
-                                     class="w-full h-full object-contain"
-                                     width="80"
-                                     height="80"
-                                     loading="eager">
-                            </div>
-                            <span>{{ session('register_error') }}</span>
-                        </div>
-                    @endif
-
                     <div class="mb-8">
                         <h2 class="text-3xl font-bold text-white mb-2">Selamat Datang</h2>
                         <p class="text-slate-300">Masuk ke akun Anda</p>
@@ -123,17 +110,6 @@
                             Masuk
                         </button>
 
-                        <!-- ✅ Link Register - Hanya muncul di Mobile -->
-                        <div class="md:hidden text-center mt-4 pt-4 border-t border-slate-800">
-                            <p class="text-sm text-slate-400 mb-2">Belum punya akun?</p>
-                            <a href="{{ route('register') }}" 
-                               class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 transition-all shadow-lg hover:shadow-cyan-500/10">
-                                <span>Daftar Akun Baru</span>
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                                </svg>
-                            </a>
-                        </div>
                     </form>
                 </div>
             </div>
@@ -211,10 +187,7 @@
                     </div>
                 </div>
 
-                <a href="{{ route('register') }}" 
-                   class="mt-6 inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 transition-all shadow-lg hover:shadow-cyan-500/10">
-                    <span>Belum punya akun? Daftar Baru →</span>
-                </a>
+                <p class="mt-6 text-sm text-slate-400">Belum punya akun? Minta Owner membuatkan akun untuk Anda.</p>
             </div>
         </div>
     </div>

@@ -69,23 +69,17 @@
                                 <p class="text-xs text-slate-400">{{ $item->masterSku?->product_name }}</p>
                             </div>
                             <div class="text-right">
-                                <p class="text-xs text-slate-400">Bin: <span class="font-mono text-white">{{ $item->bin_code }}</span></p>
                                 <p class="text-xs text-slate-400">Status: <span class="{{ $item->status === 'COMPLETED' ? 'text-emerald-400' : 'text-amber-400' }}">{{ $item->status }}</span></p>
                             </div>
                         </div>
 
                         @if($session->status === 'IN_PROGRESS' && $item->status !== 'COMPLETED')
-                            <form method="POST" action="{{ route('gudang.packing.pick', [$session->id, $item->id]) }}" class="flex items-center gap-3">
+                            <form method="POST" action="{{ route('gudang.packing.pack', [$session->id, $item->id]) }}" class="flex items-center gap-3">
                                 @csrf
                                 <div class="flex-1">
-                                    <label class="block text-xs text-slate-400 mb-1">Qty Picked</label>
-                                    <input type="number" name="qty_picked" value="{{ $item->qty_picked }}" min="0" max="{{ $item->qty_ordered }}" required
+                                    <label class="block text-xs text-slate-400 mb-1">Qty Dikemas</label>
+                                    <input type="number" name="qty_packed" value="{{ $item->qty_packed ?: $item->qty_ordered }}" min="0" max="{{ $item->qty_ordered }}" required
                                            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>
-                                </div>
-                                <div class="flex-1">
-                                    <label class="block text-xs text-slate-400 mb-1">Bin Code</label>
-                                    <input type="text" name="bin_code" value="{{ $item->bin_code }}" required
-                                           class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono focus:border-cyan-400 focus:outline-none transition-all"/>
                                 </div>
                                 <div class="flex items-end">
                                     <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">
@@ -96,7 +90,7 @@
                         @else
                             <div class="flex items-center gap-4 text-xs text-slate-400">
                                 <span>Ordered: <span class="text-white font-bold">{{ $item->qty_ordered }}</span></span>
-                                <span>Picked: <span class="text-emerald-400 font-bold">{{ $item->qty_picked }}</span></span>
+                                <span>Dikemas: <span class="text-emerald-400 font-bold">{{ $item->qty_packed }}</span></span>
                             </div>
                         @endif
                     </div>

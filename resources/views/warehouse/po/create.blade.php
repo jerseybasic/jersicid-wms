@@ -1,4 +1,10 @@
 <x-app-layout>
+    @php
+        $isEdit = $po->exists;
+        $rows = old('items') ?? ($isEdit
+            ? $po->items->map(fn ($i) => ['sku' => $i->sku, 'qty' => $i->qty_ordered, 'price' => $i->price])->all()
+            : [['sku' => '', 'qty' => 1, 'price' => 0]]);
+    @endphp
     <x-slot name="header">
         <div class="flex items-center gap-4">
             <a href="{{ route('po.index') }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-all flex items-center gap-2 border border-slate-700">
@@ -8,7 +14,7 @@
                 Kembali
             </a>
             <div>
-                <h2 class="font-semibold text-xl text-white leading-tight">{{ __('Buat Purchase Order Baru') }}</h2>
+                <h2 class="font-semibold text-xl text-white leading-tight">{{ $isEdit ? 'Edit Purchase Order ' . $po->po_number : 'Buat Purchase Order Baru' }}</h2>
                 <p class="text-sm text-slate-400 mt-1">Tambahkan item yang akan dipesan</p>
             </div>
         </div>
@@ -16,8 +22,11 @@
 
     <div class="max-w-5xl mx-auto">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <form method="POST" action="{{ route('po.store') }}" class="space-y-6">
+            <form method="POST" action="{{ $isEdit ? route('po.update', $po->id) : route('po.store') }}" class="space-y-6">
                 @csrf
+                @if ($isEdit)
+                    @method('PUT')
+                @endif
 
                 @if($errors->any())
                     <div class="p-4 bg-red-900/30 border border-red-500/50 rounded-xl">
@@ -37,7 +46,7 @@
                         <select name="supplier_id" required class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all">
                             <option value="">-- Pilih Supplier --</option>
                             @foreach($suppliers as $supplier)
-                                <option value="{{ $supplier->id }}" {{ old('supplier_id') == $supplier->id ? 'selected' : '' }}>
+                                <option value="{{ $supplier->id }}" {{ old('supplier_id', $po->supplier_id) == $supplier->id ? 'selected' : '' }}>
                                     {{ $supplier->name }}
                                 </option>
                             @endforeach
@@ -48,9 +57,9 @@
                     <div>
                         <label class="block text-sm font-medium text-slate-300 mb-2">Tipe Supplier *</label>
                         <select name="supplier_type" required class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all">
-                            <option value="UMUM" {{ old('supplier_type', $defaultSupplierType) == 'UMUM' ? 'selected' : '' }}>Umum</option>
-                            <option value="SUBLIMASI" {{ old('supplier_type', $defaultSupplierType) == 'SUBLIMASI' ? 'selected' : '' }}>Sublimasi</option>
-                            <option value="KONVEKSI" {{ old('supplier_type', $defaultSupplierType) == 'KONVEKSI' ? 'selected' : '' }}>Konveksi</option>
+                            <option value="UMUM" {{ old('supplier_type', $po->supplier_type ?? 'UMUM') == 'UMUM' ? 'selected' : '' }}>Umum</option>
+                            <option value="SUBLIMASI" {{ old('supplier_type', $po->supplier_type ?? 'UMUM') == 'SUBLIMASI' ? 'selected' : '' }}>Sublimasi</option>
+                            <option value="KONVEKSI" {{ old('supplier_type', $po->supplier_type ?? 'UMUM') == 'KONVEKSI' ? 'selected' : '' }}>Konveksi</option>
                         </select>
                         <p class="text-xs text-slate-500 mt-1">PO Sublimasi/Konveksi terlihat tim terkait</p>
                     </div>
@@ -58,7 +67,7 @@
                     <!-- Tanggal Estimasi Tiba -->
                     <div>
                         <label class="block text-sm font-medium text-slate-300 mb-2">Tanggal Estimasi Tiba *</label>
-                        <input type="date" name="expected_date" value="{{ old('expected_date') }}" required 
+                        <input type="date" name="expected_date" value="{{ old('expected_date', $po->expected_date?->format('Y-m-d')) }}" required 
                                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all"/>
                     </div>
                 </div>
@@ -67,7 +76,7 @@
                 <div>
                     <label class="block text-sm font-medium text-slate-300 mb-2">Catatan</label>
                     <textarea name="notes" rows="2" placeholder="Catatan tambahan (opsional)"
-                              class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all">{{ old('notes') }}</textarea>
+                              class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all">{{ old('notes', $po->notes) }}</textarea>
                 </div>
 
                 <!-- Items Section -->
@@ -96,34 +105,35 @@
                     </div>
 
                     <div id="items-container" class="space-y-3">
-                        <!-- Row Pertama (Default) -->
+                        @foreach ($rows as $index => $row)
                         <div class="grid grid-cols-12 gap-3 item-row bg-slate-800/30 p-3 rounded-xl border border-slate-700/50">
                             <div class="col-span-12 md:col-span-6">
-                                <select name="items[0][sku]" required class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all">
+                                <select name="items[{{ $index }}][sku]" required class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all">
                                     <option value="">-- Pilih SKU --</option>
                                     @foreach($skus as $sku)
-                                        <option value="{{ $sku->sku }}" data-price="{{ $sku->price }}">
+                                        <option value="{{ $sku->sku }}" data-price="{{ $sku->price }}" {{ ($row['sku'] ?? '') == $sku->sku ? 'selected' : '' }}>
                                             {{ $sku->sku }} - {{ $sku->product_name }} ({{ $sku->size }})
                                         </option>
                                     @endforeach
                                 </select>
                             </div>
                             <div class="col-span-6 md:col-span-2">
-                                <input type="number" name="items[0][qty]" placeholder="Qty" required min="1" value="1"
+                                <input type="number" name="items[{{ $index }}][qty]" placeholder="Qty" required min="1" value="{{ $row['qty'] ?? 1 }}"
                                        class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>
                             </div>
                             <div class="col-span-6 md:col-span-3">
-                                <input type="number" name="items[0][price]" placeholder="Harga" required min="0" value="0"
+                                <input type="number" name="items[{{ $index }}][price]" placeholder="Harga" required min="0" value="{{ $row['price'] ?? 0 }}"
                                        class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>
                             </div>
                             <div class="col-span-12 md:col-span-1 flex items-center justify-center">
-                                <button type="button" class="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-2 rounded-lg transition-colors remove-btn" style="display:none;">
+                                <button type="button" class="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-2 rounded-lg transition-colors remove-btn" style="{{ $loop->first ? 'display:none;' : '' }}">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                     </svg>
                                 </button>
                             </div>
                         </div>
+                        @endforeach
                     </div>
 
                     <!-- Total Estimasi -->
@@ -137,7 +147,7 @@
                 <div class="flex items-center gap-3 pt-4 border-t border-slate-800">
                     <a href="{{ route('po.index') }}" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700 transition-all">Batal</a>
                     <button type="submit" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">
-                        Simpan Purchase Order
+                        {{ $isEdit ? 'Simpan Perubahan' : 'Simpan Purchase Order' }}
                     </button>
                 </div>
             </form>
@@ -145,7 +155,7 @@
     </div>
 
     <script>
-        let itemCount = 1;
+        let itemCount = {{ max(array_keys($rows)) + 1 }};
 
         // Tambah Item
         document.getElementById('add-item').addEventListener('click', function() {
@@ -202,6 +212,7 @@
         });
 
         // Hitung total estimasi
+        document.addEventListener('DOMContentLoaded', updateTotal);
         function updateTotal() {
             let total = 0;
             document.querySelectorAll('.item-row').forEach(row => {

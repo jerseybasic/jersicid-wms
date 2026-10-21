@@ -15,6 +15,9 @@
         @if(session('error'))
             <div class="p-3 bg-red-900/30 border border-red-500/50 text-red-400 rounded-lg text-sm">{{ session('error') }}</div>
         @endif
+        @if($errors->any())
+            <div class="p-3 bg-red-900/30 border border-red-500/50 text-red-400 rounded-lg text-sm">{{ $errors->first() }}</div>
+        @endif
 
         <!-- Stats -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -47,6 +50,7 @@
                         <option value="CONFIRMED" {{ request('status') == 'CONFIRMED' ? 'selected' : '' }}>Confirmed</option>
                         <option value="PICKING" {{ request('status') == 'PICKING' ? 'selected' : '' }}>Picking</option>
                         <option value="PACKING" {{ request('status') == 'PACKING' ? 'selected' : '' }}>Packing</option>
+                        <option value="READY_TO_SHIP" {{ request('status') == 'READY_TO_SHIP' ? 'selected' : '' }}>Siap Kirim</option>
                         <option value="SHIPPED" {{ request('status') == 'SHIPPED' ? 'selected' : '' }}>Shipped</option>
                     </select>
                     <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium">Filter</button>
@@ -93,39 +97,49 @@
                                         'PACKING' => 'bg-cyan-500/20 text-cyan-400',
                                         'READY_TO_SHIP' => 'bg-indigo-500/20 text-indigo-400',
                                         'SHIPPED' => 'bg-emerald-500/20 text-emerald-400',
+                                        'COMPLETED' => 'bg-slate-500/20 text-slate-300',
                                         'CANCELLED' => 'bg-red-500/20 text-red-400',
                                     ];
                                 @endphp
                                 <span class="text-xs px-2 py-1 rounded-full {{ $statusColors[$order->status] ?? 'bg-slate-500/20 text-slate-400' }}">
-                                    {{ str_replace('_', ' ', $order->status) }}
+                                    {{ $order->status_label }}
                                 </span>
                             </td>
                             <td class="py-3 px-4 text-xs text-slate-400">{{ $order->created_at->format('d M Y') }}</td>
                             <td class="py-3 px-4 text-right">
                                 <div class="flex justify-end gap-1">
                                     @if($order->status === 'PENDING')
-                                        <form method="POST" action="{{ route('outbound.update-status', $order->id) }}">
+                                        <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}">
                                             @csrf @method('PATCH')
                                             <input type="hidden" name="status" value="CONFIRMED">
-                                            <button class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded font-medium">Confirm</button>
+                                            <button class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded font-medium">Konfirmasi</button>
                                         </form>
                                     @elseif($order->status === 'CONFIRMED')
-                                        <form method="POST" action="{{ route('outbound.update-status', $order->id) }}">
-                                            @csrf @method('PATCH')
-                                            <input type="hidden" name="status" value="PICKING">
-                                            <button class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded font-medium">Pick</button>
-                                        </form>
+                                        <a href="{{ route('gudang.picking.create') }}" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded font-medium">Buat Picking</a>
                                     @elseif($order->status === 'PICKING')
-                                        <form method="POST" action="{{ route('outbound.update-status', $order->id) }}">
-                                            @csrf @method('PATCH')
-                                            <input type="hidden" name="status" value="PACKING">
-                                            <button class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Pack</button>
-                                        </form>
+                                        <a href="{{ route('gudang.picking') }}" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Lihat Picking</a>
                                     @elseif($order->status === 'PACKING')
-                                        <form method="POST" action="{{ route('outbound.update-status', $order->id) }}">
+                                        <a href="{{ route('gudang.packing') }}" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Ke Packing</a>
+                                    @elseif($order->status === 'READY_TO_SHIP')
+                                        <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}" class="flex items-center gap-1">
                                             @csrf @method('PATCH')
                                             <input type="hidden" name="status" value="SHIPPED">
-                                            <button class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-medium">Ship</button>
+                                            <input type="text" name="tracking_number" required placeholder="No. resi"
+                                                   class="w-32 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-xs font-mono focus:border-cyan-400 focus:outline-none">
+                                            <button class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-medium">Kirim</button>
+                                        </form>
+                                    @elseif($order->status === 'SHIPPED')
+                                        <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}">
+                                            @csrf @method('PATCH')
+                                            <input type="hidden" name="status" value="COMPLETED">
+                                            <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Selesai</button>
+                                        </form>
+                                    @endif
+                                    @if(in_array($order->status, ['PENDING', 'CONFIRMED']))
+                                        <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}" onsubmit="return confirm('Batalkan order ini?')">
+                                            @csrf @method('PATCH')
+                                            <input type="hidden" name="status" value="CANCELLED">
+                                            <button class="px-3 py-1.5 bg-red-600/80 hover:bg-red-500 text-white text-xs rounded font-medium">Batal</button>
                                         </form>
                                     @endif
                                 </div>

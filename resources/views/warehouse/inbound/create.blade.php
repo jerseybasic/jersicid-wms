@@ -94,7 +94,7 @@
                             <option value="">-- Tidak Ada --</option>
                             @if(isset($purchaseOrders))
                                 @foreach($purchaseOrders as $po)
-                                    <option value="{{ $po->id }}" {{ old('po_id') == $po->id ? 'selected' : '' }}>
+                                    <option value="{{ $po->id }}" {{ old('po_id', request('po_id')) == $po->id ? 'selected' : '' }}>
                                         {{ $po->po_number }} - {{ $po->supplier_name }}
                                     </option>
                                 @endforeach
