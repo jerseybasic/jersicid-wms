@@ -188,7 +188,7 @@ class ScanWorkflowTest extends TestCase
             'warehouse_id' => $warehouse->id,
             'po_id' => $po->id,
             'items' => [['sku' => 'JSC-A-L', 'bin_code' => 'c-03-01', 'qty_received' => 6, 'qty_rejected' => 1]],
-        ])->assertRedirect(route('gudang.inbound'));
+        ])->assertRedirectContains('/gudang/inbound/');
 
         $this->assertSame(8, $this->stockQty('JSC-A-L', 'C-03-01'));
         $this->assertSame('RECEIVED', $po->fresh()->status);

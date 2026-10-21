@@ -130,9 +130,10 @@ class InboundController extends Controller
         ]);
 
         try {
-            DB::transaction(function () use ($validated, $request) {
+            $firstMovementId = DB::transaction(function () use ($validated, $request) {
                 $user = auth()->user();
                 $receiptNo = $validated['receipt_number'];
+                $firstMovementId = null;
 
                 foreach ($validated['items'] as $item) {
                     $sku = $item['sku'];
@@ -171,7 +172,7 @@ class InboundController extends Controller
                     }
 
                     // Catat stock movement
-                    StockMovement::create([
+                    $movement = StockMovement::create([
                         'user_id' => $user->id,
                         'sku' => $sku,
                         'bin_code' => $binCode,
@@ -183,6 +184,7 @@ class InboundController extends Controller
                         'notes' => trim(($validated['notes'] ?? '') . ($qtyRejected > 0 ? " (reject {$qtyRejected} pcs)" : '')) ?: null,
                         'ip_address' => $request->ip(),
                     ]);
+                    $firstMovementId ??= $movement->id;
 
                     // Jika ada PO terkait, update qty_received di PO items
                     if (!empty($validated['po_id'])) {
@@ -215,10 +217,13 @@ class InboundController extends Controller
                     ]),
                     'ip_address' => $request->ip(),
                 ]);
+
+                return $firstMovementId;
             });
 
-            return redirect()->route('gudang.inbound')
-                ->with('success', 'Barang berhasil diterima! Stok telah diperbarui.');
+            // Langsung ke detail penerimaan supaya label SKU bisa dicetak
+            return redirect()->route('gudang.inbound.show', $firstMovementId)
+                ->with('success', 'Barang berhasil diterima! Stok telah diperbarui. Cetak label SKU di bawah ini.');
         } catch (\Exception $e) {
             return back()
                 ->withInput()

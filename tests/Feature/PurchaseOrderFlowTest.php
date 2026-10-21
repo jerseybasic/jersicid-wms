@@ -85,7 +85,7 @@ class PurchaseOrderFlowTest extends TestCase
                 ['sku' => 'JSC-A-L', 'bin_code' => 'A1-01', 'qty_received' => 4],
                 ['sku' => 'JSC-A-XL', 'bin_code' => 'A1-02', 'qty_received' => 6],
             ],
-        ])->assertRedirect(route('gudang.inbound'));
+        ])->assertRedirectContains('/gudang/inbound/');
 
         $this->assertSame(4, $this->stockQty('JSC-A-L', 'A1-01'));
         $this->assertSame(6, $this->stockQty('JSC-A-XL', 'A1-02'));

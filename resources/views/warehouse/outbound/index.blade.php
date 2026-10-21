@@ -135,6 +135,9 @@
                                             <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Selesai</button>
                                         </form>
                                     @endif
+                                    @if(in_array($order->status, ['READY_TO_SHIP', 'SHIPPED', 'COMPLETED']))
+                                        <a href="{{ route('gudang.label.shipping', $order->id) }}" target="_blank" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Label</a>
+                                    @endif
                                     @if(in_array($order->status, ['PENDING', 'CONFIRMED']))
                                         <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}" onsubmit="return confirm('Batalkan order ini?')">
                                             @csrf @method('PATCH')

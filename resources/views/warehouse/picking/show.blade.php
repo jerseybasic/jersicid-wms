@@ -80,14 +80,14 @@
                         </div>
 
                         @if($session->status === 'IN_PROGRESS' && $item->status !== 'COMPLETED')
-                            <form method="POST" action="{{ route('gudang.picking.pick', [$session->id, $item->id]) }}" class="flex items-center gap-3">
+                            <form method="POST" action="{{ route('gudang.picking.pick', [$session->id, $item->id]) }}" class="flex flex-wrap items-end gap-3">
                                 @csrf
-                                <div class="flex-1">
+                                <div class="flex-1 min-w-[8rem]">
                                     <label class="block text-xs text-slate-400 mb-1">Qty Picked</label>
                                     <input type="number" name="qty_picked" value="{{ $item->qty_picked }}" data-scan-qty="{{ $item->id }}" min="0" max="{{ $item->qty_ordered }}" required
                                            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>
                                 </div>
-                                <div class="flex-1">
+                                <div class="flex-1 min-w-[8rem]">
                                     <label class="block text-xs text-slate-400 mb-1">Bin Code</label>
                                     <input type="text" name="bin_code" value="{{ $item->bin_code }}" required
                                            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono focus:border-cyan-400 focus:outline-none transition-all"/>

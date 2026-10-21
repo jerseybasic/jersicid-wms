@@ -55,10 +55,11 @@ class PackingController extends Controller
             'order_id' => ['required', 'exists:orders,id'],
             'courier' => ['nullable', 'string', 'max:100'],
             'notes' => ['nullable', 'string', 'max:500'],
+            'start_now' => ['nullable', 'boolean'],
         ]);
 
         try {
-            DB::transaction(function () use ($validated, $request) {
+            $session = DB::transaction(function () use ($validated, $request) {
                 $user = auth()->user();
                 $order = Order::with('pickingSession.items')->lockForUpdate()->findOrFail($validated['order_id']);
                 if ($order->status !== 'PACKING' || $order->packingSession()->exists()) {
@@ -98,7 +99,19 @@ class PackingController extends Controller
                     ]),
                     'ip_address' => $request->ip(),
                 ]);
+
+                // Dari layar Tugas: sesi langsung dimulai dan staf dibawa ke layar scan
+                if (!empty($validated['start_now'])) {
+                    $session->update(['status' => 'IN_PROGRESS', 'started_at' => now()]);
+                }
+
+                return $session;
             });
+
+            if (!empty($validated['start_now'])) {
+                return redirect()->route('gudang.packing.show', $session->id)
+                    ->with('success', 'Tugas diambil. Mulai scan barang.');
+            }
 
             return redirect()->route('gudang.packing')
                 ->with('success', 'Packing session berhasil dibuat!');
