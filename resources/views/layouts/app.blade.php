@@ -264,6 +264,11 @@
                                         'icon' =>
                                             'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
                                     ],
+                                    [
+                                        'name' => 'Riwayat Aktivitas',
+                                        'route' => 'audit-trails.index',
+                                        'icon' => 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+                                    ],
                                 ],
                             ],
                         ],
@@ -344,6 +349,11 @@
                                         'route' => 'reports.index',
                                         'icon' =>
                                             'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+                                    ],
+                                    [
+                                        'name' => 'Riwayat Aktivitas',
+                                        'route' => 'audit-trails.index',
+                                        'icon' => 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
                                     ],
                                 ],
                             ],
@@ -569,115 +579,55 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                 </svg>
-                                @if (isset($unreadNotifications) && $unreadNotifications > 0 && Route::has('notifications.mark-all-read'))
-                                    <span
-                                        class="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-br from-red-500 to-pink-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-slate-900 shadow-lg shadow-red-500/50 animate-pulse">
-                                        {{ $unreadNotifications }}
+                                @if ($workTotal > 0)
+                                    <span data-work-badge
+                                        class="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 bg-gradient-to-br from-red-500 to-pink-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-slate-900 shadow-lg shadow-red-500/50">
+                                        {{ $workTotal > 99 ? '99+' : $workTotal }}
                                     </span>
                                 @endif
                             </button>
 
-                            <!-- Notifications Dropdown Menu - MODERN FUTURISTIC -->
+                            <!-- Daftar pekerjaan yang menunggu (Tugas Hari Ini) -->
                             <div x-show="open" x-transition:enter="transition ease-out duration-200"
                                 x-transition:enter-start="opacity-0 scale-95 -translate-y-2"
                                 x-transition:enter-end="opacity-100 scale-100 translate-y-0"
                                 x-transition:leave="transition ease-in duration-150"
                                 x-transition:leave-start="opacity-100 scale-100"
                                 x-transition:leave-end="opacity-0 scale-95"
-                                class="absolute right-0 mt-3 w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden"
+                                class="fixed left-4 right-4 top-20 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-3 sm:w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden"
                                 style="z-index: 1000;" x-cloak>
-                                <!-- Header with Gradient -->
-                                <div
-                                    class="bg-gradient-to-br from-slate-800 to-slate-900 border-b border-slate-700 px-5 py-4">
-                                    <div class="flex items-center justify-between">
-                                        <div class="flex items-center gap-3">
-                                            <div
-                                                class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <h3 class="text-sm font-bold text-white">Notifikasi</h3>
-                                                <p class="text-xs text-slate-400">{{ $unreadNotifications ?? 0 }}
-                                                    notifikasi baru</p>
-                                            </div>
-                                        </div>
-                                    </div>
+                                <div class="bg-gradient-to-br from-slate-800 to-slate-900 border-b border-slate-700 px-5 py-4">
+                                    <h3 class="text-sm font-bold text-white">Tugas Hari Ini</h3>
+                                    <p class="text-xs text-slate-400">
+                                        {{ $workTotal > 0 ? $workTotal . ' pekerjaan menunggu' : 'Tidak ada pekerjaan yang menunggu' }}
+                                    </p>
                                 </div>
 
-                                <!-- Notifications List -->
                                 <div class="max-h-96 overflow-y-auto custom-scrollbar">
-                                    @if (isset($notifications) && $notifications->count() > 0)
-                                        @foreach ($notifications as $notification)
-                                            <div
-                                                class="px-5 py-4 border-b border-slate-800 hover:bg-slate-800/50 transition-colors group">
-                                                <div class="flex items-start gap-3">
-                                                    <div
-                                                        class="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-cyan-500/30 group-hover:scale-110 transition-transform">
-                                                        <svg class="w-5 h-5 text-cyan-400" fill="none"
-                                                            stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                                stroke-width="2"
-                                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
-                                                    </div>
-                                                    <div class="flex-1 min-w-0">
-                                                        <p class="text-sm text-white font-medium truncate">
-                                                            {{ $notification->data['message'] ?? 'Notifikasi baru' }}
-                                                        </p>
-                                                        <p class="text-xs text-slate-400 mt-1">
-                                                            {{ $notification->created_at->diffForHumans() }}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        @endforeach
-                                    @else
-                                        <div class="px-5 py-12 text-center">
-                                            <div
-                                                class="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-700">
-                                                <svg class="w-8 h-8 text-slate-600" fill="none"
-                                                    stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                                                </svg>
-                                            </div>
-                                            <p class="text-sm text-slate-400 font-medium">Tidak ada notifikasi</p>
-                                            <p class="text-xs text-slate-500 mt-1">Semua sistem berjalan normal</p>
+                                    @forelse (collect($workItems)->where('count', '>', 0) as $item)
+                                        <a href="{{ $item['url'] }}"
+                                            class="flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                                            <span class="min-w-0">
+                                                <span class="block text-sm text-white font-medium truncate">{{ $item['label'] }}</span>
+                                                <span class="block text-xs text-slate-400 truncate">{{ $item['hint'] }}</span>
+                                            </span>
+                                            <span class="flex-shrink-0 min-w-[2rem] px-2 py-1 rounded-lg bg-cyan-500/15 text-cyan-400 text-sm font-bold text-center">
+                                                {{ $item['count'] }}
+                                            </span>
+                                        </a>
+                                    @empty
+                                        <div class="px-5 py-10 text-center">
+                                            <p class="text-sm text-emerald-400 font-medium">Semua beres</p>
+                                            <p class="text-xs text-slate-500 mt-1">Tidak ada order, PO, atau opname yang menunggu.</p>
                                         </div>
-                                    @endif
+                                    @endforelse
                                 </div>
 
-                                <!-- Footer Actions -->
-                                <div
-                                    class="bg-slate-800/50 border-t border-slate-700 px-5 py-3 flex items-center justify-between">
-                                    <a href="{{ route('notifications.index') }}"
-                                        class="text-xs text-cyan-400 hover:text-cyan-300 font-semibold transition-colors flex items-center gap-1.5 group">
-                                        <span>Lihat Semua</span>
-                                        <svg class="w-3 h-3 group-hover:translate-x-1 transition-transform"
-                                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M9 5l7 7-7 7" />
-                                        </svg>
+                                <div class="bg-slate-800/50 border-t border-slate-700 px-5 py-3">
+                                    <a href="{{ route('gudang.tugas') }}"
+                                        class="text-xs text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
+                                        Buka Tugas Saya
                                     </a>
-                                    @if (isset($unreadNotifications) && $unreadNotifications > 0 && Route::has('notifications.mark-all-read'))
-                                        <form method="POST" action="{{ route('notifications.mark-all-read') }}">
-                                            @csrf
-                                            <button type="submit"
-                                                class="text-xs text-slate-400 hover:text-white transition-colors flex items-center gap-1.5">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                                <span>Tandai Sudah Dibaca</span>
-                                            </button>
-                                        </form>
-                                    @endif
                                 </div>
                             </div>
                         </div>

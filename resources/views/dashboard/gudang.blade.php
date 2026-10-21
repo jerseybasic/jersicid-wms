@@ -10,6 +10,8 @@
 
     <div class="space-y-6">
 
+        <x-work-queue :items="$workItems" />
+
         <!-- Stats Cards Row 1 -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <!-- Total Stok -->
@@ -122,68 +124,8 @@
             </div>
         </div>
 
-        <!-- Quick Actions & Alerts -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            <!-- Pending Tasks -->
-            <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
-                <h3 class="text-base font-semibold text-white mb-4">Tugas Menunggu</h3>
-                <div class="space-y-3">
-                    <a href="{{ route('po.index') }}"
-                        class="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:border-cyan-500/50 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">
-                                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-white">PO Siap Diterima</p>
-                                <p class="text-xs text-slate-400">Barang ready di supplier</p>
-                            </div>
-                        </div>
-                        {{-- ✅ FIX: $poPending → $poReady --}}
-                        <span class="text-lg font-bold text-amber-400">{{ $poReady ?? 0 }}</span>
-                    </a>
-
-                    <a href="{{ route('gudang.picking') }}"
-                        class="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:border-cyan-500/50 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                                <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-white">Order Perlu Picking</p>
-                                <p class="text-xs text-slate-400">Ambil barang dari rak</p>
-                            </div>
-                        </div>
-                        {{-- ✅ FIX: $pendingPick → $orderNeedPicking --}}
-                        <span class="text-lg font-bold text-purple-400">{{ $orderNeedPicking ?? 0 }}</span>
-                    </a>
-
-                    <a href="{{ route('gudang.packing') }}"
-                        class="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:border-cyan-500/50 transition-colors">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
-                                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-white">Order Perlu Packing</p>
-                                <p class="text-xs text-slate-400">Kemas untuk pengiriman</p>
-                            </div>
-                        </div>
-                        {{-- ✅ FIX: $pendingPack → $orderNeedPacking --}}
-                        <span class="text-lg font-bold text-cyan-400">{{ $orderNeedPacking ?? 0 }}</span>
-                    </a>
-                </div>
-            </div>
+        <!-- Stok menipis & pergerakan terakhir -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
             <!-- Low Stock Alerts -->
             <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
@@ -199,7 +141,7 @@
                             <div class="text-right ml-2">
                                 {{-- ✅ FIX: current_qty → current_stock (computed column) --}}
                                 <p class="text-sm font-bold text-red-400">{{ $item->current_stock ?? 0 }}</p>
-                                <p class="text-[10px] text-slate-500">Min: {{ $item->min_stock }}</p>
+                                <p class="text-[10px] text-slate-500">Min: {{ $item->limit_qty }}</p>
                             </div>
                         </div>
                     @empty

@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Setting;
+use App\Models\SystemSetting;
 
 if (!function_exists('format_rupiah')) {
     function format_rupiah($amount)
@@ -12,7 +12,7 @@ if (!function_exists('format_rupiah')) {
 if (!function_exists('setting')) {
     function setting($key, $default = null)
     {
-        return Setting::get($key, $default);
+        return SystemSetting::get($key, $default);
     }
 }
 

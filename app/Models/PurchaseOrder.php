@@ -14,7 +14,7 @@ class PurchaseOrder extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'id', 'po_number', 'supplier_id', 'supplier_name', 'supplier_type', 'vendor_id',
+        'id', 'po_number', 'supplier_id', 'supplier_name', 'supplier_type',
         'expected_date', 'status', 'created_by', 'notes', 'production_notes',
         'defect_count', 'defect_notes', 'ready_at',
         'approved_by', 'approved_at',
@@ -46,12 +46,6 @@ class PurchaseOrder extends Model
                 $model->id = (string) Str::uuid();
             }
         });
-    }
-
-    // ✅ Relasi ke Vendor
-    public function vendor()
-    {
-        return $this->belongsTo(Vendor::class, 'vendor_id');
     }
 
     // ✅ Relasi ke Supplier (jika ada)
@@ -87,7 +81,7 @@ class PurchaseOrder extends Model
     {
         $allowedTransitions = [
             'DRAFT' => ['PENDING', 'CANCELLED'],
-            'PENDING' => ['APPROVED', 'CANCELLED'],
+            'PENDING' => ['APPROVED', 'DRAFT', 'CANCELLED'], // DRAFT = ditolak, dikembalikan untuk diperbaiki
             'APPROVED' => ['IN_PRODUCTION', 'CANCELLED'],
             'IN_PRODUCTION' => ['READY_FOR_PICKUP', 'CANCELLED'],
             // RECEIVED diisi otomatis oleh Inbound saat semua item sudah diterima

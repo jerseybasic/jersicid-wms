@@ -13,6 +13,8 @@ use App\Models\PackingSession;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\AuditTrail;
+use App\Services\LowStock;
+use App\Services\WorkQueue;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -110,7 +112,7 @@ class DashboardController extends Controller
             'topSkus',
             'lowStockItems',
             'recentActivities'
-        ));
+        ) + ['workItems' => WorkQueue::for(auth()->user())]);
     }
 
     public function gudang()
@@ -154,15 +156,6 @@ class DashboardController extends Controller
                 'completedToday' => DB::table('picking_sessions')->whereBetween('completed_at', $todayRange)->count()
                     + DB::table('packing_sessions')->whereBetween('completed_at', $todayRange)->count(),
 
-                // 10. PO siap diterima
-                'poReady' => DB::table('purchase_orders')->where('status', 'READY_FOR_PICKUP')->count(),
-
-                // 11. Order perlu picking
-                'orderNeedPicking' => DB::table('orders')->whereIn('status', ['CONFIRMED', 'PENDING'])->count(),
-
-                // 12. Order perlu packing (status sudah picked, belum packed)
-                'orderNeedPacking' => DB::table('orders')->whereIn('status', ['PICKED', 'PICKING'])->count(),
-
                 // 13. Low stock products (top 5) - untuk panel
                 'lowStockProducts' => $this->lowStockQuery()
                     ->orderBy('current_stock')
@@ -189,12 +182,9 @@ class DashboardController extends Controller
             'packingPending',
             'inProgress',
             'completedToday',
-            'poReady',           // ← untuk $poPending di view
-            'orderNeedPicking',  // ← untuk $pendingPick di view
-            'orderNeedPacking',  // ← untuk $pendingPack di view
             'lowStockProducts',  // ← untuk $lowStockItems di view
             'recentMovements'
-        ));
+        ) + ['workItems' => WorkQueue::for(auth()->user())]);
     }
 
     /**
@@ -214,9 +204,7 @@ class DashboardController extends Controller
 
     private function lowStockQuery()
     {
-        return $this->skusWithStock()
-            ->where('master_skus.min_stock', '>', 0)
-            ->whereRaw('COALESCE(stock_sum.total_qty, 0) <= master_skus.min_stock');
+        return LowStock::query();
     }
 
     /**

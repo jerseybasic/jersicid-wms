@@ -86,6 +86,7 @@ class LabelController extends Controller
             'order' => $order,
             'senderName' => SystemSetting::get('company_name', config('app.name')),
             'senderPhone' => SystemSetting::get('company_phone'),
+            'senderAddress' => SystemSetting::get('company_address'),
         ]);
     }
 }

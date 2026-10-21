@@ -8,6 +8,8 @@
 
     <div class="space-y-6">
 
+        <x-work-queue :items="$workItems" />
+
         <!-- Stats Cards - Row 1 (4 kolom) -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <!-- Total Stok -->
@@ -218,7 +220,7 @@
                 <div class="space-y-3">
                     @forelse($lowStockItems as $index => $sku)
                         @php
-                            $percentage = $sku->min_stock > 0 ? ($sku->current_stock / $sku->min_stock) * 100 : 0;
+                            $percentage = $sku->limit_qty > 0 ? ($sku->current_stock / $sku->limit_qty) * 100 : 0;
                             $barColor =
                                 $percentage <= 25
                                     ? 'bg-red-500'
@@ -235,7 +237,7 @@
                                 </div>
                                 <div class="text-right ml-3">
                                     <p class="text-sm font-bold text-red-400">{{ $sku->current_stock }} /
-                                        {{ $sku->min_stock }}</p>
+                                        {{ $sku->limit_qty }}</p>
                                     <p class="text-[10px] text-slate-500">Sisa / Min</p>
                                 </div>
                             </div>
