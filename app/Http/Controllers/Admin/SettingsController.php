@@ -7,7 +7,10 @@ use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Models\WhatsAppMessage;
+use App\Console\Commands\SendLowStockAlert;
 use App\Services\LowStock;
+use App\Services\WhatsApp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -34,7 +37,17 @@ class SettingsController extends Controller
             'low_stock_threshold' => LowStock::defaultThreshold(),
         ];
 
-        return view('settings.index', compact('stats', 'company'));
+        $whatsapp = [
+            'has_token' => WhatsApp::hasToken(),
+            'extra' => WhatsApp::extraTargets(),
+            'members' => WhatsApp::members(),
+            'ready' => WhatsApp::configured(),
+            'seen_at' => WhatsApp::macroSeenAt(),
+            'counts' => WhatsAppMessage::selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status'),
+            'recent' => WhatsAppMessage::latest('id')->limit(10)->get(),
+        ];
+
+        return view('settings.index', compact('stats', 'company', 'whatsapp'));
     }
 
     /**
@@ -56,6 +69,39 @@ class SettingsController extends Controller
             'Batas stok menipis untuk SKU yang min stoknya 0 (0 = tidak dipakai)');
 
         return back()->with('success', 'Pengaturan berhasil disimpan.');
+    }
+
+    /** Nomor tambahan di luar anggota. Penerima utama diatur per anggota di Kelola User. */
+    public function updateWhatsApp(Request $request)
+    {
+        $validated = $request->validate([
+            'whatsapp_target' => ['nullable', 'string', 'max:255', 'regex:' . WhatsApp::TARGET_PATTERN],
+        ], [
+            'whatsapp_target.regex' => 'Isi nomor WhatsApp, contoh 081234567890. Beberapa nomor dipisah koma.',
+        ]);
+
+        WhatsApp::saveExtraTargets($validated['whatsapp_target'] ?? null);
+
+        return back()->with('success', 'Pengaturan WhatsApp disimpan.');
+    }
+
+    /** Buat token baru untuk makro. Token hanya ditampilkan sekali. */
+    public function whatsAppToken()
+    {
+        return back()->with('success', 'Token makro baru dibuat. Salin sekarang, token ini tidak ditampilkan lagi.')
+            ->with('whatsapp_token', WhatsApp::generateToken());
+    }
+
+    /** Kirim pesan percobaan berisi ringkasan stok menipis saat ini. */
+    public function testWhatsApp()
+    {
+        $message = SendLowStockAlert::message() ?? '*Tes notifikasi ' . config('app.name') . "*\nSaat ini tidak ada stok menipis.";
+
+        if ($error = WhatsApp::send($message)) {
+            return back()->withErrors(['whatsapp' => $error]);
+        }
+
+        return back()->with('success', 'Pesan tes masuk antrean. Makro akan mengirimnya saat mengambil antrean berikutnya.');
     }
 
     public function updateProfile(Request $request)

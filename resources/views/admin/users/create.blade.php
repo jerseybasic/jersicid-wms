@@ -45,6 +45,7 @@
                             <option value="">Pilih Role</option>
                             <option value="OWNER" {{ old('role') == 'OWNER' ? 'selected' : '' }}>Owner</option>
                             <option value="SUPERVISOR" {{ old('role') == 'SUPERVISOR' ? 'selected' : '' }}>Supervisor</option>
+                            <option value="ADMIN_GUDANG" {{ old('role') == 'ADMIN_GUDANG' ? 'selected' : '' }}>Admin Gudang</option>
                             <option value="STAFF_GUDANG" {{ old('role') == 'STAFF_GUDANG' ? 'selected' : '' }}>Staff Gudang</option>
                             <option value="SUBLIM" {{ old('role') == 'SUBLIM' ? 'selected' : '' }}>Sublim</option>
                             <option value="KONVEKSI" {{ old('role') == 'KONVEKSI' ? 'selected' : '' }}>Konveksi</option>
@@ -69,6 +70,20 @@
                         <option value="AKTIF" {{ old('status') == 'AKTIF' ? 'selected' : '' }}>AKTIF</option>
                         <option value="NONAKTIF" {{ old('status') == 'NONAKTIF' ? 'selected' : '' }}>NONAKTIF</option>
                     </select>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">No. WhatsApp</label>
+                        <input type="text" name="whatsapp" value="{{ old('whatsapp') }}" placeholder="081234567890"
+                               class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"/>
+                        @error('whatsapp')<p class="text-xs text-red-400 mt-1">{{ $message }}</p>@enderror
+                    </div>
+                    <label class="flex items-center gap-3 md:pt-8 text-sm text-slate-300">
+                        <input type="hidden" name="notify_whatsapp" value="0">
+                        <input type="checkbox" name="notify_whatsapp" value="1" {{ old('notify_whatsapp') ? 'checked' : '' }} class="rounded bg-slate-800 border-slate-600">
+                        Kirim notifikasi WhatsApp ke anggota ini
+                    </label>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">

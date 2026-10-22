@@ -69,6 +69,12 @@ Database dibackup setiap hari pukul 01:30 WIB ke `storage/app/private`. Backup y
 
 Untuk mencoba backup secara manual, jalankan `php artisan backup:run --only-db`. Salin file backup ke tempat lain secara berkala, misalnya ke Google Drive.
 
+## Notifikasi stok menipis (WhatsApp)
+
+Setiap pukul 08:00 WIB, daftar SKU yang stoknya menipis dimasukkan ke **antrean WhatsApp**, satu pesan untuk setiap anggota yang dicentang **Kirim notifikasi WhatsApp** di **Kelola User**. Pengiriman ke WhatsApp dilakukan oleh makro toko di folder [`whatsapp-macro/`](whatsapp-macro/README.md) (`./wa-login.sh --wms`), yang mengambil antrean lewat API dengan token dari **Pengaturan → Notifikasi WhatsApp**. Penjelasannya ada di [docs/makro-whatsapp.md](docs/makro-whatsapp.md).
+
+Jadwal ini memakai cron `schedule:run` yang sama dengan backup. Untuk mengisi antrean secara manual, jalankan `php artisan wms:kirim-stok-menipis`.
+
 ## Zona waktu
 
 Aplikasi memakai WIB (`Asia/Jakarta`). Data yang dibuat sebelum versi ini tersimpan dalam UTC. Jalankan sekali `php artisan wms:geser-waktu-lama` setelah backup supaya data lama ikut tampil dalam WIB.

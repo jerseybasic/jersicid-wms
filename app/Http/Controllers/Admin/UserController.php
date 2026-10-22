@@ -25,17 +25,23 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        // Nomor boleh diketik dengan spasi atau tanda hubung
+        $request->merge(['whatsapp' => preg_replace('/[\s\-().]/', '', (string) $request->input('whatsapp')) ?: null]);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s]+$/'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:12', 'confirmed'],
-            'role' => ['required', 'in:OWNER,SUPERVISOR,STAFF_GUDANG,SUBLIM,KONVEKSI'],
+            'role' => ['required', 'in:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG,SUBLIM,KONVEKSI'],
             'workspace_default' => ['required', 'in:UTAMA,GUDANG,PACKING,PO'],
             'status' => ['required', 'in:AKTIF,NONAKTIF'],
+            'whatsapp' => ['nullable', 'string', 'regex:/^(\+?62|0)8\d{7,12}$/'],
+            'notify_whatsapp' => ['nullable', 'boolean'],
         ], [
             'name.regex' => 'Nama hanya boleh mengandung huruf dan spasi.',
             'password.min' => 'Password minimal 12 karakter.',
             'password.confirmed' => 'Konfirmasi password tidak cocok.',
+            'whatsapp.regex' => 'Nomor WhatsApp harus nomor HP Indonesia, contoh 081234567890.',
         ]);
 
         User::create([
@@ -46,6 +52,8 @@ class UserController extends Controller
             'role' => $validated['role'],
             'workspace_default' => $validated['workspace_default'],
             'status' => $validated['status'],
+            'whatsapp' => $validated['whatsapp'] ?? null,
+            'notify_whatsapp' => $request->boolean('notify_whatsapp') && !empty($validated['whatsapp']),
         ]);
 
         return redirect()->route('users.index')
@@ -62,17 +70,23 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
 
+        // Nomor boleh diketik dengan spasi atau tanda hubung
+        $request->merge(['whatsapp' => preg_replace('/[\s\-().]/', '', (string) $request->input('whatsapp')) ?: null]);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z\s]+$/'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'role' => ['required', 'in:OWNER,SUPERVISOR,STAFF_GUDANG,SUBLIM,KONVEKSI'],
+            'role' => ['required', 'in:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG,SUBLIM,KONVEKSI'],
             'workspace_default' => ['required', 'in:UTAMA,GUDANG,PACKING,PO'],
             'status' => ['required', 'in:AKTIF,NONAKTIF'],
+            'whatsapp' => ['nullable', 'string', 'regex:/^(\+?62|0)8\d{7,12}$/'],
+            'notify_whatsapp' => ['nullable', 'boolean'],
             'password' => ['nullable', 'string', 'min:12', 'confirmed'],
         ], [
             'name.regex' => 'Nama hanya boleh mengandung huruf dan spasi.',
             'password.min' => 'Password minimal 12 karakter.',
             'password.confirmed' => 'Konfirmasi password tidak cocok.',
+            'whatsapp.regex' => 'Nomor WhatsApp harus nomor HP Indonesia, contoh 081234567890.',
         ]);
 
         $updateData = [
@@ -81,6 +95,8 @@ class UserController extends Controller
             'role' => $validated['role'],
             'workspace_default' => $validated['workspace_default'],
             'status' => $validated['status'],
+            'whatsapp' => $validated['whatsapp'] ?? null,
+            'notify_whatsapp' => $request->boolean('notify_whatsapp') && !empty($validated['whatsapp']),
         ];
 
         if (!empty($validated['password'])) {
