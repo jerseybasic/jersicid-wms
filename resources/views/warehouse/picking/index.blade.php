@@ -65,7 +65,10 @@
 
                 <button type="submit" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition-all text-sm">Filter</button>
                 <a href="{{ route('gudang.picking') }}" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg border border-slate-700 transition-all text-sm">Reset</a>
-                <a href="{{ route('gudang.picking.create') }}" class="px-4 py-2 ml-auto bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all text-sm flex items-center gap-2">
+                <a href="{{ route('gudang.picking-batch.create') }}" class="px-4 py-2 ml-auto bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold rounded-xl border border-cyan-500/40 transition-all text-sm">
+                    Picking Gabungan
+                </a>
+                <a href="{{ route('gudang.picking.create') }}" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all text-sm flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
                     </svg>
@@ -96,6 +99,9 @@
                             </td>
                             <td class="py-3 px-4">
                                 <span class="text-xs text-slate-300">{{ $session->order?->order_number }}</span>
+                                @if ($session->batch_id)
+                                    <a href="{{ route('gudang.picking-batch.show', $session->batch_id) }}" class="block text-[11px] text-cyan-400 hover:underline">Gabungan · keranjang {{ $session->basket_no }}</a>
+                                @endif
                             </td>
                             <td class="py-3 px-4">
                                 <span class="text-xs px-2 py-1 rounded-full {{ $session->status_color }}">{{ $session->status }}</span>

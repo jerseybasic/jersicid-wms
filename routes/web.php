@@ -13,6 +13,7 @@ use App\Http\Controllers\Warehouse\PurchaseOrderController;
 use App\Http\Controllers\Warehouse\InboundController;
 use App\Http\Controllers\Warehouse\OrderImportController;
 use App\Http\Controllers\Warehouse\OutboundController;
+use App\Http\Controllers\Warehouse\PickingBatchController;
 use App\Http\Controllers\Warehouse\PickingController;
 use App\Http\Controllers\Warehouse\PackingController;
 use App\Http\Controllers\Warehouse\TransferController;
@@ -142,6 +143,18 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{sessionId}/items/{itemId}/pick', [PickingController::class, 'pickItem'])->name('picking.pick');
         Route::post('/{id}/scan', [PickingController::class, 'scan'])->name('picking.scan');
         Route::delete('/{id}', [PickingController::class, 'destroy'])->name('picking.destroy');
+    });
+
+// ==================== PICKING GABUNGAN (GUDANG) ====================
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
+    ->prefix('gudang/picking-gabungan')
+    ->name('gudang.picking-batch.')
+    ->group(function () {
+        Route::get('/create', [PickingBatchController::class, 'create'])->name('create');
+        Route::post('/', [PickingBatchController::class, 'store'])->name('store');
+        Route::get('/{batch}', [PickingBatchController::class, 'show'])->name('show');
+        Route::post('/{batch}/scan', [PickingBatchController::class, 'scan'])->name('scan');
+        Route::delete('/{batch}', [PickingBatchController::class, 'destroy'])->name('destroy');
     });
 
 // ==================== PACKING (GUDANG) ====================
