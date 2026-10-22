@@ -9,7 +9,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Console\Commands\SendLowStockAlert;
 use App\Services\LowStock;
-use App\Services\Telegram;
+use App\Services\WhatsApp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -36,12 +36,12 @@ class SettingsController extends Controller
             'low_stock_threshold' => LowStock::defaultThreshold(),
         ];
 
-        $telegram = [
-            'has_token' => Telegram::token() !== null,
-            'chat_id' => Telegram::chatId(),
+        $whatsapp = [
+            'has_token' => WhatsApp::token() !== null,
+            'target' => WhatsApp::target(),
         ];
 
-        return view('settings.index', compact('stats', 'company', 'telegram'));
+        return view('settings.index', compact('stats', 'company', 'whatsapp'));
     }
 
     /**
@@ -66,58 +66,45 @@ class SettingsController extends Controller
     }
 
     /**
-     * Token bot dan chat ID Telegram untuk notifikasi stok menipis.
+     * Token Fonnte dan nomor WhatsApp tujuan untuk notifikasi stok menipis.
      * Token yang dikosongkan tidak menghapus token tersimpan, kecuali "hapus" dicentang.
      */
-    public function updateTelegram(Request $request)
+    public function updateWhatsApp(Request $request)
     {
         $validated = $request->validate([
-            'telegram_bot_token' => ['nullable', 'string', 'regex:' . Telegram::TOKEN_PATTERN],
-            'telegram_chat_id' => ['nullable', 'string', 'regex:' . Telegram::CHAT_PATTERN],
-            'telegram_clear' => ['nullable', 'boolean'],
+            'whatsapp_token' => ['nullable', 'string', 'regex:' . WhatsApp::TOKEN_PATTERN],
+            'whatsapp_target' => ['nullable', 'string', 'max:255', 'regex:' . WhatsApp::TARGET_PATTERN],
+            'whatsapp_clear' => ['nullable', 'boolean'],
         ], [
-            'telegram_bot_token.regex' => 'Format token bot tidak dikenali. Salin token lengkap dari @BotFather, contohnya 123456789:ABC...',
-            'telegram_chat_id.regex' => 'Chat ID berupa angka (boleh diawali tanda minus untuk grup) atau @namachannel.',
+            'whatsapp_token.regex' => 'Format token tidak dikenali. Salin token perangkat dari dashboard Fonnte.',
+            'whatsapp_target.regex' => 'Isi nomor WhatsApp (contoh 081234567890) atau ID grup Fonnte. Beberapa tujuan dipisah koma.',
         ]);
 
-        if ($request->boolean('telegram_clear')) {
-            Telegram::saveToken(null);
-            Telegram::saveChatId(null);
+        if ($request->boolean('whatsapp_clear')) {
+            WhatsApp::saveToken(null);
+            WhatsApp::saveTarget(null);
 
-            return back()->with('success', 'Pengaturan Telegram dihapus. Notifikasi tidak dikirim lagi.');
+            return back()->with('success', 'Pengaturan WhatsApp dihapus. Notifikasi tidak dikirim lagi.');
         }
 
-        if (!empty($validated['telegram_bot_token'])) {
-            Telegram::saveToken($validated['telegram_bot_token']);
+        if (!empty($validated['whatsapp_token'])) {
+            WhatsApp::saveToken($validated['whatsapp_token']);
         }
-        Telegram::saveChatId($validated['telegram_chat_id'] ?? null);
+        WhatsApp::saveTarget($validated['whatsapp_target'] ?? null);
 
-        return back()->with('success', 'Pengaturan Telegram disimpan.');
-    }
-
-    /** Ambil chat ID dari pesan terakhir yang diterima bot. */
-    public function detectTelegramChat()
-    {
-        $result = Telegram::latestChat();
-        if ($result['error']) {
-            return back()->withErrors(['telegram' => $result['error']]);
-        }
-
-        Telegram::saveChatId($result['chat']['id']);
-
-        return back()->with('success', "Chat ID ditemukan dan disimpan: {$result['chat']['id']} ({$result['chat']['name']}).");
+        return back()->with('success', 'Pengaturan WhatsApp disimpan.');
     }
 
     /** Kirim pesan percobaan berisi ringkasan stok menipis saat ini. */
-    public function testTelegram()
+    public function testWhatsApp()
     {
-        $message = SendLowStockAlert::message() ?? '<b>Tes notifikasi ' . e(config('app.name')) . '</b>' . "\nSaat ini tidak ada stok menipis.";
+        $message = SendLowStockAlert::message() ?? '*Tes notifikasi ' . config('app.name') . "*\nSaat ini tidak ada stok menipis.";
 
-        if ($error = Telegram::send($message)) {
-            return back()->withErrors(['telegram' => $error]);
+        if ($error = WhatsApp::send($message)) {
+            return back()->withErrors(['whatsapp' => $error]);
         }
 
-        return back()->with('success', 'Pesan tes terkirim ke Telegram.');
+        return back()->with('success', 'Pesan tes terkirim ke WhatsApp.');
     }
 
     public function updateProfile(Request $request)

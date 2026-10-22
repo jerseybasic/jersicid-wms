@@ -6,5 +6,5 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('backup:clean')->dailyAt('01:00');
 Schedule::command('backup:run --only-db')->dailyAt('01:30');
 
-// Ringkasan stok menipis ke Telegram setiap pagi (hanya jika Telegram sudah diatur di Pengaturan)
+// Ringkasan stok menipis ke WhatsApp setiap pagi (hanya jika WhatsApp sudah diatur di Pengaturan)
 Schedule::command('wms:kirim-stok-menipis')->dailyAt('08:00');

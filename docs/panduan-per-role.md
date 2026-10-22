@@ -102,9 +102,9 @@ Semua menu, ditambah:
 - **Harga modal (HPP)**: isi di form Master SKU, atau lewat kolom `COST_PRICE` (boleh juga `HARGA_MODAL` atau `HPP`) di file import. Jika kolom itu tidak ada di file, HPP yang sudah tersimpan tidak berubah. HPP dipakai di laporan Nilai Stok dan menjadi harga awal saat membuat PO.
 - **Kelola User**: buat akun untuk setiap karyawan dan pilih role-nya. Karyawan tidak bisa mendaftar sendiri.
 - **Pengaturan** (menu di bawah nama Anda, kanan atas): nama, telepon, dan alamat perusahaan untuk label kirim, serta batas stok menipis umum. Batas khusus per SKU diisi di kolom stok minimum Master SKU.
-- **Notifikasi Telegram** (di **Pengaturan**): daftar stok menipis dikirim setiap pagi pukul 08:00 ke Telegram Anda atau grup gudang.
-  1. Di Telegram, buka **@BotFather**, kirim `/newbot`, lalu salin tokennya.
-  2. Tempel token di **Pengaturan → Notifikasi Telegram**, lalu klik **Simpan Telegram**.
-  3. Kirim `/start` ke bot Anda. Untuk grup, tambahkan bot ke grup lalu kirim satu pesan di sana.
-  4. Klik **Cari Chat ID**, lalu **Kirim Tes**.
+- **Notifikasi WhatsApp** (di **Pengaturan**): daftar stok menipis dikirim setiap pagi pukul 08:00 ke nomor WhatsApp yang dipilih.
+  1. Daftar di **fonnte.com**, tambahkan perangkat, lalu scan QR dengan nomor WhatsApp pengirim. Sebaiknya pakai nomor khusus toko, bukan nomor pribadi.
+  2. Salin token perangkat dari dashboard Fonnte, lalu tempel di **Pengaturan → Notifikasi WhatsApp**.
+  3. Isi nomor penerima (misalnya 081234567890; beberapa nomor dipisah koma), lalu klik **Simpan WhatsApp**.
+  4. Klik **Kirim Tes**.
 - **Menghapus PO**: hanya owner yang bisa.

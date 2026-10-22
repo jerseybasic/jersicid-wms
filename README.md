@@ -69,9 +69,9 @@ Database dibackup setiap hari pukul 01:30 WIB ke `storage/app/private`. Backup y
 
 Untuk mencoba backup secara manual, jalankan `php artisan backup:run --only-db`. Salin file backup ke tempat lain secara berkala, misalnya ke Google Drive.
 
-## Notifikasi stok menipis (Telegram)
+## Notifikasi stok menipis (WhatsApp)
 
-Setiap pukul 08:00 WIB, daftar SKU yang stoknya menipis dikirim ke Telegram. Cara mengaturnya ada di menu **Pengaturan → Notifikasi Telegram** (buat bot di @BotFather, simpan tokennya, lalu klik **Cari Chat ID** dan **Kirim Tes**). Jadwal ini memakai cron `schedule:run` yang sama dengan backup. Untuk mengirim secara manual, jalankan `php artisan wms:kirim-stok-menipis`.
+Setiap pukul 08:00 WIB, daftar SKU yang stoknya menipis dikirim ke WhatsApp lewat gateway [Fonnte](https://fonnte.com). Cara mengaturnya ada di **Pengaturan → Notifikasi WhatsApp**: hubungkan nomor pengirim di Fonnte, simpan tokennya dan nomor penerima, lalu klik **Kirim Tes**. Jadwal ini memakai cron `schedule:run` yang sama dengan backup. Untuk mengirim secara manual, jalankan `php artisan wms:kirim-stok-menipis`.
 
 ## Zona waktu
 

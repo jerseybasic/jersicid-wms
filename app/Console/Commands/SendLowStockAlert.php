@@ -3,24 +3,24 @@
 namespace App\Console\Commands;
 
 use App\Services\LowStock;
-use App\Services\Telegram;
+use App\Services\WhatsApp;
 use Illuminate\Console\Command;
 
 /**
- * Ringkasan stok menipis ke Telegram. Dijadwalkan tiap pagi; tidak mengirim apa-apa jika tidak ada yang menipis.
+ * Ringkasan stok menipis ke WhatsApp. Dijadwalkan tiap pagi; tidak mengirim apa-apa jika tidak ada yang menipis.
  */
 class SendLowStockAlert extends Command
 {
     protected $signature = 'wms:kirim-stok-menipis';
 
-    protected $description = 'Kirim daftar SKU yang stoknya menipis ke Telegram';
+    protected $description = 'Kirim daftar SKU yang stoknya menipis ke WhatsApp';
 
     private const MAX_LINES = 30;
 
     public function handle(): int
     {
-        if (!Telegram::configured()) {
-            $this->info('Telegram belum diatur, tidak ada yang dikirim.');
+        if (!WhatsApp::configured()) {
+            $this->info('WhatsApp belum diatur, tidak ada yang dikirim.');
 
             return self::SUCCESS;
         }
@@ -32,7 +32,7 @@ class SendLowStockAlert extends Command
             return self::SUCCESS;
         }
 
-        if ($error = Telegram::send($message)) {
+        if ($error = WhatsApp::send($message)) {
             $this->error($error);
 
             return self::FAILURE;
@@ -52,11 +52,10 @@ class SendLowStockAlert extends Command
         }
 
         $items = LowStock::query()->orderBy('current_stock')->orderBy('master_skus.sku')->limit(self::MAX_LINES)->get();
-        $e = fn ($text) => htmlspecialchars((string) $text, ENT_QUOTES);
 
-        $lines = ["<b>Stok menipis: {$total} SKU</b> (" . now()->format('d/m/Y') . ')', ''];
+        $lines = ["*Stok menipis: {$total} SKU* (" . now()->format('d/m/Y') . ')', ''];
         foreach ($items as $sku) {
-            $lines[] = "• <code>{$e($sku->sku)}</code> {$e(trim($sku->product_name . ' ' . $sku->size))}: sisa <b>" . (int) $sku->current_stock . '</b> (batas ' . (int) $sku->limit_qty . ')';
+            $lines[] = "• {$sku->sku} " . trim($sku->product_name . ' ' . $sku->size) . ': sisa *' . (int) $sku->current_stock . '* (batas ' . (int) $sku->limit_qty . ')';
         }
         if ($total > self::MAX_LINES) {
             $lines[] = '…dan ' . ($total - self::MAX_LINES) . ' SKU lainnya.';
