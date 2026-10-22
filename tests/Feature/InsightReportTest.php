@@ -166,4 +166,27 @@ class InsightReportTest extends TestCase
         $movement = StockMovement::create(['sku' => $sku, 'bin_code' => 'A-01-01', 'type' => $type, 'qty' => 1]);
         StockMovement::whereKey($movement->id)->update(['created_at' => now()->subDays($daysAgo)]);
     }
+
+    public function test_analysis_reports_export_to_excel(): void
+    {
+        \Maatwebsite\Excel\Facades\Excel::fake();
+        $owner = $this->userWithRole('OWNER');
+        $this->makeSku('JSC-A-L', 100000);
+        $this->putStock('JSC-A-L', 'A-01-01', 3);
+        $period = ['start_date' => '2026-10-01', 'end_date' => '2026-10-21'];
+
+        $this->actingAs($owner)->get(route('reports.stock-value'))->assertSee('Export Excel');
+        $this->get(route('reports.stock-value', ['export' => 'excel']))->assertOk();
+        \Maatwebsite\Excel\Facades\Excel::assertDownloaded('Laporan_Nilai_Stok_' . now()->format('Ymd') . '.xlsx',
+            fn ($export) => $export->array() === [['Kategori ukuran', 'DEWASA', 1, 3, 300000], ['Produk (20 terbesar)', 'CLUB TEST', 1, 3, 300000]]);
+
+        $this->get(route('reports.performance', $period + ['export' => 'excel']))->assertOk();
+        \Maatwebsite\Excel\Facades\Excel::assertDownloaded('Laporan_Kinerja_Picker_Packer_20261001-20261021.xlsx');
+
+        $this->get(route('reports.opname-accuracy', $period + ['export' => 'excel']))->assertOk();
+        \Maatwebsite\Excel\Facades\Excel::assertDownloaded('Laporan_Akurasi_Opname_20261001-20261021.xlsx');
+
+        $this->get(route('reports.slow-moving', ['hari' => 30, 'export' => 'excel']))->assertOk();
+        \Maatwebsite\Excel\Facades\Excel::assertDownloaded('Laporan_Barang_Lambat_30hari_' . now()->format('Ymd') . '.xlsx');
+    }
 }

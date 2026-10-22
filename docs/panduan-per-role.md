@@ -18,6 +18,7 @@ Di semua role, ikon **lonceng** di kanan atas menunjukkan pekerjaan yang sedang 
 1. Buka **Outbound**, lalu klik **Buat Order Baru** untuk order yang masuk.
 2. Periksa order berstatus baru, lalu klik **Konfirmasi** agar order masuk ke daftar picking. Jika stok yang belum dipesan order lain tidak cukup, konfirmasi ditolak dan muncul SKU yang kurang.
 3. Setelah order siap kirim, klik **Kirim** dan isi nomor resi.
+4. Untuk mencetak semua label sekaligus, klik **Cetak N Label Siap Kirim** di Outbound.
 
 ### Import pesanan marketplace (BigSeller)
 1. Di BigSeller, ekspor pesanan per SKU ke Excel.
@@ -49,6 +50,11 @@ Buka **Transfer Stok**, isi SKU, rak asal, rak tujuan, dan jumlahnya, lalu simpa
 2. Klik **Mulai Opname**. Scan lokasi rak, lalu scan barangnya satu per satu.
 3. Jika ada barang yang tidak ada di daftar, form **Tambah barang** otomatis terisi saat barangnya di-scan.
 4. Klik **Simpan Sementara** sesering mungkin. Setelah semua lokasi dihitung, klik **Selesaikan & Adjust Stok**.
+
+### Menata barang ke rak (Denah Gudang)
+1. Buka **Denah Gudang**. Jika ada tulisan "stok belum punya lokasi rak", artinya stok hasil import atau form SKU masih tercatat di DEFAULT-01 atau GUDANG-UTAMA.
+2. Klik rak tujuan, cari produknya, lalu masukkan ke keranjang.
+3. Biarkan **Pindahkan stok yang belum punya rak** tercentang, isi lokasinya (misalnya A-01-01), lalu klik **Simpan**. Stoknya pindah ke rak itu dan tercatat sebagai transfer.
 
 ### Cek barang dan lokasi
 Buka **Cek Barang & Lokasi**, lalu scan barcode barang untuk melihat stok di setiap rak, atau scan rak untuk melihat isinya.

@@ -42,6 +42,7 @@ class OutboundController extends Controller
             'pending' => Order::where('status', 'PENDING')->count(),
             'picking' => Order::whereIn('status', ['CONFIRMED', 'PICKING'])->count(),
             'packing' => Order::whereIn('status', ['PACKING', 'READY_TO_SHIP'])->count(),
+            'ready' => Order::where('status', 'READY_TO_SHIP')->count(),
         ];
 
         return view('warehouse.outbound.index', compact('orders', 'stats'));

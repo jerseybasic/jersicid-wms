@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Label Kirim {{ $order->order_number }}</title>
+    <title>Label Kirim {{ $orders->count() === 1 ? $orders->first()->order_number : $orders->count() . ' order' }}</title>
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; background: #e2e8f0; }
@@ -12,7 +12,7 @@
         .btn-print { background: #06b6d4; color: #0f172a; }
         .btn-plain { background: #334155; color: #fff; }
         .page { padding: 16px; }
-        .label { width: 100mm; min-height: 150mm; margin: 0 auto; background: #fff; border: 0.4mm solid #000; padding: 4mm; display: flex; flex-direction: column; gap: 3mm; font-size: 9pt; }
+        .label { width: 100mm; min-height: 150mm; margin: 0 auto 16px; break-after: page; background: #fff; border: 0.4mm solid #000; padding: 4mm; display: flex; flex-direction: column; gap: 3mm; font-size: 9pt; }
         .row { display: flex; justify-content: space-between; align-items: center; gap: 3mm; }
         .courier { font-size: 18pt; font-weight: bold; text-transform: uppercase; }
         .box { border: 0.3mm solid #000; padding: 2.5mm; }
@@ -32,65 +32,22 @@
             body { background: #fff; }
             .toolbar { display: none; }
             .page { padding: 0; }
-            .label { border: 0; }
+            .label { border: 0; margin: 0; }
+            .label:last-child { break-after: auto; }
         }
     </style>
 </head>
 <body>
     <div class="toolbar">
-        <strong>Label kirim {{ $order->order_number }}</strong>
+        <strong>Label kirim {{ $orders->count() === 1 ? $orders->first()->order_number : $orders->count() . ' order' }}</strong>
         <button class="btn-print" onclick="window.print()">Cetak</button>
         <a class="btn-plain" href="{{ url()->previous() }}">Kembali</a>
     </div>
 
-    @php($code = $order->tracking_number ?: $order->order_number)
     <div class="page">
-        <div class="label">
-            <div class="row">
-                <div class="courier">{{ $order->courier ?: 'Kurir' }}</div>
-                <div style="text-align:right">
-                    <div class="caption">No. Order</div>
-                    <strong>{{ $order->order_number }}</strong>
-                </div>
-            </div>
-
-            <div class="tracking box">
-                {!! \SimpleSoftwareIO\QrCode\Facades\QrCode::size(120)->margin(0)->generate($code) !!}
-                <div class="caption">{{ $order->tracking_number ? 'No. Resi' : 'Resi belum diisi, scan no. order' }}</div>
-                <div class="number">{{ $code }}</div>
-            </div>
-
-            <div class="box">
-                <div class="caption">Penerima</div>
-                <div class="to-name">{{ $order->customer_name }}</div>
-                @if ($order->customer_phone)
-                    <div><strong>{{ $order->customer_phone }}</strong></div>
-                @endif
-                <div class="address">{{ $order->shipping_address }}</div>
-            </div>
-
-            <div class="box">
-                <div class="caption">Pengirim</div>
-                <strong>{{ $senderName }}</strong>
-                @if ($senderPhone)
-                    <span> · {{ $senderPhone }}</span>
-                @endif
-                @if ($senderAddress)
-                    <div>{{ $senderAddress }}</div>
-                @endif
-            </div>
-
-            <table>
-                @foreach ($order->items as $item)
-                    <tr>
-                        <td>{{ $item->sku }} <span style="color:#444">{{ $item->masterSku?->product_name }}</span></td>
-                        <td class="qty">× {{ $item->qty_ordered }}</td>
-                    </tr>
-                @endforeach
-            </table>
-
-            <div class="warning">WAJIB VIDEO UNBOXING SAAT MEMBUKA PAKET</div>
-        </div>
+        @foreach ($orders as $order)
+            @include('warehouse.label._shipping-label', ['order' => $order])
+        @endforeach
     </div>
 
     <script>

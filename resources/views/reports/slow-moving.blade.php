@@ -1,5 +1,5 @@
 <x-app-layout>
-    @include('reports.partials.header', ['title' => 'Barang Lambat Laku', 'subtitle' => 'SKU yang masih ada stoknya tapi lama tidak keluar gudang'])
+    @include('reports.partials.header', ['title' => 'Barang Lambat Laku', 'subtitle' => 'SKU yang masih ada stoknya tapi lama tidak keluar gudang', 'export' => route('reports.slow-moving', array_merge(request()->query(), ['export' => 'excel']))])
 
     <div class="space-y-6">
         <form method="GET" action="{{ route('reports.slow-moving') }}" class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-wrap items-end gap-3">

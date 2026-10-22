@@ -29,6 +29,10 @@
             </div>
         @endif
 
+        @if ($errors->any())
+            <div class="p-4 bg-red-900/30 border border-red-500/50 text-red-400 rounded-xl text-sm">{{ $errors->first() }}</div>
+        @endif
+
         @if (session('error'))
             <div class="p-4 bg-red-900/30 border border-red-500/50 text-red-400 rounded-xl flex items-start gap-3">
                 <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,6 +152,7 @@
                                 <div class="flex-shrink-0 text-right">
                                     <p class="text-xs text-slate-400">Stok:</p>
                                     <p class="text-sm font-bold text-emerald-400" x-text="sku.current_stock"></p>
+                                    <p class="text-[10px] text-amber-400" x-show="sku.unplaced_stock > 0" x-text="sku.unplaced_stock + ' belum di rak'"></p>
                                 </div>
 
                                 <div class="flex-shrink-0">
@@ -212,6 +217,7 @@
                                 <div class="text-right">
                                     <p class="text-xs text-slate-400">Stok total</p>
                                     <p class="w-20 px-2 py-1 text-emerald-400 text-sm font-semibold" x-text="item.current_stock"></p>
+                                    <p class="text-[10px] text-amber-400" x-show="item.unplaced_stock > 0" x-text="item.unplaced_stock + ' belum di rak'"></p>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-xs text-slate-400">Kapasitas</p>
@@ -241,6 +247,21 @@
                                 :value="item.max_capacity">
                         </div>
                     </template>
+                    <div class="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-3"
+                        x-show="cart.some(item => item.unplaced_stock > 0)">
+                        <label class="flex items-start gap-3 text-sm text-slate-200">
+                            <input type="checkbox" name="move_unplaced" value="1" checked
+                                class="mt-0.5 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500">
+                            <span>Pindahkan stok yang belum punya rak ke rak ini
+                                (<span x-text="cart.reduce((n, item) => n + (item.unplaced_stock || 0), 0)"></span> pcs).
+                                <span class="block text-xs text-slate-400">Stok ini tercatat di lokasi seperti DEFAULT-01 atau GUDANG-UTAMA, jadi belum muncul di denah.</span></span>
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <label for="bin_code" class="text-xs text-slate-400 shrink-0">Ke lokasi</label>
+                            <input id="bin_code" type="text" name="bin_code" value="{{ old('bin_code', $rack->code . '-01-01') }}"
+                                class="w-36 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-white text-sm font-mono uppercase focus:border-cyan-400 focus:outline-none">
+                        </div>
+                    </div>
                     <button type="submit"
                         class="w-full px-6 py-4 border-2 border-slate-700 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -460,6 +481,7 @@
                         article: sku.article,
                         size: sku.size,
                         current_stock: sku.current_stock,
+                        unplaced_stock: sku.unplaced_stock,
                         max_capacity: this.defaultCapacity
                     });
 

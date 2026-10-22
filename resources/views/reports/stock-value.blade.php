@@ -1,5 +1,5 @@
 <x-app-layout>
-    @include('reports.partials.header', ['title' => 'Nilai Stok', 'subtitle' => 'Jumlah stok dikali harga jual di master SKU'])
+    @include('reports.partials.header', ['title' => 'Nilai Stok', 'subtitle' => 'Jumlah stok dikali harga jual di master SKU', 'export' => route('reports.stock-value', array_merge(request()->query(), ['export' => 'excel']))])
 
     <div class="space-y-6">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\MasterSku;
+use App\Models\StockActive;
+use App\Models\StockMovement;
 use App\Models\WarehouseRack;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -35,9 +37,14 @@ class WarehouseMappingController extends Controller
             ->select('sku', 'bin_code', 'qty')
             ->get();
 
+        $rackCodes = $racks->pluck('code')->flip();
+        $unplaced = ['skus' => [], 'qty' => 0];
+
         foreach ($stocks as $stock) {
             $code = WarehouseRack::codeFromBin($stock->bin_code);
-            if ($code === null) {
+            if ($code === null || !isset($rackCodes[$code])) {
+                $unplaced['skus'][$stock->sku] = true;
+                $unplaced['qty'] += $stock->qty;
                 continue;
             }
             $stockByRack[$code]['skus'][$stock->sku] = true;
@@ -57,7 +64,9 @@ class WarehouseMappingController extends Controller
             $rack->total_qty = $stockByRack[$rack->code]['qty'] ?? 0;
         }
 
-        return view('warehouse.mapping.index', compact('racks'));
+        $unplaced['skus'] = count($unplaced['skus']);
+
+        return view('warehouse.mapping.index', compact('racks', 'unplaced'));
     }
 
     /**
@@ -93,6 +102,9 @@ class WarehouseMappingController extends Controller
             ->orderBy('master_skus.product_name')
             ->get();
 
+        $unplacedBySku = $this->unplacedStock()->map(fn ($bins) => (int) $bins->sum('qty'));
+        $allSkus->each(fn ($sku) => $sku->unplaced_stock = $unplacedBySku->get($sku->sku, 0));
+
         $rackProducts = $this->rackProducts($rack);
 
         $groupedProducts = $rackProducts->groupBy(function ($product) {
@@ -122,12 +134,20 @@ class WarehouseMappingController extends Controller
             'products' => 'required|array|min:1',
             'products.*.sku' => 'required|exists:master_skus,sku',
             'products.*.max_capacity' => 'required|integer|min:1',
+            'move_unplaced' => 'nullable|boolean',
+            'bin_code' => 'nullable|string|max:50',
         ]);
 
         $rack = WarehouseRack::where('code', $rackCode)->firstOrFail();
+        $targetBin = strtoupper(trim($validated['bin_code'] ?? '')) ?: $rack->code . '-01-01';
+        if (WarehouseRack::codeFromBin($targetBin) !== $rack->code) {
+            return back()->withErrors(['bin_code' => "Lokasi {$targetBin} bukan bagian dari rak {$rack->code}. Contoh: {$rack->code}-01-01."]);
+        }
+        $moveUnplaced = $request->boolean('move_unplaced');
+        $moved = 0;
 
         try {
-            DB::transaction(function () use ($rack, $validated) {
+            DB::transaction(function () use ($rack, $validated, $targetBin, $moveUnplaced, $request, &$moved) {
                 foreach ($validated['products'] as $product) {
                     $exists = DB::table('rack_products')
                         ->where('warehouse_rack_id', $rack->id)
@@ -148,11 +168,15 @@ class WarehouseMappingController extends Controller
                             'sku' => $product['sku'],
                             'current_qty' => 0,
                             'max_capacity' => $product['max_capacity'],
-                            'bin_location' => $rack->code . '-01-01',
+                            'bin_location' => $targetBin,
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
                     }
+                }
+
+                if ($moveUnplaced) {
+                    $moved = $this->moveUnplacedStock(array_column($validated['products'], 'sku'), $targetBin, $request);
                 }
 
                 AuditTrail::create([
@@ -162,12 +186,19 @@ class WarehouseMappingController extends Controller
                     'new_values' => json_encode([
                         'rack' => $rack->code,
                         'skus' => array_column($validated['products'], 'sku'),
+                        'moved_to' => $moved ? $targetBin : null,
+                        'moved_qty' => $moved,
                     ]),
                     'ip_address' => request()->ip(),
                 ]);
             });
 
-            return back()->with('success', count($validated['products']) . ' produk berhasil ditetapkan ke rak ' . $rackCode);
+            $message = count($validated['products']) . ' produk berhasil ditetapkan ke rak ' . $rackCode . '.';
+            if ($moved) {
+                $message .= " {$moved} pcs stok yang belum punya rak dipindah ke {$targetBin}.";
+            }
+
+            return back()->with('success', $message);
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal menetapkan produk: ' . safe_error_message($e));
         }
@@ -200,6 +231,66 @@ class WarehouseMappingController extends Controller
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal melepas produk: ' . safe_error_message($e));
         }
+    }
+
+    /**
+     * Stok yang lokasinya bukan rak di denah (misalnya DEFAULT-01 dari import Master SKU
+     * atau GUDANG-UTAMA dari form SKU), dikelompokkan per SKU.
+     */
+    private function unplacedStock(?array $skus = null): Collection
+    {
+        $rackCodes = WarehouseRack::pluck('code')->flip();
+
+        return StockActive::where('qty', '>', 0)
+            ->when($skus !== null, fn ($q) => $q->whereIn('sku', $skus))
+            ->get()
+            ->filter(fn ($stock) => !isset($rackCodes[WarehouseRack::codeFromBin($stock->bin_code) ?? '']))
+            ->groupBy('sku');
+    }
+
+    /**
+     * Pindahkan stok yang belum punya rak ke bin tujuan (tercatat sebagai TRANSFER). Mengembalikan jumlah pcs.
+     */
+    private function moveUnplacedStock(array $skus, string $targetBin, Request $request): int
+    {
+        $moved = 0;
+
+        foreach ($this->unplacedStock($skus) as $sku => $sources) {
+            foreach ($sources as $source) {
+                $source = StockActive::lockForUpdate()->find($source->id);
+                $qty = (int) $source->qty;
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $target = StockActive::lockForUpdate()->firstOrCreate(
+                    ['sku' => $sku, 'bin_code' => $targetBin],
+                    ['qty' => 0, 'reserved_qty' => 0]
+                );
+                $targetBefore = (int) $target->qty;
+                $target->update(['qty' => $targetBefore + $qty, 'last_movement_at' => now()]);
+
+                // Dicatat seperti Transfer Stok: satu baris di bin asal, catatan menyebut tujuannya
+                StockMovement::create([
+                    'user_id' => auth()->id(),
+                    'sku' => $sku,
+                    'bin_code' => $source->bin_code,
+                    'type' => 'TRANSFER',
+                    'qty' => $qty,
+                    'qty_before' => $qty,
+                    'qty_after' => 0,
+                    'reference_no' => 'MAP-' . now()->format('YmdHis'),
+                    'reference_type' => 'MAPPING',
+                    'notes' => "Ditata ke rak: {$source->bin_code} ke {$targetBin} (sebelumnya {$targetBefore} pcs di sana)",
+                    'ip_address' => $request->ip(),
+                ]);
+
+                $source->delete();
+                $moved += $qty;
+            }
+        }
+
+        return $moved;
     }
 
     /**

@@ -8,6 +8,13 @@
 
     <div class="max-w-7xl mx-auto space-y-6">
 
+        @if ($unplaced['qty'] > 0)
+            <div class="p-4 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-xl text-sm">
+                <strong>{{ number_format($unplaced['qty']) }} pcs</strong> stok ({{ $unplaced['skus'] }} SKU) belum punya lokasi rak, jadi belum terlihat di denah.
+                Buka salah satu rak, tambahkan produknya, lalu biarkan pilihan <strong>Pindahkan stok yang belum punya rak</strong> tercentang.
+            </div>
+        @endif
+
         <!-- Warehouse Map Container -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl overflow-x-auto">
 

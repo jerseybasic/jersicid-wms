@@ -98,4 +98,22 @@ class TasksAndLabelsTest extends TestCase
 
         $this->get(route('gudang.label.sku', ['ref' => 'TIDAK-ADA']))->assertNotFound();
     }
+
+    public function test_all_ready_to_ship_labels_print_at_once(): void
+    {
+        $staff = $this->userWithRole('STAFF_GUDANG');
+        $this->actingAs($staff)->get(route('gudang.label.shipping-bulk'))
+            ->assertRedirect(route('gudang.outbound'))->assertSessionHas('error');
+        $this->get(route('gudang.outbound'))->assertDontSee('Label Siap Kirim');
+
+        foreach (['ORD-SIAP-1' => 'READY_TO_SHIP', 'ORD-SIAP-2' => 'READY_TO_SHIP', 'ORD-PACK' => 'PACKING'] as $number => $status) {
+            \App\Models\Order::create(['order_number' => $number, 'customer_name' => "Pembeli {$number}", 'status' => $status, 'tracking_number' => "RESI-{$number}"]);
+        }
+
+        $this->get(route('gudang.outbound'))->assertSee('Cetak 2 Label Siap Kirim');
+        $this->get(route('gudang.label.shipping-bulk'))->assertOk()
+            ->assertSee('Label kirim 2 order')
+            ->assertSee('RESI-ORD-SIAP-1')->assertSee('RESI-ORD-SIAP-2')
+            ->assertDontSee('RESI-ORD-PACK');
+    }
 }
