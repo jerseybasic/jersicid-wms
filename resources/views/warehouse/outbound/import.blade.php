@@ -41,7 +41,8 @@
             </ol>
             <h3 class="text-base font-semibold text-white pt-2">Yang perlu diperhatikan</h3>
             <ul class="list-disc list-inside space-y-1">
-                <li>SKU di BigSeller harus sama dengan kode di <strong>Master SKU</strong>. Jika kolom "SKU Gudang" terisi, kolom itu yang dipakai.</li>
+                <li>SKU di BigSeller dicocokkan dengan kode di <strong>Master SKU</strong>. Jika kolom "SKU Gudang" terisi, kolom itu yang dipakai.</li>
+                <li>Jika kode SKU di marketplace berbeda, petakan sekali saja di pratinjau (atau di Master Data → Pemetaan SKU). Import berikutnya otomatis memakai SKU gudang yang benar.</li>
                 <li>Pesanan yang nomornya sudah pernah diimpor atau sudah dibatalkan otomatis dilewati, jadi file yang sama aman diupload ulang.</li>
                 <li>Nomor resi dari marketplace ikut tersimpan, jadi retur bisa dicari lewat scan resi.</li>
             </ul>
