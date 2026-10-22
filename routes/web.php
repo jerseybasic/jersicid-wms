@@ -241,6 +241,9 @@ Route::middleware(['auth'])->prefix('settings')->name('settings.')->group(functi
 Route::middleware(['auth', 'role:OWNER'])->prefix('settings')->name('settings.')->group(function () {
     Route::get('/', [SettingsController::class, 'index'])->name('index');
     Route::put('/', [SettingsController::class, 'update'])->name('update');
+    Route::put('/telegram', [SettingsController::class, 'updateTelegram'])->name('telegram');
+    Route::post('/telegram/cari-chat', [SettingsController::class, 'detectTelegramChat'])->name('telegram.detect');
+    Route::post('/telegram/tes', [SettingsController::class, 'testTelegram'])->name('telegram.test');
     Route::post('/clear-cache', function () {
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
         \Illuminate\Support\Facades\Artisan::call('view:clear');

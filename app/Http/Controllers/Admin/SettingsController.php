@@ -7,7 +7,9 @@ use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Console\Commands\SendLowStockAlert;
 use App\Services\LowStock;
+use App\Services\Telegram;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -34,7 +36,12 @@ class SettingsController extends Controller
             'low_stock_threshold' => LowStock::defaultThreshold(),
         ];
 
-        return view('settings.index', compact('stats', 'company'));
+        $telegram = [
+            'has_token' => Telegram::token() !== null,
+            'chat_id' => Telegram::chatId(),
+        ];
+
+        return view('settings.index', compact('stats', 'company', 'telegram'));
     }
 
     /**
@@ -56,6 +63,61 @@ class SettingsController extends Controller
             'Batas stok menipis untuk SKU yang min stoknya 0 (0 = tidak dipakai)');
 
         return back()->with('success', 'Pengaturan berhasil disimpan.');
+    }
+
+    /**
+     * Token bot dan chat ID Telegram untuk notifikasi stok menipis.
+     * Token yang dikosongkan tidak menghapus token tersimpan, kecuali "hapus" dicentang.
+     */
+    public function updateTelegram(Request $request)
+    {
+        $validated = $request->validate([
+            'telegram_bot_token' => ['nullable', 'string', 'regex:' . Telegram::TOKEN_PATTERN],
+            'telegram_chat_id' => ['nullable', 'string', 'regex:' . Telegram::CHAT_PATTERN],
+            'telegram_clear' => ['nullable', 'boolean'],
+        ], [
+            'telegram_bot_token.regex' => 'Format token bot tidak dikenali. Salin token lengkap dari @BotFather, contohnya 123456789:ABC...',
+            'telegram_chat_id.regex' => 'Chat ID berupa angka (boleh diawali tanda minus untuk grup) atau @namachannel.',
+        ]);
+
+        if ($request->boolean('telegram_clear')) {
+            Telegram::saveToken(null);
+            Telegram::saveChatId(null);
+
+            return back()->with('success', 'Pengaturan Telegram dihapus. Notifikasi tidak dikirim lagi.');
+        }
+
+        if (!empty($validated['telegram_bot_token'])) {
+            Telegram::saveToken($validated['telegram_bot_token']);
+        }
+        Telegram::saveChatId($validated['telegram_chat_id'] ?? null);
+
+        return back()->with('success', 'Pengaturan Telegram disimpan.');
+    }
+
+    /** Ambil chat ID dari pesan terakhir yang diterima bot. */
+    public function detectTelegramChat()
+    {
+        $result = Telegram::latestChat();
+        if ($result['error']) {
+            return back()->withErrors(['telegram' => $result['error']]);
+        }
+
+        Telegram::saveChatId($result['chat']['id']);
+
+        return back()->with('success', "Chat ID ditemukan dan disimpan: {$result['chat']['id']} ({$result['chat']['name']}).");
+    }
+
+    /** Kirim pesan percobaan berisi ringkasan stok menipis saat ini. */
+    public function testTelegram()
+    {
+        $message = SendLowStockAlert::message() ?? '<b>Tes notifikasi ' . e(config('app.name')) . '</b>' . "\nSaat ini tidak ada stok menipis.";
+
+        if ($error = Telegram::send($message)) {
+            return back()->withErrors(['telegram' => $error]);
+        }
+
+        return back()->with('success', 'Pesan tes terkirim ke Telegram.');
     }
 
     public function updateProfile(Request $request)
