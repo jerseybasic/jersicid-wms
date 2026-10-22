@@ -3,6 +3,7 @@
 #
 #   ./wa-login.sh            buka menu (login QR otomatis jika belum login)
 #   ./wa-login.sh --gui      sama, tapi jendela browser ditampilkan (debug)
+#   ./wa-login.sh --firefox  pakai Firefox (bawaan: Chromium/Chrome, jika tidak ada Firefox)
 #   ./wa-login.sh --browser  mode lama: Chrome biasa + ekstensi
 set -e
 

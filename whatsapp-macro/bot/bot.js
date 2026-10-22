@@ -5,6 +5,7 @@
 // - Multi akun: ganti/tambah/hapus akun; tiap akun bisa jalan di terminal terpisah
 //
 // Opsi: --gui (tampilkan jendela browser)
+//       --firefox / --chrome  pilih browser (bawaan: Chromium/Chrome, jika tidak ada pakai Firefox)
 //       --wms [--akun nama]  kirim notifikasi dari antrean JERSIC.ID WMS terus-menerus
 
 const fs = require("fs");
@@ -50,18 +51,21 @@ function parseArgs(argv) {
   return out;
 }
 
-function findChrome() {
-  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
-  const names =
-    process.platform === "linux"
-      ? ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "brave-browser", "microsoft-edge"]
-      : [];
+function inPath(names) {
   for (const n of names) {
     for (const dir of (process.env.PATH || "").split(path.delimiter)) {
       const p = path.join(dir, n);
       if (fs.existsSync(p)) return p;
     }
   }
+}
+
+function findChrome() {
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+  const found =
+    process.platform === "linux" &&
+    inPath(["chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "brave-browser", "microsoft-edge"]);
+  if (found) return found;
   const fixed = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -72,6 +76,26 @@ function findChrome() {
   ];
   return fixed.find((p) => p && fs.existsSync(p));
 }
+
+// Ubuntu: /usr/bin/firefox hanya skrip pengalih ke snap, jadi snap dicek lebih dulu
+const SNAP_FIREFOX = "/snap/bin/firefox";
+function findFirefox() {
+  if (process.env.FIREFOX_PATH) return process.env.FIREFOX_PATH;
+  if (process.platform === "linux") {
+    if (fs.existsSync(SNAP_FIREFOX)) return SNAP_FIREFOX;
+    const p = inPath(["firefox", "firefox-esr"]);
+    try {
+      if (p && !/\bsnap\b/.test(fs.readFileSync(p, "latin1").slice(0, 2000))) return p;
+    } catch {}
+  }
+  const fixed = [
+    "/Applications/Firefox.app/Contents/MacOS/firefox",
+    path.join(process.env.ProgramFiles || "", "Mozilla Firefox/firefox.exe"),
+    path.join(process.env["ProgramFiles(x86)"] || "", "Mozilla Firefox/firefox.exe"),
+  ];
+  return fixed.find((p) => p && fs.existsSync(p));
+}
+const isSnap = (exe) => String(exe).startsWith("/snap/");
 
 const isPhone = (to) => /^\+?[\d\s-]{8,}$/.test(String(to).trim());
 
@@ -117,7 +141,13 @@ function preview(list, max = 2) {
 
 // ================= akun =================
 const accPath = (name) => path.join(ACC_DIR, name);
-const profileOf = (name) => path.join(accPath(name), "profile");
+// Profil Chrome dan Firefox terpisah, jadi tiap browser perlu login (scan QR) sendiri.
+// Firefox snap tidak boleh membaca folder tersembunyi (~/.wa-terminal), profilnya di ~/snap/firefox/common.
+function profileOf(name, type = "chrome") {
+  if (type !== "firefox") return path.join(accPath(name), "profile");
+  if (isSnap(findFirefox())) return path.join(os.homedir(), "snap", "firefox", "common", "wa-terminal", name);
+  return path.join(accPath(name), "profile-firefox");
+}
 const settingsOf = (name) => path.join(accPath(name), "settings.json");
 
 function migrateOld() {
@@ -175,8 +205,8 @@ function unlockAcc(name) {
   } catch {}
 }
 
-const loginMark = (name) => path.join(accPath(name), ".loggedin");
-const loggedBefore = (name) => fs.existsSync(loginMark(name));
+const loginMark = (name, type = "chrome") => path.join(accPath(name), type === "firefox" ? ".loggedin-firefox" : ".loggedin");
+const loggedBefore = (name) => fs.existsSync(loginMark(name)) || fs.existsSync(loginMark(name, "firefox"));
 
 function cleanName(v) {
   return String(v)
@@ -235,25 +265,53 @@ function saveSettings(acc, s) {
 // ================= browser =================
 let browser;
 
-async function launch(profile, gui) {
-  const exe = findChrome();
-  if (!exe) throw new Error("Chromium/Chrome tidak ditemukan. Pasang: sudo apt install chromium");
+const BROWSERS = {
+  chrome: { label: "Chromium/Chrome", find: findChrome },
+  firefox: { label: "Firefox", find: findFirefox },
+};
+
+// Pilihan: --firefox / --chrome atau WA_BROWSER. Tanpa pilihan: Chromium/Chrome, jika tidak ada Firefox.
+// Akun yang baru pernah login di Firefox tetap memakai Firefox agar tidak perlu scan QR lagi.
+function pickBrowser(acc) {
+  const want = String(session.browser || process.env.WA_BROWSER || "").toLowerCase();
+  let order = ["chrome", "firefox"];
+  if (want.startsWith("f")) order = ["firefox"];
+  else if (want.startsWith("c")) order = ["chrome"];
+  else if (fs.existsSync(loginMark(acc, "firefox")) && !fs.existsSync(loginMark(acc))) order = ["firefox", "chrome"];
+  for (const type of order) {
+    const exe = BROWSERS[type].find();
+    if (exe) return { type, exe };
+  }
+  if (order.length === 1) throw new Error(`${BROWSERS[order[0]].label} tidak ditemukan.`);
+  throw new Error("Chromium/Chrome atau Firefox tidak ditemukan. Pasang salah satu, misalnya: sudo apt install firefox");
+}
+
+async function launch(acc, gui) {
+  const { type, exe } = pickBrowser(acc);
+  const profile = profileOf(acc, type);
   fs.mkdirSync(profile, { recursive: true });
+  const opts = {
+    executablePath: exe,
+    headless: !gui,
+    handleSIGINT: false, // Ctrl+C ditangani sendiri
+    userDataDir: profile,
+    defaultViewport: { width: 1280, height: 900 },
+  };
+  if (type === "firefox") {
+    opts.browser = "firefox";
+    opts.args = ["--width=1280", "--height=900"];
+  } else {
+    opts.args = [
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-dev-shm-usage",
+      "--window-size=1280,900",
+      ...(process.getuid && process.getuid() === 0 ? ["--no-sandbox"] : []),
+    ];
+  }
+  session.browserType = type;
   try {
-    browser = await puppeteer.launch({
-      executablePath: exe,
-      headless: !gui,
-      handleSIGINT: false, // Ctrl+C ditangani sendiri
-      userDataDir: profile,
-      defaultViewport: { width: 1280, height: 900 },
-      args: [
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-dev-shm-usage",
-        "--window-size=1280,900",
-        ...(process.getuid && process.getuid() === 0 ? ["--no-sandbox"] : []),
-      ],
-    });
+    browser = await puppeteer.launch(opts);
   } catch (e) {
     browser = null;
     if (/already running|SingletonLock|ProcessSingleton/i.test(e.message))
@@ -261,8 +319,8 @@ async function launch(profile, gui) {
     throw new Error("Gagal membuka browser: " + e.message.split("\n")[0]);
   }
   const page = (await browser.pages())[0] || (await browser.newPage());
-  // WhatsApp menolak user-agent "HeadlessChrome"
-  await page.setUserAgent((await browser.userAgent()).replace("HeadlessChrome", "Chrome"));
+  // WhatsApp menolak user-agent "HeadlessChrome" (Firefox headless tidak bermasalah)
+  if (type === "chrome") await page.setUserAgent((await browser.userAgent()).replace("HeadlessChrome", "Chrome"));
   await page.goto(WA_URL, { waitUntil: "domcontentloaded", timeout: 90000 });
   return page;
 }
@@ -704,7 +762,7 @@ function expandPath(p) {
 }
 
 // ================= sesi (akun aktif) =================
-const session = { acc: null, page: null, gui: false, ready: false };
+const session = { acc: null, page: null, gui: false, ready: false, browser: null, browserType: null };
 
 async function openAccount(acc) {
   if (inUse(acc)) throw new Error(`Akun "${acc}" sedang dipakai terminal lain.`);
@@ -713,13 +771,13 @@ async function openAccount(acc) {
   if (session.acc && session.acc !== acc) unlockAcc(session.acc);
   lockAcc(acc);
   session.acc = acc;
-  session.page = await launch(profileOf(acc), session.gui);
+  session.page = await launch(acc, session.gui);
   if (!(await ensureLogin(session.page, acc))) {
     await closeBrowser();
     throw new Error(abortLogin ? `Login akun "${acc}" dibatalkan.` : `Login akun "${acc}" gagal / waktu habis.`);
   }
   session.ready = true;
-  fs.writeFileSync(loginMark(acc), new Date().toISOString());
+  fs.writeFileSync(loginMark(acc, session.browserType), new Date().toISOString());
   fs.writeFileSync(LAST_FILE, acc);
   await sleep(800);
 }
@@ -960,8 +1018,10 @@ async function accountScreen(flash = "") {
         const unlinked = await waLogout(session.page);
         await closeBrowser();
         session.ready = false;
-        fs.rmSync(profileOf(session.acc), { recursive: true, force: true });
-        fs.rmSync(loginMark(session.acc), { force: true });
+        for (const type of Object.keys(BROWSERS)) {
+          fs.rmSync(profileOf(session.acc, type), { recursive: true, force: true });
+          fs.rmSync(loginMark(session.acc, type), { force: true });
+        }
         info = unlinked
           ? C.g(`✔ Akun "${session.acc}" logout. Pilih akun itu lagi untuk login ulang.`)
           : C.y(`Sesi lokal "${session.acc}" dihapus. Hapus juga perangkatnya di HP: Perangkat tertaut.`);
@@ -984,6 +1044,7 @@ async function accountScreen(flash = "") {
       else if (a === session.acc && session.ready) info = C.r("✖ Akun aktif tidak bisa dihapus. Pilih akun lain dulu.");
       else if (inUse(a)) info = C.r("✖ Akun sedang dipakai terminal lain");
       else if ((await ask(C.y(`  Hapus akun "${a}" beserta sesi & tujuannya? (y/n): `))).toLowerCase() === "y") {
+        fs.rmSync(profileOf(a, "firefox"), { recursive: true, force: true });
         fs.rmSync(accPath(a), { recursive: true, force: true });
         if (a === session.acc) session.acc = null;
         info = C.g(`✔ Akun "${a}" dihapus. Hapus juga perangkatnya di HP (Perangkat tertaut).`);
@@ -1358,7 +1419,7 @@ async function wmsCall(c, suffix, body) {
 async function wmsLoop(c) {
   if (!session.ready || session.acc !== c.akun || !browser) await openAccount(c.akun);
   console.clear();
-  console.log(C.b(C.g(`\n  Mode WMS  -  akun "${c.akun}"`)) + C.d(`  ›  ${c.url}`));
+  console.log(C.b(C.g(`\n  Mode WMS  -  akun "${c.akun}"`)) + C.d(`  ›  ${c.url} · ${BROWSERS[session.browserType].label}`));
   log(C.c(`Cek antrean tiap ${c.poll}s · jeda antar pesan ${c.jeda}s`));
   console.log(C.y("  Ctrl+C untuk berhenti.\n"));
 
@@ -1420,6 +1481,8 @@ async function wmsMode(args = {}) {
 (async () => {
   const args = parseArgs(process.argv.slice(2));
   session.gui = !!args.gui;
+  if (args.firefox) session.browser = "firefox";
+  else if (args.chrome) session.browser = "chrome";
   fs.mkdirSync(HOME_DIR, { recursive: true });
   migrateOld();
   // sekali jalan: akun dari versi sebelumnya yang sudah punya sesi dianggap sudah login

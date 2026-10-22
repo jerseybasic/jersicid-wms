@@ -1,6 +1,6 @@
 # WA Terminal — menu WhatsApp Web di terminal
 
-Menjalankan WhatsApp Web di **Chromium headless** (tanpa jendela). QR login tampil di
+Menjalankan WhatsApp Web di **Chromium/Chrome atau Firefox headless** (tanpa jendela). QR login tampil di
 terminal, semua diatur lewat menu angka. Mendukung **banyak tujuan** (nama & nomor) dan
 **banyak akun WhatsApp**.
 
@@ -37,7 +37,12 @@ Keterangan:
 
 ## Syarat
 - Node.js 18+ — Linux Mint: `sudo apt install nodejs npm`
-- Chromium atau Google Chrome (dicari otomatis; path manual: `CHROME_PATH=/usr/bin/google-chrome`)
+- Chromium/Google Chrome **atau Firefox**, dicari otomatis. Jika keduanya ada, yang dipakai Chromium/Chrome.
+  - Paksa Firefox: `./wa-login.sh --firefox` (atau env `WA_BROWSER=firefox`). Paksa Chrome: `--chrome`.
+  - Path manual: `CHROME_PATH=/usr/bin/google-chrome` atau `FIREFOX_PATH=/usr/bin/firefox`.
+  - Login Chrome dan Firefox terpisah, jadi saat pertama memakai Firefox perlu scan QR sekali lagi.
+    Akun yang sudah login di Firefox otomatis tetap memakai Firefox.
+  - Firefox versi snap (Ubuntu) didukung; profilnya disimpan di `~/snap/firefox/common/wa-terminal/`.
 
 ## Jalankan
 ```bash

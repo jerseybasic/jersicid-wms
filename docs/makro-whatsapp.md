@@ -17,6 +17,8 @@ Makro bisa berjalan di komputer mana pun yang bisa membuka alamat WMS, misalnya 
 3. Di folder `whatsapp-macro`, jalankan `./wa-login.sh --wms --setup` (Windows: `wa-login.bat --wms --setup`). Isi alamat WMS, token, dan akun pengirim. Jika akun belum login, scan QR yang muncul.
 4. Klik **Kirim Tes** di Pengaturan WMS. Dalam sekitar satu menit, pesan akan terkirim dan statusnya berubah menjadi **Terkirim**.
 
+Makro memakai Chromium/Chrome, atau Firefox jika Chrome tidak ada. Untuk memaksa Firefox, tambahkan `--firefox`, misalnya `./wa-login.sh --wms --setup --firefox`.
+
 Untuk menjalankan berikutnya cukup `./wa-login.sh --wms`. Cara menjalankannya terus-menerus di server ada di README makro.
 
 ## API antrean (untuk referensi)

@@ -2,6 +2,7 @@
 REM Makro WhatsApp Web dari terminal (Windows)
 REM   wa-login.bat            buka menu (login QR otomatis jika belum login)
 REM   wa-login.bat --gui      tampilkan jendela browser (debug)
+REM   wa-login.bat --firefox  pakai Firefox (bawaan: Chrome, jika tidak ada Firefox)
 REM   wa-login.bat --browser  mode lama: Chrome biasa + ekstensi
 setlocal
 chcp 65001 >nul
