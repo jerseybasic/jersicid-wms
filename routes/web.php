@@ -243,6 +243,9 @@ Route::middleware(['auth', 'role:OWNER'])->prefix('settings')->name('settings.')
     Route::put('/', [SettingsController::class, 'update'])->name('update');
     Route::put('/whatsapp', [SettingsController::class, 'updateWhatsApp'])->name('whatsapp');
     Route::post('/whatsapp/tes', [SettingsController::class, 'testWhatsApp'])->name('whatsapp.test');
+    Route::get('/whatsapp/status', [SettingsController::class, 'whatsAppStatus'])->name('whatsapp.status');
+    Route::get('/whatsapp/qr', [SettingsController::class, 'whatsAppQr'])->name('whatsapp.qr');
+    Route::post('/whatsapp/keluar', [SettingsController::class, 'whatsAppLogout'])->name('whatsapp.logout');
     Route::post('/clear-cache', function () {
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
         \Illuminate\Support\Facades\Artisan::call('view:clear');

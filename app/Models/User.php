@@ -19,6 +19,8 @@ class User extends Authenticatable
         'id',
         'name',
         'email',
+        'whatsapp',
+        'notify_whatsapp',
         'password',
         'role',
         'workspace_default',
@@ -33,6 +35,7 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'notify_whatsapp' => 'boolean',
     ];
 
     protected static function boot()
