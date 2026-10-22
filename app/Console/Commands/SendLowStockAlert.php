@@ -7,7 +7,7 @@ use App\Services\WhatsApp;
 use Illuminate\Console\Command;
 
 /**
- * Ringkasan stok menipis ke WhatsApp. Dijadwalkan tiap pagi; tidak mengirim apa-apa jika tidak ada yang menipis.
+ * Ringkasan stok menipis ke antrean WhatsApp (dikirim oleh makro). Dijadwalkan tiap pagi; tidak mengirim apa-apa jika tidak ada yang menipis.
  */
 class SendLowStockAlert extends Command
 {
@@ -20,7 +20,7 @@ class SendLowStockAlert extends Command
     public function handle(): int
     {
         if (!WhatsApp::configured()) {
-            $this->info('WhatsApp belum diatur, tidak ada yang dikirim.');
+            $this->info('WhatsApp belum diatur (token makro atau penerima kosong), tidak ada yang diantrekan.');
 
             return self::SUCCESS;
         }
@@ -38,7 +38,7 @@ class SendLowStockAlert extends Command
             return self::FAILURE;
         }
 
-        $this->info('Ringkasan stok menipis terkirim.');
+        $this->info('Ringkasan stok menipis masuk antrean WhatsApp.');
 
         return self::SUCCESS;
     }

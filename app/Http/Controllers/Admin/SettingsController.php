@@ -7,6 +7,7 @@ use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Models\WhatsAppMessage;
 use App\Console\Commands\SendLowStockAlert;
 use App\Services\LowStock;
 use App\Services\WhatsApp;
@@ -37,12 +38,13 @@ class SettingsController extends Controller
         ];
 
         $whatsapp = [
-            'driver' => WhatsApp::driver(),
-            'has_token' => WhatsApp::token() !== null,
-            'sender_ready' => WhatsApp::senderReady(),
+            'has_token' => WhatsApp::hasToken(),
             'extra' => WhatsApp::extraTargets(),
             'members' => WhatsApp::members(),
             'ready' => WhatsApp::configured(),
+            'seen_at' => WhatsApp::macroSeenAt(),
+            'counts' => WhatsAppMessage::selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status'),
+            'recent' => WhatsAppMessage::latest('id')->limit(10)->get(),
         ];
 
         return view('settings.index', compact('stats', 'company', 'whatsapp'));
@@ -69,56 +71,25 @@ class SettingsController extends Controller
         return back()->with('success', 'Pengaturan berhasil disimpan.');
     }
 
-    /**
-     * Cara kirim WhatsApp, token Fonnte, dan nomor tambahan. Penerima utama diatur per anggota di Kelola User.
-     * Token yang dikosongkan tidak menghapus token tersimpan, kecuali "hapus" dicentang.
-     */
+    /** Nomor tambahan di luar anggota. Penerima utama diatur per anggota di Kelola User. */
     public function updateWhatsApp(Request $request)
     {
         $validated = $request->validate([
-            'whatsapp_driver' => ['required', Rule::in(array_keys(WhatsApp::DRIVERS))],
-            'whatsapp_token' => ['nullable', 'string', 'regex:' . WhatsApp::TOKEN_PATTERN],
             'whatsapp_target' => ['nullable', 'string', 'max:255', 'regex:' . WhatsApp::TARGET_PATTERN],
-            'whatsapp_clear' => ['nullable', 'boolean'],
         ], [
-            'whatsapp_token.regex' => 'Format token tidak dikenali. Salin token perangkat dari dashboard Fonnte.',
             'whatsapp_target.regex' => 'Isi nomor WhatsApp, contoh 081234567890. Beberapa nomor dipisah koma.',
         ]);
 
-        WhatsApp::saveDriver($validated['whatsapp_driver']);
-        if ($request->boolean('whatsapp_clear')) {
-            WhatsApp::saveToken(null);
-        } elseif (!empty($validated['whatsapp_token'])) {
-            WhatsApp::saveToken($validated['whatsapp_token']);
-        }
         WhatsApp::saveExtraTargets($validated['whatsapp_target'] ?? null);
 
         return back()->with('success', 'Pengaturan WhatsApp disimpan.');
     }
 
-    /** Status login pengirim sendiri (dipanggil berkala oleh halaman Pengaturan). */
-    public function whatsAppStatus()
+    /** Buat token baru untuk makro. Token hanya ditampilkan sekali. */
+    public function whatsAppToken()
     {
-        return response()->json(WhatsApp::serverStatus());
-    }
-
-    /** QR login WhatsApp Web dari pengirim sendiri. */
-    public function whatsAppQr()
-    {
-        $png = WhatsApp::serverQr();
-        abort_if($png === null, 404);
-
-        return response($png, 200, ['Content-Type' => 'image/png', 'Cache-Control' => 'no-store']);
-    }
-
-    /** Keluarkan nomor WhatsApp dari pengirim sendiri, lalu QR baru bisa di-scan dengan nomor lain. */
-    public function whatsAppLogout()
-    {
-        if ($error = WhatsApp::serverLogout()) {
-            return back()->withErrors(['whatsapp' => $error]);
-        }
-
-        return back()->with('success', 'Nomor WhatsApp dikeluarkan. Scan QR baru dengan nomor yang ingin dipakai.');
+        return back()->with('success', 'Token makro baru dibuat. Salin sekarang, token ini tidak ditampilkan lagi.')
+            ->with('whatsapp_token', WhatsApp::generateToken());
     }
 
     /** Kirim pesan percobaan berisi ringkasan stok menipis saat ini. */
@@ -130,7 +101,7 @@ class SettingsController extends Controller
             return back()->withErrors(['whatsapp' => $error]);
         }
 
-        return back()->with('success', 'Pesan tes terkirim ke WhatsApp.');
+        return back()->with('success', 'Pesan tes masuk antrean. Makro akan mengirimnya saat mengambil antrean berikutnya.');
     }
 
     public function updateProfile(Request $request)

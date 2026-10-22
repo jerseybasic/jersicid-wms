@@ -4,55 +4,23 @@ namespace App\Services;
 
 use App\Models\SystemSetting;
 use App\Models\User;
-use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use App\Models\WhatsAppMessage;
+use Illuminate\Support\Str;
 
 /**
- * Kirim pesan WhatsApp ke anggota yang mengaktifkan notifikasi di Kelola User (plus nomor tambahan di Pengaturan).
+ * Notifikasi WhatsApp lewat makro Playwright milik toko.
  *
- * Dua cara kirim:
- * - "server": pengirim sendiri di folder whatsapp-sender (Node.js + Playwright, login WhatsApp Web lewat QR).
- * - "fonnte": gateway fonnte.com dengan token perangkat.
+ * WMS hanya menaruh pesan di antrean (whatsapp_messages), satu baris per penerima. Makro mengambil
+ * antrean lewat API dengan token, mengirimnya di WhatsApp Web, lalu melapor terkirim atau gagal.
+ * Penerima: anggota aktif yang mencentang notifikasi di Kelola User, plus nomor tambahan di Pengaturan.
  */
 class WhatsApp
 {
-    public const DRIVERS = ['server' => 'Server sendiri (WhatsApp Web)', 'fonnte' => 'Fonnte'];
-    public const FONNTE_URL = 'https://api.fonnte.com/send';
-    public const TOKEN_PATTERN = '/^[A-Za-z0-9!@#$%^&*()_+\-=.~]{10,100}$/';
     /** Nomor tambahan (08xx / 628xx) dipisah koma */
     public const TARGET_PATTERN = '/^\s*(\+?\d{9,15})(\s*,\s*(\+?\d{9,15}))*\s*$/';
-
-    public static function driver(): string
-    {
-        $driver = SystemSetting::get('whatsapp_driver', 'server');
-
-        return array_key_exists($driver, self::DRIVERS) ? $driver : 'server';
-    }
-
-    public static function saveDriver(string $driver): void
-    {
-        SystemSetting::set('whatsapp_driver', $driver, 'NOTIFICATION', 'Cara kirim WhatsApp (server/fonnte)');
-    }
-
-    public static function token(): ?string
-    {
-        $stored = SystemSetting::get('whatsapp_token');
-        if (!$stored) {
-            return null;
-        }
-
-        try {
-            return Crypt::decryptString($stored);
-        } catch (\Throwable) {
-            return null;
-        }
-    }
-
-    public static function saveToken(?string $token): void
-    {
-        SystemSetting::set('whatsapp_token', $token ? Crypt::encryptString($token) : '', 'NOTIFICATION', 'Token perangkat Fonnte (terenkripsi)');
-    }
+    /** Pesan yang sudah diambil makro tapi belum dilaporkan dianggap macet setelah sekian menit, lalu boleh diambil lagi */
+    public const CLAIM_TIMEOUT_MINUTES = 10;
+    public const MAX_ATTEMPTS = 3;
 
     /** Nomor tambahan di luar anggota, dipisah koma */
     public static function extraTargets(): ?string
@@ -95,125 +63,96 @@ class WhatsApp
         return array_values(array_unique(array_map([self::class, 'normalize'], $numbers)));
     }
 
-    public static function senderReady(): bool
-    {
-        return self::driver() === 'fonnte'
-            ? self::token() !== null
-            : filled(config('services.whatsapp_sender.url')) && filled(config('services.whatsapp_sender.key'));
-    }
-
     public static function configured(): bool
     {
-        return self::senderReady() && self::recipients() !== [];
+        return self::hasToken() && self::recipients() !== [];
     }
 
     /**
-     * Kirim pesan ke semua penerima (format WhatsApp: *tebal*). Mengembalikan pesan error, atau null jika berhasil.
+     * Taruh pesan (format WhatsApp: *tebal*) di antrean untuk semua penerima.
+     * Mengembalikan pesan error, atau null jika berhasil masuk antrean.
      */
     public static function send(string $message): ?string
     {
-        if (!self::senderReady()) {
-            return self::driver() === 'fonnte'
-                ? 'Token Fonnte belum diisi.'
-                : 'Pengirim WhatsApp belum diatur: isi WA_SENDER_URL dan WA_SENDER_KEY di file .env server.';
-        }
         $recipients = self::recipients();
         if ($recipients === []) {
             return 'Belum ada penerima. Isi nomor WhatsApp anggota di Kelola User dan centang "Kirim notifikasi WhatsApp".';
         }
 
-        return self::driver() === 'fonnte' ? self::sendFonnte($recipients, $message) : self::sendServer($recipients, $message);
-    }
-
-    /** Status pengirim sendiri: READY, QR (perlu scan), LOADING, atau OFFLINE. */
-    public static function serverStatus(): array
-    {
-        $response = self::server('get', '/status', [], 10);
-
-        return $response['error'] ? ['state' => 'OFFLINE', 'error' => $response['error']] : $response['data'] + ['error' => null];
-    }
-
-    /** Gambar QR login WhatsApp Web (PNG) dari pengirim sendiri, atau null. */
-    public static function serverQr(): ?string
-    {
-        try {
-            $response = Http::timeout(15)->withHeaders(['X-Api-Key' => (string) config('services.whatsapp_sender.key')])
-                ->get(rtrim((string) config('services.whatsapp_sender.url'), '/') . '/qr');
-        } catch (\Throwable) {
-            return null;
-        }
-
-        return $response->successful() && str_starts_with((string) $response->header('Content-Type'), 'image/') ? $response->body() : null;
-    }
-
-    /** Keluarkan nomor WhatsApp dari pengirim sendiri (untuk ganti nomor). */
-    public static function serverLogout(): ?string
-    {
-        return self::server('post', '/logout', [], 30)['error'];
-    }
-
-    private static function sendServer(array $recipients, string $message): ?string
-    {
-        // Pengirim mengetik pesan satu per satu, jadi waktunya bertambah per nomor
-        $response = self::server('post', '/send', ['to' => $recipients, 'message' => $message], 30 + 20 * count($recipients));
-        if ($response['error']) {
-            return $response['error'];
-        }
-
-        $failed = collect($response['data']['results'] ?? [])->reject(fn ($r) => $r['ok'] ?? false);
-        if ($failed->isNotEmpty()) {
-            return 'Gagal ke ' . $failed->map(fn ($r) => ($r['to'] ?? '?') . ' (' . ($r['error'] ?? 'tidak diketahui') . ')')->implode(', ');
+        foreach ($recipients as $recipient) {
+            WhatsAppMessage::create(['recipient' => $recipient, 'body' => $message]);
         }
 
         return null;
     }
 
-    private static function server(string $method, string $path, array $payload, int $timeout): array
+    // ---- Token makro -------------------------------------------------------
+
+    public static function hasToken(): bool
     {
-        $url = rtrim((string) config('services.whatsapp_sender.url'), '/') . $path;
-
-        try {
-            $request = Http::timeout($timeout)->acceptJson()->withHeaders(['X-Api-Key' => (string) config('services.whatsapp_sender.key')]);
-            $response = $method === 'get' ? $request->get($url) : $request->post($url, $payload);
-        } catch (\Throwable $e) {
-            Log::warning('Pengirim WhatsApp tidak bisa dihubungi', ['url' => $url, 'error' => $e->getMessage()]);
-
-            return ['data' => null, 'error' => 'Pengirim WhatsApp tidak berjalan atau tidak bisa dihubungi. Jalankan whatsapp-sender di server.'];
-        }
-
-        if (!$response->successful() || $response->json('ok') === false) {
-            $reason = $response->json('error') ?? ('HTTP ' . $response->status());
-            Log::warning('Pengirim WhatsApp menolak', ['path' => $path, 'reason' => $reason]);
-
-            return ['data' => null, 'error' => 'WhatsApp gagal: ' . $reason];
-        }
-
-        return ['data' => $response->json() ?? [], 'error' => null];
+        return (bool) SystemSetting::get('whatsapp_macro_token');
     }
 
-    private static function sendFonnte(array $recipients, string $message): ?string
+    /** Buat token baru (token lama tidak berlaku lagi). Token asli hanya dikembalikan sekali; yang disimpan hash-nya. */
+    public static function generateToken(): string
     {
-        try {
-            $response = Http::timeout(20)->asForm()
-                ->withHeaders(['Authorization' => self::token()])
-                ->post(self::FONNTE_URL, [
-                    'target' => implode(',', $recipients),
-                    'message' => $message,
-                    'countryCode' => '62',
-                ]);
-        } catch (\Throwable $e) {
-            Log::warning('Fonnte tidak bisa dihubungi', ['error' => $e->getMessage()]);
+        $token = 'wa_' . Str::random(40);
+        SystemSetting::set('whatsapp_macro_token', hash('sha256', $token), 'NOTIFICATION', 'Hash token makro WhatsApp');
 
-            return 'Layanan WhatsApp (Fonnte) tidak bisa dihubungi. Periksa koneksi internet server.';
-        }
+        return $token;
+    }
 
-        if (!$response->successful() || $response->json('status') !== true) {
-            $reason = $response->json('reason') ?? $response->json('detail') ?? ('HTTP ' . $response->status());
-            Log::warning('Fonnte menolak pesan', ['reason' => $reason]);
+    public static function revokeToken(): void
+    {
+        SystemSetting::set('whatsapp_macro_token', '', 'NOTIFICATION', 'Hash token makro WhatsApp');
+    }
 
-            return 'WhatsApp gagal dikirim: ' . $reason;
-        }
+    public static function tokenValid(?string $token): bool
+    {
+        $hash = SystemSetting::get('whatsapp_macro_token');
 
-        return null;
+        return $hash && $token && hash_equals($hash, hash('sha256', $token));
+    }
+
+    // ---- Antrean untuk makro ----------------------------------------------
+
+    /** Ambil sampai $limit pesan untuk dikirim, dan tandai sedang diambil. */
+    public static function claim(int $limit): \Illuminate\Support\Collection
+    {
+        SystemSetting::set('whatsapp_macro_seen_at', now()->toDateTimeString(), 'NOTIFICATION', 'Terakhir makro WhatsApp mengambil antrean');
+
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($limit) {
+            $messages = WhatsAppMessage::where('status', 'PENDING')
+                ->where(fn ($q) => $q->whereNull('claimed_at')->orWhere('claimed_at', '<', now()->subMinutes(self::CLAIM_TIMEOUT_MINUTES)))
+                ->orderBy('id')->limit($limit)->lockForUpdate()->get();
+
+            WhatsAppMessage::whereIn('id', $messages->pluck('id'))->update(['claimed_at' => now()]);
+
+            return $messages;
+        });
+    }
+
+    public static function markSent(WhatsAppMessage $message): void
+    {
+        $message->update(['status' => 'SENT', 'sent_at' => now(), 'error' => null]);
+    }
+
+    /** Gagal: dicoba lagi sampai MAX_ATTEMPTS, setelah itu berstatus FAILED. */
+    public static function markFailed(WhatsAppMessage $message, string $error): void
+    {
+        $attempts = $message->attempts + 1;
+        $message->update([
+            'attempts' => $attempts,
+            'error' => Str::limit($error, 250),
+            'claimed_at' => null,
+            'status' => $attempts >= self::MAX_ATTEMPTS ? 'FAILED' : 'PENDING',
+        ]);
+    }
+
+    public static function macroSeenAt(): ?\Carbon\Carbon
+    {
+        $seen = SystemSetting::get('whatsapp_macro_seen_at');
+
+        return $seen ? \Carbon\Carbon::parse($seen) : null;
     }
 }

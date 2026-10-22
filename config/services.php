@@ -35,10 +35,4 @@ return [
         ],
     ],
 
-    // Pengirim WhatsApp sendiri (folder whatsapp-sender, Node.js + Playwright)
-    'whatsapp_sender' => [
-        'url' => env('WA_SENDER_URL', 'http://127.0.0.1:3100'),
-        'key' => env('WA_SENDER_KEY'),
-    ],
-
 ];

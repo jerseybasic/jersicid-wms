@@ -71,12 +71,9 @@ Untuk mencoba backup secara manual, jalankan `php artisan backup:run --only-db`.
 
 ## Notifikasi stok menipis (WhatsApp)
 
-Setiap pukul 08:00 WIB, daftar SKU yang stoknya menipis dikirim ke WhatsApp anggota yang dicentang **Kirim notifikasi WhatsApp** di **Kelola User**. Pesan dikirim lewat salah satu dari dua cara, dipilih di **Pengaturan → Notifikasi WhatsApp**:
+Setiap pukul 08:00 WIB, daftar SKU yang stoknya menipis dimasukkan ke **antrean WhatsApp**, satu pesan untuk setiap anggota yang dicentang **Kirim notifikasi WhatsApp** di **Kelola User**. Pengiriman ke WhatsApp dilakukan oleh makro Playwright milik toko, yang mengambil antrean lewat API dengan token dari **Pengaturan → Notifikasi WhatsApp**. Penjelasan API dan contoh makronya ada di [docs/makro-whatsapp.md](docs/makro-whatsapp.md).
 
-- **Server sendiri**: program `whatsapp-sender` (Node.js + Playwright) membuka WhatsApp Web di server. Cara memasangnya ada di [whatsapp-sender/README.md](whatsapp-sender/README.md). Login dilakukan dengan scan QR dari halaman Pengaturan.
-- **Fonnte**: gateway berbayar/gratis terbatas di fonnte.com, cukup dengan token perangkat.
-
-Jadwal ini memakai cron `schedule:run` yang sama dengan backup. Untuk mengirim secara manual, jalankan `php artisan wms:kirim-stok-menipis`.
+Jadwal ini memakai cron `schedule:run` yang sama dengan backup. Untuk mengisi antrean secara manual, jalankan `php artisan wms:kirim-stok-menipis`.
 
 ## Zona waktu
 
