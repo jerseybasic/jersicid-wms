@@ -71,7 +71,7 @@ class PurchaseOrderController extends Controller
             $data['prefillRows'] = $lowStock->map(fn ($sku) => [
                 'sku' => $sku->sku,
                 'qty' => LowStock::suggestedQty((int) $sku->current_stock, (int) $sku->limit_qty),
-                'price' => (int) $sku->price,
+                'price' => (int) ($sku->cost_price ?: $sku->price),
                 'stock' => (int) $sku->current_stock,
                 'limit' => (int) $sku->limit_qty,
             ])->all();
@@ -299,7 +299,7 @@ class PurchaseOrderController extends Controller
             'skus' => MasterSku::where('status', 'AKTIF')
                 ->orderBy('product_name')
                 ->orderBy('size')
-                ->get(['sku', 'product_name', 'price', 'size']),
+                ->get(['sku', 'product_name', 'price', 'cost_price', 'size']),
         ];
     }
 

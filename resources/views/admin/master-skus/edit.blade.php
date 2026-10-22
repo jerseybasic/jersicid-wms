@@ -133,11 +133,17 @@
                             class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all" />
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-300 mb-2">Harga (Rp) <span
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Harga Jual (Rp) <span
                                 class="text-red-400">*</span></label>
                         <input type="number" name="price" value="{{ old('price', $sku->price) }}" required
                             min="0"
                             class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Harga Modal / HPP (Rp)</label>
+                        <input type="number" name="cost_price" value="{{ old('cost_price', $sku->cost_price) }}" min="0" placeholder="Opsional"
+                            class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all" />
+                        <p class="text-xs text-slate-500 mt-1">Harga beli per pcs. Dipakai untuk nilai modal stok dan default harga di PO.</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-300 mb-2">Berat Standar (gram) <span

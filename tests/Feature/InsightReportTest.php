@@ -142,7 +142,7 @@ class InsightReportTest extends TestCase
         $response = $this->actingAs($owner)->get(route('reports.stock-value'))->assertOk()
             ->assertSee('Rp 700.000');
 
-        $this->assertSame(['skus' => 2, 'qty' => 9, 'value' => 700000], $response->viewData('total'));
+        $this->assertSame(['skus' => 2, 'qty' => 9, 'value' => 700000, 'cost_value' => 0, 'profit' => 0, 'without_cost' => 2], $response->viewData('total'));
         $this->assertSame(['DEWASA', 'KIDS'], $response->viewData('categories')->pluck('name')->all());
 
         $this->get(route('reports.index'))->assertSee('Barang Lambat Laku')->assertSee('Nilai Stok');
@@ -178,7 +178,7 @@ class InsightReportTest extends TestCase
         $this->actingAs($owner)->get(route('reports.stock-value'))->assertSee('Export Excel');
         $this->get(route('reports.stock-value', ['export' => 'excel']))->assertOk();
         \Maatwebsite\Excel\Facades\Excel::assertDownloaded('Laporan_Nilai_Stok_' . now()->format('Ymd') . '.xlsx',
-            fn ($export) => $export->array() === [['Kategori ukuran', 'DEWASA', 1, 3, 300000], ['Produk (20 terbesar)', 'CLUB TEST', 1, 3, 300000]]);
+            fn ($export) => $export->array() === [['Kategori ukuran', 'DEWASA', 1, 3, 300000, 0, 0], ['Produk (20 terbesar)', 'CLUB TEST', 1, 3, 300000, 0, 0]]);
 
         $this->get(route('reports.performance', $period + ['export' => 'excel']))->assertOk();
         \Maatwebsite\Excel\Facades\Excel::assertDownloaded('Laporan_Kinerja_Picker_Packer_20261001-20261021.xlsx');
@@ -188,5 +188,20 @@ class InsightReportTest extends TestCase
 
         $this->get(route('reports.slow-moving', ['hari' => 30, 'export' => 'excel']))->assertOk();
         \Maatwebsite\Excel\Facades\Excel::assertDownloaded('Laporan_Barang_Lambat_30hari_' . now()->format('Ymd') . '.xlsx');
+    }
+
+    public function test_stock_value_uses_cost_price_for_capital_and_profit(): void
+    {
+        $owner = $this->userWithRole('OWNER');
+        $this->makeSku('JSC-A-L', 100000)->update(['cost_price' => 60000]);
+        $this->makeSku('JSC-B-L', 50000);   // HPP belum diisi
+        $this->putStock('JSC-A-L', 'A-01-01', 3);
+        $this->putStock('JSC-B-L', 'A-01-02', 2);
+
+        $response = $this->actingAs($owner)->get(route('reports.stock-value'))->assertOk()
+            ->assertSee('Rp 180.000')->assertSee('Rp 120.000')
+            ->assertSee('1 SKU yang ada stoknya belum punya harga modal');
+
+        $this->assertSame(['skus' => 2, 'qty' => 5, 'value' => 400000, 'cost_value' => 180000, 'profit' => 120000, 'without_cost' => 1], $response->viewData('total'));
     }
 }

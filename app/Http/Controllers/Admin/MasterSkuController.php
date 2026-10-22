@@ -43,6 +43,7 @@ class MasterSkuExport implements FromCollection, WithHeadings, WithMapping, With
             'SIZE',
             'SIZE_TOKEN',
             'PRICE',
+            'COST_PRICE',
             'STANDARD_WEIGHT_GRAM',
             'MIN_STOCK',
             'STATUS',
@@ -62,6 +63,7 @@ class MasterSkuExport implements FromCollection, WithHeadings, WithMapping, With
             $sku->size,
             $sku->size_token ?? '-',
             $sku->price,
+            $sku->cost_price,
             $sku->standard_weight_gram,
             $sku->min_stock,
             $sku->status,
@@ -106,6 +108,12 @@ class MasterSkuImport implements ToModel, WithHeadingRow, WithChunkReading, With
             $updateData = [];
 
             $fields = ['article', 'product_name', 'version', 'sub_version', 'size_category', 'size', 'size_token', 'price', 'standard_weight_gram', 'min_stock', 'status'];
+
+            // Harga modal hanya diubah kalau kolomnya ada di file, supaya file lama tidak menghapusnya
+            if (($cost = MasterSku::costFromRow($row)) !== null) {
+                $fields[] = 'cost_price';
+                $row['cost_price'] = $cost;
+            }
 
             foreach ($fields as $field) {
                 $newValue = $this->normalizeValue($row[$field] ?? null, $field);
@@ -156,6 +164,7 @@ class MasterSkuImport implements ToModel, WithHeadingRow, WithChunkReading, With
             'size' => trim($row['size'] ?? ''),
             'size_token' => !empty($row['size_token']) && $row['size_token'] !== '-' ? trim($row['size_token']) : null,
             'price' => $this->parseNumber($row['price'] ?? 0),
+            'cost_price' => MasterSku::costFromRow($row) ?? 0,
             'standard_weight_gram' => (int) ($row['standard_weight_gram'] ?? 250),
             'min_stock' => (int) ($row['min_stock'] ?? 0),
             'status' => in_array($status, ['AKTIF', 'NONAKTIF']) ? $status : 'AKTIF',
@@ -164,7 +173,7 @@ class MasterSkuImport implements ToModel, WithHeadingRow, WithChunkReading, With
 
     private function normalizeValue($value, $field): mixed
     {
-        if ($field === 'price' || $field === 'standard_weight_gram' || $field === 'min_stock') {
+        if ($field === 'price' || $field === 'cost_price' || $field === 'standard_weight_gram' || $field === 'min_stock') {
             return $this->parseNumber($value ?? 0);
         }
 
@@ -335,10 +344,13 @@ class MasterSkuController extends Controller
             'size' => 'required|string|max:20',
             'size_token' => 'nullable|string|max:50',
             'price' => 'required|integer|min:0',
+            'cost_price' => 'nullable|integer|min:0',
             'standard_weight_gram' => 'required|integer|min:0',
             'min_stock' => 'required|integer|min:0',
             'status' => 'required|in:AKTIF,NONAKTIF',
         ]);
+
+        $validated['cost_price'] = (int) ($validated['cost_price'] ?? 0);
 
         try {
             DB::transaction(function () use ($validated) {
@@ -377,10 +389,13 @@ class MasterSkuController extends Controller
             'size' => 'required|string|max:20',
             'size_token' => 'nullable|string|max:50',
             'price' => 'required|integer|min:0',
+            'cost_price' => 'nullable|integer|min:0',
             'standard_weight_gram' => 'required|integer|min:0',
             'min_stock' => 'required|integer|min:0',
             'status' => 'required|in:AKTIF,NONAKTIF',
         ]);
+
+        $validated['cost_price'] = (int) ($validated['cost_price'] ?? 0);
 
         try {
             DB::transaction(function () use ($sku, $validated) {
