@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\MasterSku;
 use App\Models\StockActive;
+use App\Services\StockAvailability;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -129,6 +130,11 @@ class OutboundController extends Controller
 
         if (!in_array($newStatus, $allowedTransitions[$order->status] ?? [])) {
             return back()->with('error', "Order {$order->order_number} tidak bisa diubah dari {$order->status_label} ke " . Order::STATUS_LABELS[$newStatus] . '.');
+        }
+
+        // Konfirmasi hanya jika stok cukup, supaya picker tidak berangkat mengambil barang yang tidak ada
+        if ($newStatus === 'CONFIRMED' && $shortages = StockAvailability::shortages($order)) {
+            return back()->with('error', "Order {$order->order_number} belum bisa dikonfirmasi, stok kurang: " . StockAvailability::describe($shortages) . '.');
         }
 
         $updateData = ['status' => $newStatus];

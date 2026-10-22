@@ -66,7 +66,7 @@ class BigSellerImportTest extends TestCase
         $this->makeSku('JER-GHOTIC-HITAM-M');
         $this->makeSku('JER-RETRO-NAVY-M');
         $this->putStock('JER-GHOTIC-HITAM-M', 'A-01-01', 10);
-        $this->putStock('JER-RETRO-NAVY-M', 'A-01-02', 0);
+        $this->putStock('JER-RETRO-NAVY-M', 'A-01-02', 1);
 
         $file = $this->upload([
             $this->row('261019191AR592', 'JER-GHOTIC-HITAM-M', '2'),
@@ -84,7 +84,7 @@ class BigSellerImportTest extends TestCase
             ->assertSee('Import 2 pesanan')
             ->assertSee('SKU JER-TIDAK-ADA-L belum ada di Master SKU')
             ->assertSee('Pesanan dibatalkan')
-            ->assertSee('Stok JER-RETRO-NAVY-M tinggal 0 pcs');
+            ->assertDontSee('tinggal');
         $this->assertSame(0, Order::count(), 'Pratinjau belum boleh menyimpan apa pun');
 
         $orders = collect($response->viewData('orders'))->keyBy('order_number');
@@ -94,7 +94,10 @@ class BigSellerImportTest extends TestCase
 
         $this->post(route('gudang.outbound.import.store'), ['token' => $response->viewData('token'), 'confirm_now' => '1'])
             ->assertRedirect(route('gudang.outbound'))
-            ->assertSessionHas('success', '2 pesanan berhasil diimpor dan langsung masuk daftar picking. 2 pesanan dilewati.');
+            ->assertSessionHas('success', '2 pesanan berhasil diimpor. 1 langsung masuk daftar picking, 1 tetap Pending karena stoknya kurang. 2 pesanan dilewati.');
+
+        // Stok RETRO-NAVY cuma 1 dan sudah dipakai pesanan pertama, jadi pesanan kedua menunggu stok
+        $this->assertSame('PENDING', Order::where('order_number', '261022CCC')->value('status'));
 
         $order = Order::with('items')->where('order_number', '261019191AR592')->firstOrFail();
         $this->assertSame('CONFIRMED', $order->status);

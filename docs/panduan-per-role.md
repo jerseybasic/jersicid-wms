@@ -16,7 +16,7 @@ Di semua role, ikon **lonceng** di kanan atas menunjukkan pekerjaan yang sedang 
 
 ### Order keluar (Outbound)
 1. Buka **Outbound**, lalu klik **Buat Order Baru** untuk order yang masuk.
-2. Periksa order berstatus baru, lalu klik **Konfirmasi** agar order masuk ke daftar picking.
+2. Periksa order berstatus baru, lalu klik **Konfirmasi** agar order masuk ke daftar picking. Jika stok yang belum dipesan order lain tidak cukup, konfirmasi ditolak dan muncul SKU yang kurang.
 3. Setelah order siap kirim, klik **Kirim** dan isi nomor resi.
 
 ### Import pesanan marketplace (BigSeller)

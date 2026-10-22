@@ -59,6 +59,20 @@ php artisan optimize
 
 `npm run build` wajib dijalankan setiap kali ada perubahan tampilan, karena folder `public/build` tidak ikut di Git.
 
+## Backup otomatis
+
+Database dibackup setiap hari pukul 01:30 WIB ke `storage/app/private`. Backup yang lama dirapikan otomatis: semua disimpan 7 hari, lalu satu per hari selama 16 hari. Agar jadwal ini berjalan, pasang satu baris cron di server (butuh `mysqldump`):
+
+```
+* * * * * cd /path/ke/jersicid-wms && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Untuk mencoba backup secara manual, jalankan `php artisan backup:run --only-db`. Salin file backup ke tempat lain secara berkala, misalnya ke Google Drive.
+
+## Zona waktu
+
+Aplikasi memakai WIB (`Asia/Jakarta`). Data yang dibuat sebelum versi ini tersimpan dalam UTC. Jalankan sekali `php artisan wms:geser-waktu-lama` setelah backup supaya data lama ikut tampil dalam WIB.
+
 ## Tes otomatis
 
 ```bash
@@ -72,7 +86,7 @@ Tes memakai database SQLite di memori, jadi tidak menyentuh data asli. GitHub Ac
 | Role | Untuk siapa | Akses utama |
 |---|---|---|
 | OWNER | Pemilik | Semua menu, termasuk Kelola User, Pengaturan, dan menghapus PO |
-| SUPERVISOR | Kepala gudang | Semua operasional, membuat dan menyetujui PO, Laporan, Riwayat Aktivitas. Master SKU dan Supplier boleh dibuka (`/master-skus`, `/suppliers`) tapi belum ada di menunya |
+| SUPERVISOR | Kepala gudang | Semua operasional, Master SKU, Supplier, membuat dan menyetujui PO, Laporan, Riwayat Aktivitas |
 | ADMIN_GUDANG | Admin gudang | Semua operasional gudang, melihat PO dan mengisi tahap produksi |
 | STAFF_GUDANG | Staf gudang | Barang masuk, order keluar, picking, packing, retur, transfer, opname, cek barang, cetak label |
 

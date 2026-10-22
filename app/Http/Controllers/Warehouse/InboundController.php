@@ -146,6 +146,7 @@ class InboundController extends Controller
                     // Cek stock aktif di bin tersebut
                     $stockActive = StockActive::where('sku', $sku)
                         ->where('bin_code', $binCode)
+                        ->lockForUpdate()
                         ->first();
 
                     $qtyBefore = $stockActive?->qty ?? 0;

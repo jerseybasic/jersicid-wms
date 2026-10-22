@@ -7,6 +7,7 @@ use App\Models\AuditTrail;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Services\BigSellerOrderImport;
+use App\Services\StockAvailability;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -68,11 +69,12 @@ class OrderImportController extends Controller
                 ->with('error', 'Pratinjau sudah kedaluwarsa. Upload ulang filenya.');
         }
 
-        $status = $request->boolean('confirm_now') ? 'CONFIRMED' : 'PENDING';
+        $confirmNow = $request->boolean('confirm_now');
         $created = [];
+        $confirmed = 0;
         $skipped = 0;
 
-        DB::transaction(function () use ($orders, $status, $request, &$created, &$skipped) {
+        DB::transaction(function () use ($orders, $confirmNow, $request, &$created, &$confirmed, &$skipped) {
             foreach ($orders as $data) {
                 // Cek ulang saat menyimpan: bisa saja sudah diimpor dari tab lain
                 if (!$data['importable'] || Order::withTrashed()->where('order_number', $data['order_number'])->exists()) {
@@ -87,7 +89,7 @@ class OrderImportController extends Controller
                     'shipping_address' => $data['shipping_address'],
                     'courier' => $data['courier'],
                     'tracking_number' => $data['tracking_number'],
-                    'status' => $status,
+                    'status' => 'PENDING',
                     'notes' => $this->notes($data),
                     'created_by' => auth()->id(),
                 ]);
@@ -103,6 +105,12 @@ class OrderImportController extends Controller
                     ]);
                 }
 
+                // Langsung dikonfirmasi hanya jika stoknya cukup; sisanya tetap Pending di Outbound
+                if ($confirmNow && !StockAvailability::shortages($order)) {
+                    $order->update(['status' => 'CONFIRMED']);
+                    $confirmed++;
+                }
+
                 $created[] = $order->order_number;
             }
 
@@ -110,12 +118,22 @@ class OrderImportController extends Controller
                 'user_id' => auth()->id(),
                 'action' => 'IMPORT',
                 'module' => 'OUTBOUND',
-                'new_values' => json_encode(['source' => 'BigSeller', 'status' => $status, 'orders' => $created]),
+                'new_values' => json_encode(['source' => 'BigSeller', 'confirmed' => $confirmed, 'orders' => $created]),
                 'ip_address' => $request->ip(),
             ]);
         });
 
-        $message = count($created) . ' pesanan berhasil diimpor' . ($status === 'CONFIRMED' ? ' dan langsung masuk daftar picking.' : '.');
+        $message = count($created) . ' pesanan berhasil diimpor';
+        if ($confirmNow && $confirmed === count($created)) {
+            $message .= ' dan langsung masuk daftar picking.';
+        } elseif ($confirmNow && $confirmed === 0) {
+            $message .= ', tetapi semuanya tetap Pending karena stoknya kurang.';
+        } elseif ($confirmNow) {
+            $pending = count($created) - $confirmed;
+            $message .= ". {$confirmed} langsung masuk daftar picking, {$pending} tetap Pending karena stoknya kurang.";
+        } else {
+            $message .= '.';
+        }
         if ($skipped) {
             $message .= " {$skipped} pesanan dilewati.";
         }
