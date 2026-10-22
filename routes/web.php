@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Warehouse\PurchaseOrderController;
 use App\Http\Controllers\Warehouse\InboundController;
+use App\Http\Controllers\Warehouse\OrderImportController;
 use App\Http\Controllers\Warehouse\OutboundController;
 use App\Http\Controllers\Warehouse\PickingController;
 use App\Http\Controllers\Warehouse\PackingController;
@@ -101,6 +102,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->prefix('gudang/outbound')->name('gudang.')->group(function () {
     Route::get('/', [OutboundController::class, 'index'])->name('outbound');
     Route::get('/create', [OutboundController::class, 'create'])->name('outbound.create');
+    Route::get('/import', [OrderImportController::class, 'create'])->name('outbound.import');
+    Route::post('/import/preview', [OrderImportController::class, 'preview'])->name('outbound.import.preview');
+    Route::post('/import', [OrderImportController::class, 'store'])->name('outbound.import.store');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
 });

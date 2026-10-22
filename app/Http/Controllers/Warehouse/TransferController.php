@@ -76,6 +76,7 @@ class TransferController extends Controller
                 // Cek stok di bin asal
                 $stockFrom = StockActive::where('sku', $sku)
                     ->where('bin_code', $binFrom)
+                    ->lockForUpdate()
                     ->first();
 
                 if (!$stockFrom || $stockFrom->qty < $qty) {
@@ -98,6 +99,7 @@ class TransferController extends Controller
                 // Tambah stok bin tujuan
                 $stockTo = StockActive::where('sku', $sku)
                     ->where('bin_code', $binTo)
+                    ->lockForUpdate()
                     ->first();
 
                 $oldQtyTo = $stockTo ? $stockTo->qty : 0;
