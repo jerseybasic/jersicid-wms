@@ -100,7 +100,7 @@
                     <span class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-700 text-slate-300">Belum aktif</span>
                 @endif
             </div>
-            <p class="text-sm text-slate-400 mb-4">Setiap pagi pukul 08:00, daftar SKU yang stoknya menipis masuk ke antrean WhatsApp. Makro Playwright Anda mengambil antrean ini lalu mengirimnya lewat WhatsApp Web.</p>
+            <p class="text-sm text-slate-400 mb-4">Setiap pagi pukul 08:00, daftar SKU yang stoknya menipis masuk ke antrean WhatsApp. Makro WhatsApp toko (<code>./wa-login.sh --wms</code>) mengambil antrean ini lalu mengirimnya lewat WhatsApp Web.</p>
 
             @error('whatsapp')
                 <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-300">{{ $message }}</div>

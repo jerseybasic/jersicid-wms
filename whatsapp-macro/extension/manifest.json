@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "WA Terminal QR",
+  "version": "1.0.0",
+  "description": "Mengirim QR login WhatsApp Web ke terminal (server lokal 127.0.0.1:8765).",
+  "host_permissions": ["http://127.0.0.1:8765/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

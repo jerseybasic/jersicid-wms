@@ -102,8 +102,8 @@ Semua menu, ditambah:
 - **Harga modal (HPP)**: isi di form Master SKU, atau lewat kolom `COST_PRICE` (boleh juga `HARGA_MODAL` atau `HPP`) di file import. Jika kolom itu tidak ada di file, HPP yang sudah tersimpan tidak berubah. HPP dipakai di laporan Nilai Stok dan menjadi harga awal saat membuat PO.
 - **Kelola User**: buat akun untuk setiap karyawan dan pilih role-nya. Karyawan tidak bisa mendaftar sendiri.
 - **Pengaturan** (menu di bawah nama Anda, kanan atas): nama, telepon, dan alamat perusahaan untuk label kirim, serta batas stok menipis umum. Batas khusus per SKU diisi di kolom stok minimum Master SKU.
-- **Notifikasi WhatsApp**: daftar stok menipis dimasukkan ke antrean setiap pagi pukul 08:00, lalu dikirim ke WhatsApp anggota oleh makro Playwright toko.
+- **Notifikasi WhatsApp**: daftar stok menipis dimasukkan ke antrean setiap pagi pukul 08:00, lalu dikirim ke WhatsApp anggota oleh makro toko (folder `whatsapp-macro`, Mode WMS).
   1. Di **Kelola User**, isi **No. WhatsApp** setiap anggota yang perlu menerima notifikasi, lalu centang **Kirim notifikasi WhatsApp**.
-  2. Di **Pengaturan → Notifikasi WhatsApp**, klik **Buat token**, lalu salin tokennya ke makro. Cara menghubungkan makro ada di [makro-whatsapp.md](makro-whatsapp.md).
+  2. Di **Pengaturan → Notifikasi WhatsApp**, klik **Buat token**, lalu salin tokennya ke makro. Lalu di komputer makro jalankan `./wa-login.sh --wms --setup` dan tempel tokennya. Detailnya ada di [makro-whatsapp.md](makro-whatsapp.md).
   3. Klik **Kirim Tes**. Status pesan (menunggu, terkirim, atau gagal) dan kapan makro terakhir mengambil antrean tampil di halaman yang sama.
 - **Menghapus PO**: hanya owner yang bisa.
