@@ -38,6 +38,7 @@ class TemplateExport implements FromCollection, WithHeadings, WithStyles, WithCo
                 'master_skus.size',
                 'master_skus.size_token',
                 'master_skus.price',
+                'master_skus.cost_price',
                 'master_skus.standard_weight_gram',
                 'master_skus.min_stock',
                 'master_skus.status'
@@ -55,6 +56,7 @@ class TemplateExport implements FromCollection, WithHeadings, WithStyles, WithCo
                     'master_skus.size',
                     'master_skus.size_token',
                     'master_skus.price',
+                    'master_skus.cost_price',
                     'master_skus.standard_weight_gram',
                     'master_skus.min_stock',
                     'master_skus.status'
@@ -76,6 +78,7 @@ class TemplateExport implements FromCollection, WithHeadings, WithStyles, WithCo
                 'size' => 'L',
                 'size_token' => 'L',
                 'price' => 150000,
+                'cost_price' => 85000,
                 'standard_weight_gram' => 250,
                 'min_stock' => 10,
                 'status' => 'AKTIF',
@@ -91,6 +94,7 @@ class TemplateExport implements FromCollection, WithHeadings, WithStyles, WithCo
                 'size' => 'M',
                 'size_token' => 'M',
                 'price' => 120000,
+                'cost_price' => 65000,
                 'standard_weight_gram' => 200,
                 'min_stock' => 5,
                 'status' => 'AKTIF',
@@ -111,6 +115,7 @@ class TemplateExport implements FromCollection, WithHeadings, WithStyles, WithCo
             'SIZE',
             'SIZE_TOKEN',
             'PRICE',
+            'COST_PRICE',
             'STANDARD_WEIGHT_GRAM',
             'MIN_STOCK',
             'STATUS'
@@ -140,9 +145,10 @@ class TemplateExport implements FromCollection, WithHeadings, WithStyles, WithCo
     {
         return [
             'I' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1, // PRICE
-            'J' => NumberFormat::FORMAT_NUMBER, // STANDARD_WEIGHT_GRAM
-            'K' => NumberFormat::FORMAT_NUMBER, // MIN_STOCK
-            'L' => NumberFormat::FORMAT_NUMBER, // CURRENT_STOCK (jika ada)
+            'J' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1, // COST_PRICE
+            'K' => NumberFormat::FORMAT_NUMBER, // STANDARD_WEIGHT_GRAM
+            'L' => NumberFormat::FORMAT_NUMBER, // MIN_STOCK
+            'N' => NumberFormat::FORMAT_NUMBER, // CURRENT_STOCK (jika ada)
         ];
     }
 }

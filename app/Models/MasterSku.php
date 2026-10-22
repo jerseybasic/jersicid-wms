@@ -19,6 +19,7 @@ class MasterSku extends Model
         'size',
         'size_token',
         'price',
+        'cost_price',
         'standard_weight_gram',
         'min_stock',
         'status'
@@ -26,9 +27,32 @@ class MasterSku extends Model
 
     protected $casts = [
         'price' => 'integer',
+        'cost_price' => 'integer',
         'standard_weight_gram' => 'integer',
         'min_stock' => 'integer',
     ];
+
+    /**
+     * Harga modal dari satu baris file import (kolom COST_PRICE, HARGA_MODAL, atau HPP).
+     * Null kalau kolomnya tidak ada atau kosong, supaya harga modal yang sudah tersimpan tidak terhapus.
+     */
+    public static function costFromRow(array $row): ?int
+    {
+        foreach (['cost_price', 'harga_modal', 'hpp'] as $key) {
+            $value = $row[$key] ?? null;
+            if ($value === null || trim((string) $value) === '') {
+                continue;
+            }
+            if (is_numeric($value)) {
+                return max(0, (int) $value);
+            }
+            $digits = preg_replace('/[^0-9]/', '', (string) $value);
+
+            return $digits === '' ? null : (int) $digits;
+        }
+
+        return null;
+    }
 
     /**
      * Relasi ke StockActive

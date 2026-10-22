@@ -65,6 +65,12 @@ class MasterSkuImport implements ToModel, WithHeadingRow, SkipsEmptyRows, WithBa
             'status' => strtoupper(trim($row['status'] ?? 'AKTIF')),
         ];
 
+        // Harga modal hanya diisi kalau kolomnya ada di file, supaya file lama tidak menghapusnya
+        $cost = MasterSku::costFromRow($row);
+        if ($cost !== null || !$existingSku) {
+            $data['cost_price'] = $cost ?? 0;
+        }
+
         $currentStock = (int) ($row['current_stock'] ?? 0);
 
         if ($existingSku) {

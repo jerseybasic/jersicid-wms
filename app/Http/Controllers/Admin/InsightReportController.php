@@ -151,38 +151,56 @@ class InsightReportController extends Controller
     }
 
     /**
-     * Nilai stok (jumlah × harga jual di master SKU) per kategori ukuran dan per produk.
+     * Nilai stok per kategori ukuran dan per produk: nilai jual (jumlah × harga jual),
+     * nilai modal (jumlah × HPP), dan potensi laba dari SKU yang HPP-nya sudah diisi.
      */
     public function stockValue(Request $request)
     {
         $base = fn () => StockActive::query()
             ->join('master_skus', 'stock_actives.sku', '=', 'master_skus.sku')
             ->where('stock_actives.qty', '>', 0);
+        // Laba dihitung di PHP dari dua jumlah positif, karena kolom harga unsigned di MySQL
+        $sums = 'COUNT(DISTINCT stock_actives.sku) as skus, SUM(stock_actives.qty) as qty,'
+            . ' SUM(stock_actives.qty * master_skus.price) as value,'
+            . ' SUM(stock_actives.qty * master_skus.cost_price) as cost_value,'
+            . ' SUM(CASE WHEN master_skus.cost_price > 0 THEN stock_actives.qty * master_skus.price ELSE 0 END) as costed_value';
+        $withProfit = fn ($rows) => $rows->each(function ($row) {
+            $row->value = (int) $row->value;
+            $row->cost_value = (int) $row->cost_value;
+            $row->profit = (int) $row->costed_value - $row->cost_value;
+        });
 
-        $categories = $base()
+        $categories = $withProfit($base()
             ->groupBy('master_skus.size_category')
-            ->selectRaw('master_skus.size_category as name, COUNT(DISTINCT stock_actives.sku) as skus, SUM(stock_actives.qty) as qty, SUM(stock_actives.qty * master_skus.price) as value')
+            ->selectRaw('master_skus.size_category as name, ' . $sums)
             ->orderByDesc('value')
-            ->get();
+            ->get());
 
-        $products = $base()
+        $products = $withProfit($base()
             ->groupBy('master_skus.product_name')
-            ->selectRaw('master_skus.product_name as name, COUNT(DISTINCT stock_actives.sku) as skus, SUM(stock_actives.qty) as qty, SUM(stock_actives.qty * master_skus.price) as value')
+            ->selectRaw('master_skus.product_name as name, ' . $sums)
             ->orderByDesc('value')
             ->limit(20)
-            ->get();
+            ->get());
 
-        $total = ['skus' => (int) $categories->sum('skus'), 'qty' => (int) $categories->sum('qty'), 'value' => (int) $categories->sum('value')];
+        $total = [
+            'skus' => (int) $categories->sum('skus'),
+            'qty' => (int) $categories->sum('qty'),
+            'value' => (int) $categories->sum('value'),
+            'cost_value' => (int) $categories->sum('cost_value'),
+            'profit' => (int) $categories->sum('profit'),
+            'without_cost' => (int) $base()->where('master_skus.cost_price', 0)->distinct()->count('stock_actives.sku'),
+        ];
 
         if ($request->query('export') === 'excel') {
             $rows = [];
             foreach (['Kategori ukuran' => $categories, 'Produk (20 terbesar)' => $products] as $group => $list) {
                 foreach ($list as $row) {
-                    $rows[] = [$group, $row->name, (int) $row->skus, (int) $row->qty, (int) $row->value];
+                    $rows[] = [$group, $row->name, (int) $row->skus, (int) $row->qty, $row->value, $row->cost_value, $row->profit];
                 }
             }
 
-            return $this->excel('Nilai_Stok', ['Kelompok', 'Nama', 'Jumlah SKU', 'Stok (pcs)', 'Nilai (Rp)'], $rows);
+            return $this->excel('Nilai_Stok', ['Kelompok', 'Nama', 'Jumlah SKU', 'Stok (pcs)', 'Nilai jual (Rp)', 'Nilai modal (Rp)', 'Potensi laba (Rp)'], $rows);
         }
 
         return view('reports.stock-value', compact('categories', 'products', 'total'));

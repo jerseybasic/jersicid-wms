@@ -87,7 +87,7 @@ Buka **Laporan** untuk melihat:
 - **Kinerja Picker & Packer**: order dan pcs per orang beserta rata-rata waktunya
 - **Barang Lambat Laku**: SKU yang lama tidak keluar
 - **Akurasi Opname**: persen hitungan yang cocok dan SKU yang sering selisih
-- **Nilai Stok**: nilai stok per kategori dan per produk
+- **Nilai Stok**: nilai jual, nilai modal (HPP), dan potensi laba per kategori dan per produk
 
 ### Riwayat Aktivitas
 Berisi catatan siapa mengubah apa dan kapan. Gunakan untuk menelusuri selisih stok atau perubahan PO.
@@ -99,6 +99,7 @@ Berisi catatan siapa mengubah apa dan kapan. Gunakan untuk menelusuri selisih st
 Semua menu, ditambah:
 
 - **Master SKU dan Supplier**: tambah dan ubah data produk serta supplier. Import SKU massal tersedia di **Laporan → Import Master Data**.
+- **Harga modal (HPP)**: isi di form Master SKU, atau lewat kolom `COST_PRICE` (boleh juga `HARGA_MODAL` atau `HPP`) di file import. Jika kolom itu tidak ada di file, HPP yang sudah tersimpan tidak berubah. HPP dipakai di laporan Nilai Stok dan menjadi harga awal saat membuat PO.
 - **Kelola User**: buat akun untuk setiap karyawan dan pilih role-nya. Karyawan tidak bisa mendaftar sendiri.
 - **Pengaturan** (menu di bawah nama Anda, kanan atas): nama, telepon, dan alamat perusahaan untuk label kirim, serta batas stok menipis umum. Batas khusus per SKU diisi di kolom stok minimum Master SKU.
 - **Menghapus PO**: hanya owner yang bisa.

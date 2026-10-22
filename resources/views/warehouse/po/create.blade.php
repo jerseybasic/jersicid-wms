@@ -121,7 +121,7 @@
                                 <select name="items[{{ $index }}][sku]" required class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all">
                                     <option value="">-- Pilih SKU --</option>
                                     @foreach($skus as $sku)
-                                        <option value="{{ $sku->sku }}" data-price="{{ $sku->price }}" {{ ($row['sku'] ?? '') == $sku->sku ? 'selected' : '' }}>
+                                        <option value="{{ $sku->sku }}" data-price="{{ $sku->cost_price ?: $sku->price }}" {{ ($row['sku'] ?? '') == $sku->sku ? 'selected' : '' }}>
                                             {{ $sku->sku }} - {{ $sku->product_name }} ({{ $sku->size }})
                                         </option>
                                     @endforeach
