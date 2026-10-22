@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\SupplierController;
 use App\Http\Controllers\Admin\InsightReportController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\SkuAliasController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Warehouse\PurchaseOrderController;
 use App\Http\Controllers\Warehouse\InboundController;
@@ -63,6 +64,16 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
         // Reset menghapus seluruh Master SKU + stok, jadi hanya OWNER
     });
 
+// ==================== PEMETAAN SKU MARKETPLACE (OWNER & SUPERVISOR) ====================
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
+    ->prefix('pemetaan-sku')
+    ->name('sku-aliases.')
+    ->group(function () {
+        Route::get('/', [SkuAliasController::class, 'index'])->name('index');
+        Route::post('/', [SkuAliasController::class, 'store'])->name('store');
+        Route::delete('/{skuAlias}', [SkuAliasController::class, 'destroy'])->name('destroy');
+    });
+
 // ==================== SUPPLIER (OWNER & SUPERVISOR) ====================
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('suppliers')->group(function () {
     Route::get('/', [SupplierController::class, 'index'])->name('suppliers.index');
@@ -104,6 +115,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::get('/create', [OutboundController::class, 'create'])->name('outbound.create');
     Route::get('/import', [OrderImportController::class, 'create'])->name('outbound.import');
     Route::post('/import/preview', [OrderImportController::class, 'preview'])->name('outbound.import.preview');
+    Route::post('/import/map', [OrderImportController::class, 'map'])->name('outbound.import.map');
     Route::post('/import', [OrderImportController::class, 'store'])->name('outbound.import.store');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');

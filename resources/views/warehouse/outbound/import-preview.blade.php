@@ -18,6 +18,16 @@
     @endphp
 
     <div class="space-y-6">
+        @if (!empty($flash['success']))
+            <div class="p-3 bg-emerald-900/30 border border-emerald-500/50 text-emerald-400 rounded-lg text-sm">{{ $flash['success'] }}</div>
+        @endif
+        @if (!empty($flash['error']))
+            <div class="p-3 bg-red-900/30 border border-red-500/50 text-red-400 rounded-lg text-sm">{{ $flash['error'] }}</div>
+        @endif
+        @if ($errors->any())
+            <div class="p-3 bg-red-900/30 border border-red-500/50 text-red-400 rounded-lg text-sm">{{ $errors->first() }}</div>
+        @endif
+
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                 <p class="text-xs text-slate-400 mb-1">Pesanan di file</p>
@@ -53,6 +63,57 @@
             </div>
         @endif
 
+        @if ($unknown->isNotEmpty())
+            <div class="bg-slate-900 border border-amber-500/40 rounded-xl p-4 sm:p-5 space-y-4">
+                <div>
+                    <h3 class="text-base font-semibold text-white">SKU belum dikenal ({{ $unknown->count() }})</h3>
+                    <p class="text-sm text-slate-400 mt-1">
+                        @if ($canMap)
+                            Kode SKU di marketplace berbeda dengan Master SKU? Pilih SKU gudang yang sama, lalu simpan. Pemetaan diingat, jadi import berikutnya langsung dikenali.
+                        @else
+                            Minta Owner, Supervisor, atau Admin Gudang memetakan SKU ini ke SKU gudang, atau menambahkannya di Master SKU.
+                        @endif
+                    </p>
+                </div>
+
+                @if ($canMap)
+                    <form method="POST" action="{{ route('gudang.outbound.import.map') }}" class="space-y-3">
+                        @csrf
+                        <input type="hidden" name="token" value="{{ $token }}">
+                        <datalist id="sku-options">
+                            @foreach ($skuOptions as $option)
+                                <option value="{{ $option->sku }} — {{ $option->product_name }} {{ $option->size }}"></option>
+                            @endforeach
+                        </datalist>
+                        <div class="divide-y divide-slate-800">
+                            @foreach ($unknown as $i => $item)
+                                <div class="py-3 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 sm:items-center">
+                                    <div class="min-w-0">
+                                        <p class="font-mono text-sm text-amber-300 break-all">{{ $item['sku'] }}</p>
+                                        <p class="text-xs text-slate-500 truncate">{{ $item['name'] }}</p>
+                                    </div>
+                                    <div>
+                                        <input type="hidden" name="map[{{ $i }}][alias]" value="{{ $item['sku'] }}">
+                                        <label for="map-{{ $i }}" class="sr-only">SKU gudang untuk {{ $item['sku'] }}</label>
+                                        <input id="map-{{ $i }}" type="text" name="map[{{ $i }}][sku]" list="sku-options" value="{{ $item['suggest'] }}"
+                                               placeholder="Ketik kode atau nama produk" autocomplete="off"
+                                               class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:ring-cyan-500">
+                                        @if ($item['suggest'])
+                                            <p class="text-xs text-cyan-400 mt-1">Saran otomatis, periksa dulu sebelum menyimpan.</p>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+                            <p class="text-xs text-slate-500">Yang dikosongkan dilewati. Owner dan Supervisor bisa mengubahnya di Master Data → Pemetaan SKU.</p>
+                            <button type="submit" class="shrink-0 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">Simpan pemetaan dan periksa ulang</button>
+                        </div>
+                    </form>
+                @endif
+            </div>
+        @endif
+
         <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left">
@@ -83,6 +144,9 @@
                                 <td class="py-3 px-4 min-w-[14rem]">
                                     @foreach ($order['items'] as $item)
                                         <p class="text-slate-300"><span class="font-mono text-xs">{{ $item['sku'] }}</span> <span class="font-bold text-white">×{{ $item['qty'] }}</span></p>
+                                        @if (!empty($item['mapped_from']))
+                                            <p class="text-xs text-slate-500">dari {{ implode(', ', array_unique($item['mapped_from'])) }}</p>
+                                        @endif
                                     @endforeach
                                 </td>
                                 <td class="py-3 px-4 min-w-[12rem] text-xs space-y-1">

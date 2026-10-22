@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\MasterSku;
 use App\Models\Order;
+use App\Models\SkuAlias;
 use App\Models\StockActive;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -71,9 +72,9 @@ class BigSellerOrderImport
             // SKU Gudang (jika diisi di BigSeller) lebih diutamakan daripada SKU marketplace
             $sku = strtoupper((string) (($r['SKU Gudang'] ?? null) ?: $r['SKU']));
             $qty = (int) $r['Jumlah'];
-            $item = &$orders[$number]['items'][$sku];
+            $item = &$orders[$number]['source_items'][$sku];
             $item ??= [
-                'sku' => $sku,
+                'source_sku' => $sku,
                 'name' => trim(($r['Nama Produk'] ?? '') . ' ' . ($r['Nama Variasi'] ?? '')),
                 'qty' => 0,
                 'price' => (int) round((float) ($r['Harga Satuan'] ?? 0)),
@@ -83,19 +84,43 @@ class BigSellerOrderImport
         }
 
         return $this->check(array_values(array_map(function ($order) {
-            $order['items'] = array_values($order['items']);
+            $order['source_items'] = array_values($order['source_items']);
+            unset($order['items']);
 
             return $order;
         }, $orders)));
     }
 
     /**
-     * Tandai pesanan yang tidak bisa diimpor (problems) dan yang perlu diperhatikan (warnings).
+     * Ubah SKU marketplace ke kode Master SKU lewat pemetaan SKU, lalu tandai pesanan
+     * yang tidak bisa diimpor (problems) dan yang perlu diperhatikan (warnings).
+     * Bisa dipanggil ulang setelah pemetaan ditambah, karena SKU asli tetap disimpan di source_items.
      */
-    private function check(array $orders): array
+    public function check(array $orders): array
     {
+        $sources = collect($orders)->pluck('source_items')->flatten(1)->pluck('source_sku')->unique()->values();
+        $direct = MasterSku::whereIn('sku', $sources)->pluck('sku')->mapWithKeys(fn ($sku) => [strtoupper($sku) => true]);
+        $aliases = SkuAlias::whereIn('alias', $sources->reject(fn ($sku) => isset($direct[$sku]))->values())
+            ->pluck('sku', 'alias')->mapWithKeys(fn ($sku, $alias) => [strtoupper($alias) => strtoupper($sku)]);
+
+        foreach ($orders as &$order) {
+            $items = [];
+            foreach ($order['source_items'] as $source) {
+                $sku = isset($direct[$source['source_sku']]) ? $source['source_sku'] : ($aliases[$source['source_sku']] ?? $source['source_sku']);
+                $item = &$items[$sku];
+                $item ??= ['sku' => $sku, 'mapped_from' => [], 'qty' => 0] + $source;
+                $item['qty'] += $source['qty'];
+                if ($sku !== $source['source_sku']) {
+                    $item['mapped_from'][] = $source['source_sku'];
+                }
+                unset($item);
+            }
+            $order['items'] = array_values($items);
+        }
+        unset($order);
+
         $skus = collect($orders)->pluck('items')->flatten(1)->pluck('sku')->unique()->values();
-        $known = MasterSku::whereIn('sku', $skus)->pluck('sku')->flip();
+        $known = MasterSku::whereIn('sku', $skus)->pluck('sku')->mapWithKeys(fn ($sku) => [strtoupper($sku) => true]);
         $stock = StockActive::whereIn('sku', $skus)->groupBy('sku')
             ->selectRaw('sku, SUM(qty - reserved_qty) as available')->pluck('available', 'sku');
         $existing = Order::withTrashed()->whereIn('order_number', array_column($orders, 'order_number'))
@@ -111,15 +136,17 @@ class BigSellerOrderImport
             if ($order['cancelled']) {
                 $order['problems'][] = 'Pesanan dibatalkan';
             }
-            foreach ($order['items'] as $item) {
+            foreach ($order['items'] as &$item) {
+                $item['known'] = isset($known[$item['sku']]);
                 if ($item['qty'] < 1) {
                     $order['problems'][] = "Jumlah {$item['sku']} tidak valid";
-                } elseif (!isset($known[$item['sku']])) {
+                } elseif (!$item['known']) {
                     $order['problems'][] = "SKU {$item['sku']} belum ada di Master SKU";
                 } elseif ((int) ($stock[$item['sku']] ?? 0) < $item['qty']) {
                     $order['warnings'][] = "Stok {$item['sku']} tinggal " . (int) ($stock[$item['sku']] ?? 0) . " pcs";
                 }
             }
+            unset($item);
             $order['importable'] = empty($order['problems']);
         }
 

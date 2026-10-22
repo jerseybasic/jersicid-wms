@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\Order;
+use App\Models\MasterSku;
 use App\Models\OrderItem;
+use App\Models\SkuAlias;
 use App\Services\BigSellerOrderImport;
 use App\Services\StockAvailability;
 use Illuminate\Http\Request;
@@ -47,12 +49,88 @@ class OrderImportController extends Controller
         }
 
         $token = (string) Str::uuid();
-        Cache::put($this->cacheKey($token), $orders, now()->addMinutes(self::CACHE_MINUTES));
+        $fileName = $request->file('file')->getClientOriginalName();
+        Cache::put($this->cacheKey($token), compact('orders', 'fileName'), now()->addMinutes(self::CACHE_MINUTES));
+
+        return $this->previewView($orders, $token, $fileName);
+    }
+
+    /**
+     * Simpan pemetaan SKU marketplace yang diisi di pratinjau, lalu periksa ulang pesanan tanpa upload ulang.
+     */
+    public function map(Request $request, BigSellerOrderImport $import)
+    {
+        abort_unless(in_array(auth()->user()->role, SkuAlias::MANAGER_ROLES, true), 403, 'Pemetaan SKU hanya untuk Owner, Supervisor, dan Admin Gudang.');
+
+        $validated = $request->validate([
+            'token' => ['required', 'string'],
+            'map' => ['nullable', 'array'],
+            'map.*.alias' => ['required', 'string', 'max:255'],
+            'map.*.sku' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $cached = Cache::get($this->cacheKey($validated['token']));
+        if (!$cached) {
+            return redirect()->route('gudang.outbound.import')
+                ->with('error', 'Pratinjau sudah kedaluwarsa. Upload ulang filenya.');
+        }
+
+        $saved = [];
+        $errors = [];
+        foreach ($validated['map'] ?? [] as ['alias' => $alias, 'sku' => $sku]) {
+            if (blank($sku)) {
+                continue;
+            }
+            // Pilihan dari daftar berbentuk "SKU — nama produk"; ambil kodenya saja
+            $sku = trim(explode(' — ', $sku)[0]);
+            if ($error = SkuAlias::map($alias, $sku, auth()->id())) {
+                $errors[] = $error;
+            } else {
+                $saved[SkuAlias::normalize($alias)] = SkuAlias::normalize($sku);
+            }
+        }
+
+        if ($saved) {
+            AuditTrail::create([
+                'user_id' => auth()->id(),
+                'action' => 'CREATE',
+                'module' => 'SKU_ALIAS',
+                'new_values' => json_encode($saved),
+                'ip_address' => $request->ip(),
+            ]);
+        }
+
+        $orders = $import->check($cached['orders']);
+        Cache::put($this->cacheKey($validated['token']), ['orders' => $orders, 'fileName' => $cached['fileName']], now()->addMinutes(self::CACHE_MINUTES));
+
+        return $this->previewView($orders, $validated['token'], $cached['fileName'], [
+            'success' => $saved ? count($saved) . ' SKU berhasil dipetakan. Pratinjau sudah diperbarui.' : null,
+            'error' => $errors ? implode(' ', $errors) : null,
+        ]);
+    }
+
+    private function previewView(array $orders, string $token, string $fileName, array $flash = [])
+    {
+        // SKU yang belum dikenal, dengan nama produknya dari file, untuk dipetakan di pratinjau
+        $unknown = collect($orders)->pluck('items')->flatten(1)->where('known', false)
+            ->unique('sku')->sortBy('sku')->values();
+        $skuOptions = $unknown->isNotEmpty()
+            ? MasterSku::where('status', 'AKTIF')->orderBy('sku')->get(['sku', 'product_name', 'size'])
+            : collect();
+
+        // Tebakan awal: SKU gudang yang sama jika tanda baca dan spasi diabaikan (JER GOTHIC_M = JER-GOTHIC-M)
+        $plain = fn ($code) => preg_replace('/[^A-Z0-9]/', '', strtoupper($code));
+        $byPlain = $skuOptions->groupBy(fn ($sku) => $plain($sku->sku))->filter(fn ($group) => $group->count() === 1);
+        $unknown = $unknown->map(fn ($item) => $item + ['suggest' => $byPlain->get($plain($item['sku']))?->first()?->sku]);
 
         return view('warehouse.outbound.import-preview', [
             'orders' => $orders,
             'token' => $token,
-            'fileName' => $request->file('file')->getClientOriginalName(),
+            'fileName' => $fileName,
+            'flash' => $flash,
+            'unknown' => $unknown,
+            'canMap' => in_array(auth()->user()->role, SkuAlias::MANAGER_ROLES, true),
+            'skuOptions' => $skuOptions,
         ]);
     }
 
@@ -63,7 +141,7 @@ class OrderImportController extends Controller
             'confirm_now' => ['nullable', 'boolean'],
         ]);
 
-        $orders = Cache::pull($this->cacheKey($validated['token']));
+        $orders = Cache::pull($this->cacheKey($validated['token']))['orders'] ?? null;
         if (!$orders) {
             return redirect()->route('gudang.outbound.import')
                 ->with('error', 'Pratinjau sudah kedaluwarsa. Upload ulang filenya.');

@@ -24,6 +24,8 @@ Di semua role, ikon **lonceng** di kanan atas menunjukkan pekerjaan yang sedang 
 1. Di BigSeller, ekspor pesanan per SKU ke Excel.
 2. Buka **Outbound**, klik **Import BigSeller**, upload filenya, lalu klik **Lihat Pratinjau**.
 3. Periksa daftarnya. Pesanan yang SKU-nya belum ada di Master SKU, sudah pernah diimpor, atau dibatalkan akan dilewati, lengkap dengan alasannya.
+   - Jika kode SKU di marketplace berbeda dengan Master SKU (misalnya `GOTHIC-BLK-M` di Shopee untuk `JER-GOTHIC-HITAM-M`), isi SKU gudangnya di kotak **SKU belum dikenal**, lalu klik **Simpan pemetaan dan periksa ulang**. Tidak perlu upload ulang, dan import berikutnya otomatis memakai SKU gudang yang benar. Bisa dilakukan oleh Owner, Supervisor, dan Admin Gudang.
+   - Owner dan Supervisor bisa melihat, menambah, dan menghapus semua pemetaan di **Master Data → Pemetaan SKU**.
 4. Klik **Import**. Jika **Langsung konfirmasi** dicentang, pesanan langsung masuk ke daftar picking. Nomor resi marketplace ikut tersimpan.
 
 ### Mengambil barang untuk order (Picking)
