@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exports\ArrayExport;
 use App\Http\Controllers\Controller;
 use App\Models\PackingSession;
 use App\Models\PickingSession;
@@ -13,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 
 /**
  * Laporan lanjutan untuk owner/supervisor: kinerja picker & packer, barang lambat laku,
@@ -26,13 +28,21 @@ class InsightReportController extends Controller
     public function performance(Request $request)
     {
         [$start, $end] = $this->period($request);
+        $picking = $this->sessionStats(PickingSession::class, 'picking_session_items', 'picking_session_id', 'qty_picked', $start, $end);
+        $packing = $this->sessionStats(PackingSession::class, 'packing_session_items', 'packing_session_id', 'qty_packed', $start, $end);
 
-        return view('reports.performance', [
-            'start' => $start,
-            'end' => $end,
-            'picking' => $this->sessionStats(PickingSession::class, 'picking_session_items', 'picking_session_id', 'qty_picked', $start, $end),
-            'packing' => $this->sessionStats(PackingSession::class, 'packing_session_items', 'packing_session_id', 'qty_packed', $start, $end),
-        ]);
+        if ($request->query('export') === 'excel') {
+            $rows = [];
+            foreach (['Picking' => $picking, 'Packing' => $packing] as $type => $stats) {
+                foreach ($stats as $row) {
+                    $rows[] = [$type, $row['name'], $row['orders'], $row['pcs'], $row['avg_minutes']];
+                }
+            }
+
+            return $this->excel('Kinerja_Picker_Packer', ['Jenis', 'Nama', 'Order', 'Pcs', 'Rata-rata menit/order'], $rows, $start, $end);
+        }
+
+        return view('reports.performance', compact('start', 'end', 'picking', 'packing'));
     }
 
     /**
@@ -78,6 +88,11 @@ class InsightReportController extends Controller
             ->values();
 
         $summary = ['skus' => $rows->count(), 'qty' => $rows->sum('qty'), 'value' => $rows->sum('value')];
+
+        if ($request->query('export') === 'excel') {
+            return $this->excel("Barang_Lambat_{$days}hari", ['SKU', 'Produk', 'Kategori', 'Stok', 'Nilai (Rp)', 'Terakhir keluar', 'Diam (hari)'],
+                $rows->map(fn ($r) => [$r['sku'], $r['product'], $r['category'], $r['qty'], $r['value'], $r['last_out_at']?->format('Y-m-d') ?? 'Belum pernah', $r['idle_days']])->all());
+        }
         $page = LengthAwarePaginator::resolveCurrentPage();
         $items = new LengthAwarePaginator($rows->forPage($page, 25)->values(), $rows->count(), 25, $page, [
             'path' => $request->url(),
@@ -126,13 +141,19 @@ class InsightReportController extends Controller
             ->limit(10)
             ->get();
 
+        if ($request->query('export') === 'excel') {
+            return $this->excel('Akurasi_Opname', ['No. Opname', 'Cakupan', 'Selesai', 'Lokasi dihitung', 'Cocok', 'Akurasi (%)', 'Kelebihan (pcs)', 'Kekurangan (pcs)'],
+                $opnames->map(fn ($o) => [$o->opname_number, $o->scope_label, $o->completed_at?->format('Y-m-d H:i'), $o->counted_count, $o->match_count, $o->accuracy, (int) $o->plus_qty, (int) abs($o->minus_qty)])->all(),
+                $start, $end);
+        }
+
         return view('reports.opname-accuracy', compact('opnames', 'summary', 'problemSkus', 'start', 'end'));
     }
 
     /**
      * Nilai stok (jumlah × harga jual di master SKU) per kategori ukuran dan per produk.
      */
-    public function stockValue()
+    public function stockValue(Request $request)
     {
         $base = fn () => StockActive::query()
             ->join('master_skus', 'stock_actives.sku', '=', 'master_skus.sku')
@@ -153,7 +174,25 @@ class InsightReportController extends Controller
 
         $total = ['skus' => (int) $categories->sum('skus'), 'qty' => (int) $categories->sum('qty'), 'value' => (int) $categories->sum('value')];
 
+        if ($request->query('export') === 'excel') {
+            $rows = [];
+            foreach (['Kategori ukuran' => $categories, 'Produk (20 terbesar)' => $products] as $group => $list) {
+                foreach ($list as $row) {
+                    $rows[] = [$group, $row->name, (int) $row->skus, (int) $row->qty, (int) $row->value];
+                }
+            }
+
+            return $this->excel('Nilai_Stok', ['Kelompok', 'Nama', 'Jumlah SKU', 'Stok (pcs)', 'Nilai (Rp)'], $rows);
+        }
+
         return view('reports.stock-value', compact('categories', 'products', 'total'));
+    }
+
+    private function excel(string $name, array $headings, array $rows, ?Carbon $start = null, ?Carbon $end = null)
+    {
+        $period = $start ? '_' . $start->format('Ymd') . '-' . $end->format('Ymd') : '_' . now()->format('Ymd');
+
+        return Excel::download(new ArrayExport($headings, $rows), "Laporan_{$name}{$period}.xlsx");
     }
 
     /** Periode dari ?start_date & ?end_date; bawaan N hari terakhir. */

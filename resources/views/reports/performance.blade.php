@@ -1,5 +1,5 @@
 <x-app-layout>
-    @include('reports.partials.header', ['title' => 'Kinerja Picker & Packer', 'subtitle' => 'Order dan pcs yang selesai diambil atau dikemas per orang'])
+    @include('reports.partials.header', ['title' => 'Kinerja Picker & Packer', 'subtitle' => 'Order dan pcs yang selesai diambil atau dikemas per orang', 'export' => route('reports.performance', array_merge(request()->query(), ['export' => 'excel']))])
 
     <div class="space-y-6">
         @include('reports.partials.period', ['action' => route('reports.performance')])

@@ -1,5 +1,5 @@
 <x-app-layout>
-    @include('reports.partials.header', ['title' => 'Akurasi Stock Opname', 'subtitle' => 'Seberapa sering hitungan fisik sama dengan catatan sistem'])
+    @include('reports.partials.header', ['title' => 'Akurasi Stock Opname', 'subtitle' => 'Seberapa sering hitungan fisik sama dengan catatan sistem', 'export' => route('reports.opname-accuracy', array_merge(request()->query(), ['export' => 'excel']))])
 
     <div class="space-y-6">
         @include('reports.partials.period', ['action' => route('reports.opname-accuracy')])

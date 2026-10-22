@@ -210,6 +210,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->group(function () {
         Route::get('/tugas', [TaskController::class, 'index'])->name('tugas');
         Route::get('/label/sku', [LabelController::class, 'sku'])->name('label.sku');
+        Route::get('/label/kirim-massal', [LabelController::class, 'shippingBulk'])->name('label.shipping-bulk');
         Route::get('/label/kirim/{order}', [LabelController::class, 'shipping'])->name('label.shipping');
     });
 

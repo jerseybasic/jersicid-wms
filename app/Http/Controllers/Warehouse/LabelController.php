@@ -82,8 +82,31 @@ class LabelController extends Controller
             'Label kirim baru bisa dicetak setelah packing selesai.'
         );
 
+        return $this->shippingLabels(collect([$order]));
+    }
+
+    /**
+     * Semua label kirim order yang siap dikirim (READY_TO_SHIP) dalam satu kali cetak.
+     */
+    public function shippingBulk()
+    {
+        $orders = Order::with('items.masterSku')
+            ->where('status', 'READY_TO_SHIP')
+            ->orderBy('packed_at')
+            ->orderBy('created_at')
+            ->get();
+
+        if ($orders->isEmpty()) {
+            return redirect()->route('gudang.outbound')->with('error', 'Belum ada order yang siap dikirim.');
+        }
+
+        return $this->shippingLabels($orders);
+    }
+
+    private function shippingLabels($orders)
+    {
         return view('warehouse.label.shipping', [
-            'order' => $order,
+            'orders' => $orders,
             'senderName' => SystemSetting::get('company_name', config('app.name')),
             'senderPhone' => SystemSetting::get('company_phone'),
             'senderAddress' => SystemSetting::get('company_address'),
