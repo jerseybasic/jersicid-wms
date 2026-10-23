@@ -10,7 +10,7 @@
         $field = 'w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none';
     @endphp
 
-    <div class="max-w-4xl mx-auto space-y-6" x-data="transferFlow(@js(route('gudang.transfer.lookup')), @js(old('bin_from', '')))"
+    <div class="max-w-4xl mx-auto space-y-6" x-data="transferFlow(@js(route('gudang.transfer.lookup')), @js(old('bin_from', '')), @js($prefill))"
         @scan-code.window="scan($event.detail)">
 
         @if (session('success'))
@@ -54,6 +54,9 @@
             class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden" @submit="return confirmSubmit($event)">
             @csrf
             <input type="hidden" name="bin_from" :value="from">
+            @if ($prefill['from'] !== '')
+                <input type="hidden" name="kembali" value="isi-ulang">
+            @endif
 
             <div class="p-5 border-b border-slate-800 flex flex-wrap items-center gap-3">
                 <div class="mr-auto">
@@ -163,7 +166,7 @@
     </div>
 
     <script>
-        function transferFlow(lookupUrl, initialBin) {
+        function transferFlow(lookupUrl, initialBin, prefill) {
             return {
                 lookupUrl: lookupUrl,
                 from: '',
@@ -171,9 +174,14 @@
                 items: [],
                 skuBins: null,
 
-                init() {
+                async init() {
                     if (initialBin) {
-                        this.openBin(initialBin);
+                        await this.openBin(initialBin);
+                    } else if (prefill && prefill.from) {
+                        await this.openBin(prefill.from);
+                        const item = this.items.find((row) => row.sku === prefill.sku);
+                        if (item) item.move = Math.min(prefill.qty, this.max(item));
+                        if (this.from && prefill.to !== this.from) this.to = prefill.to;
                     }
                 },
 

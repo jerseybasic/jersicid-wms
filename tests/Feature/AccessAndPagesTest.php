@@ -31,6 +31,7 @@ class AccessAndPagesTest extends TestCase
         'gudang.scanner',
         'gudang.printer',
         'gudang.closing',
+        'gudang.replenishment',
         'gudang.mapping',
         'settings.update-profile',
     ];
