@@ -25,6 +25,7 @@ use App\Http\Controllers\Warehouse\BarcodeScannerController;
 use App\Http\Controllers\Warehouse\PrinterController;
 use App\Http\Controllers\Warehouse\LabelController;
 use App\Http\Controllers\Warehouse\TaskController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Warehouse\ScanCommandController;
 use App\Http\Controllers\Warehouse\ShipmentClosingController;
 use App\Http\Controllers\Warehouse\ReturnController;
@@ -224,6 +225,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{rackCode}/hapus', [WarehouseMappingController::class, 'bulkDelete'])->name('gudang.mapping.bulk-delete');
         Route::delete('/{rackCode}/{sku}', [WarehouseMappingController::class, 'unassign'])->name('gudang.mapping.unassign');
     });
+
+// Pencarian cepat di atas setiap halaman
+Route::middleware('auth')->get('/cari', [SearchController::class, 'index'])->name('search');
 
 // Cek barang & lokasi (hanya baca, tidak mengubah stok)
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])

@@ -23,7 +23,7 @@
 
         {{-- QR perintah yang ditempel di meja: Mulai Picking, Mulai Packing, Cek Retur, Tutup Kiriman --}}
         <x-scan-box :endpoint="route('gudang.command')" storage-key="tugas" :with-bin="false"
-            hint="Scan QR perintah: Mulai Picking, Mulai Packing, Cek Retur, atau Tutup Kiriman." />
+            hint="Scan QR perintah (Mulai Picking, Mulai Packing, Cek Retur, Tutup Kiriman) atau no. order/resi untuk membuka ordernya." />
 
         {{-- Ringkasan --}}
         <div class="grid grid-cols-3 gap-3">
