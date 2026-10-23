@@ -286,7 +286,7 @@
         </div>
 
         <!-- Produk di Rak (Grouped by Product Name + Version) -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" x-data="rackEditor(@js($rackProducts->values()))">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                     <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -303,6 +303,25 @@
             </div>
 
             @if (isset($groupedProducts) && $groupedProducts->count() > 0)
+                {{-- Pilih SKU yang salah lalu edit atau hapus; atau sekaligus semua --}}
+                <div class="flex flex-wrap items-center gap-2 mb-3 p-3 bg-slate-800/40 border border-slate-700/50 rounded-xl">
+                    <label class="flex items-center gap-2 text-sm text-slate-300 mr-auto">
+                        <input type="checkbox" :checked="allSelected" @change="toggleAll($event.target.checked)"
+                            class="rounded border-slate-600 bg-slate-900 text-cyan-500">
+                        Pilih semua
+                        <span class="text-cyan-400 font-semibold" x-show="selected.length" x-text="'(' + selected.length + ' dipilih)'"></span>
+                    </label>
+                    <button type="button" @click="openEdit(selected)" :disabled="!selected.length"
+                        class="px-3 py-2 text-sm font-semibold rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 disabled:opacity-40">Edit terpilih</button>
+                    <button type="button" @click="remove(selected)" :disabled="!selected.length"
+                        class="px-3 py-2 text-sm font-semibold rounded-lg bg-red-500/20 text-red-300 border border-red-500/30 disabled:opacity-40">Hapus terpilih</button>
+                    <span class="hidden sm:block w-px h-6 bg-slate-700"></span>
+                    <button type="button" @click="openEdit(allSkus)"
+                        class="px-3 py-2 text-sm font-semibold rounded-lg bg-slate-700 text-white">Edit semua</button>
+                    <button type="button" @click="remove(allSkus)"
+                        class="px-3 py-2 text-sm font-semibold rounded-lg bg-slate-700 text-red-300">Hapus semua</button>
+                </div>
+
                 <div class="space-y-2">
                     @foreach ($groupedProducts as $groupKey => $products)
                         @php
@@ -318,6 +337,9 @@
                             <!-- Product Header (Klik untuk expand) -->
                             <div @click="expanded = !expanded"
                                 class="flex items-center gap-3 p-3 bg-slate-800/30 hover:bg-slate-800/50 transition-colors cursor-pointer group">
+
+                                <input type="checkbox" @click.stop :checked="groupSelected(skus)" @change="toggleGroup(skus, $event.target.checked)"
+                                    class="rounded border-slate-600 bg-slate-900 text-cyan-500 flex-shrink-0" title="Pilih semua size">
 
                                 <!-- Expand Icon -->
                                 <svg class="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-all flex-shrink-0"
@@ -369,6 +391,8 @@
                                         <div
                                             class="flex items-center justify-between p-2 bg-slate-900/50 rounded-lg border border-slate-800/50 hover:border-cyan-500/30 transition-all">
                                             <div class="flex items-center gap-3 flex-1 min-w-0">
+                                                <input type="checkbox" :value="sku.sku" x-model="selected"
+                                                    class="rounded border-slate-600 bg-slate-900 text-cyan-500 flex-shrink-0">
                                                 <span
                                                     class="w-8 h-8 bg-cyan-500/10 text-cyan-400 text-[10px] font-bold rounded flex items-center justify-center flex-shrink-0 font-mono"
                                                     x-text="sku.size"></span>
@@ -392,6 +416,14 @@
                                                     <p class="text-[9px] text-slate-500" x-show="sku.max_capacity">Max: <span
                                                             x-text="sku.max_capacity"></span></p>
                                                 </div>
+                                                <button type="button" @click="openEdit([sku.sku])"
+                                                    class="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors"
+                                                    title="Edit">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                </button>
                                                 <form :action="'/gudang/mapping/{{ $rack->code }}/' + sku.sku"
                                                     method="POST"
                                                     onsubmit="return confirm('Yakin hapus produk dari rak ini?')"
@@ -420,6 +452,58 @@
                         </div>
                     @endforeach
                 </div>
+
+                {{-- Hapus terpilih/semua: lepas SKU dari rak, stok di bin tidak berubah --}}
+                <form x-ref="deleteForm" method="POST" action="{{ route('gudang.mapping.bulk-delete', $rack->code) }}" class="hidden">
+                    @csrf
+                    <template x-for="code in deleting" :key="code">
+                        <input type="hidden" name="skus[]" :value="code">
+                    </template>
+                </form>
+
+                {{-- Edit terpilih/semua --}}
+                <div x-show="editing.length" x-cloak class="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" @keydown.escape.window="editing = []">
+                    <form method="POST" action="{{ route('gudang.mapping.bulk-update', $rack->code) }}" @click.outside="editing = []"
+                        class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+                        @csrf
+                        <div class="p-5 border-b border-slate-800">
+                            <h3 class="text-lg font-semibold text-white">Edit <span x-text="editing.length"></span> SKU di rak {{ $rack->code }}</h3>
+                            <p class="text-xs text-slate-400 mt-1">Kosongkan kolom yang tidak ingin diubah. Lokasi bin baru memindahkan semua stok SKU itu dari rak ini ke bin tersebut (tercatat sebagai transfer).</p>
+                            <div class="mt-3 flex flex-wrap items-end gap-2">
+                                <label class="text-xs text-slate-400">Kapasitas untuk semua
+                                    <input type="number" min="1" x-model="fillCapacity" class="mt-1 block w-28 px-2 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm">
+                                </label>
+                                <label class="text-xs text-slate-400">Lokasi bin untuk semua
+                                    <input type="text" x-model="fillBin" placeholder="{{ $rack->code }}-01-01" class="mt-1 block w-36 px-2 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono uppercase">
+                                </label>
+                                <button type="button" @click="applyFill()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-lg">Terapkan ke semua baris</button>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-y-auto divide-y divide-slate-800">
+                            <template x-for="(row, index) in editing" :key="row.sku">
+                                <div class="flex flex-wrap items-center gap-3 px-5 py-3">
+                                    <input type="hidden" :name="'items[' + index + '][sku]'" :value="row.sku">
+                                    <div class="flex-1 min-w-[10rem]">
+                                        <p class="text-sm font-mono font-semibold text-cyan-400" x-text="row.sku"></p>
+                                        <p class="text-xs text-slate-400" x-text="row.current_qty + ' pcs · ' + (row.bin_location ? 'Bin ' + row.bin_location : 'belum ada stok')"></p>
+                                    </div>
+                                    <label class="text-xs text-slate-400">Kapasitas
+                                        <input type="number" min="1" :name="'items[' + index + '][max_capacity]'" x-model="row.max_capacity"
+                                            class="mt-1 block w-24 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm text-right">
+                                    </label>
+                                    <label class="text-xs text-slate-400">Pindah ke bin
+                                        <input type="text" :name="'items[' + index + '][bin_code]'" x-model="row.bin_code" :placeholder="row.bin_location || '{{ $rack->code }}-01-01'"
+                                            class="mt-1 block w-32 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono uppercase">
+                                    </label>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="p-4 border-t border-slate-800 flex justify-end gap-2">
+                            <button type="button" @click="editing = []" class="px-4 py-2 bg-slate-700 text-white rounded-lg">Batal</button>
+                            <button type="submit" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold rounded-lg">Simpan perubahan</button>
+                        </div>
+                    </form>
+                </div>
             @else
                 <div class="text-center py-12">
                     <svg class="w-16 h-16 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor"
@@ -435,6 +519,60 @@
     </div>
 
     <script>
+        function rackEditor(products) {
+            return {
+                products: products,
+                allSkus: products.map((p) => p.sku),
+                selected: [],
+                editing: [],
+                deleting: [],
+                fillCapacity: '',
+                fillBin: '',
+
+                get allSelected() {
+                    return this.selected.length > 0 && this.selected.length === this.allSkus.length;
+                },
+
+                toggleAll(on) {
+                    this.selected = on ? [...this.allSkus] : [];
+                },
+
+                groupSelected(skus) {
+                    return skus.every((s) => this.selected.includes(s.sku));
+                },
+
+                toggleGroup(skus, on) {
+                    const codes = skus.map((s) => s.sku);
+                    this.selected = on
+                        ? [...new Set([...this.selected, ...codes])]
+                        : this.selected.filter((code) => !codes.includes(code));
+                },
+
+                openEdit(codes) {
+                    this.fillCapacity = '';
+                    this.fillBin = '';
+                    this.editing = this.products
+                        .filter((p) => codes.includes(p.sku))
+                        .map((p) => ({ ...p, max_capacity: p.max_capacity || '', bin_code: '' }));
+                },
+
+                applyFill() {
+                    this.editing.forEach((row) => {
+                        if (this.fillCapacity) row.max_capacity = this.fillCapacity;
+                        if (this.fillBin) row.bin_code = this.fillBin.toUpperCase();
+                    });
+                },
+
+                remove(codes) {
+                    if (!codes.length) return;
+                    const label = codes.length === this.allSkus.length ? 'SEMUA ' + codes.length : codes.length;
+                    if (!confirm('Lepas ' + label + ' SKU dari rak ini? Stok di bin tidak berubah.')) return;
+                    this.deleting = [...codes];
+                    this.$nextTick(() => this.$refs.deleteForm.submit());
+                },
+            };
+        }
+
         function assignProductForm(allSkus) {
             return {
                 allSkus: allSkus,

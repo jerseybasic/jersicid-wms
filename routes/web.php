@@ -217,6 +217,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::get('/', [WarehouseMappingController::class, 'index'])->name('gudang.mapping');
         Route::get('/{rackCode}', [WarehouseMappingController::class, 'show'])->name('gudang.mapping.show');
         Route::post('/{rackCode}/assign', [WarehouseMappingController::class, 'assign'])->name('gudang.mapping.assign');
+        Route::post('/{rackCode}/ubah', [WarehouseMappingController::class, 'bulkUpdate'])->name('gudang.mapping.bulk-update');
+        Route::post('/{rackCode}/hapus', [WarehouseMappingController::class, 'bulkDelete'])->name('gudang.mapping.bulk-delete');
         Route::delete('/{rackCode}/{sku}', [WarehouseMappingController::class, 'unassign'])->name('gudang.mapping.unassign');
     });
 
