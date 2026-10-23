@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\SkuAliasController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Warehouse\PurchaseOrderController;
+use App\Http\Controllers\Warehouse\CourierHandoverController;
 use App\Http\Controllers\Warehouse\InboundController;
 use App\Http\Controllers\Warehouse\OrderImportController;
 use App\Http\Controllers\Warehouse\OutboundController;
@@ -155,6 +156,21 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::get('/{batch}', [PickingBatchController::class, 'show'])->name('show');
         Route::post('/{batch}/scan', [PickingBatchController::class, 'scan'])->name('scan');
         Route::delete('/{batch}', [PickingBatchController::class, 'destroy'])->name('destroy');
+    });
+
+// ==================== SERAH TERIMA KURIR (GUDANG) ====================
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
+    ->prefix('gudang/serah-terima')
+    ->name('gudang.handover')
+    ->group(function () {
+        Route::get('/', [CourierHandoverController::class, 'index']);
+        Route::post('/', [CourierHandoverController::class, 'store'])->name('.store');
+        Route::get('/{handover}', [CourierHandoverController::class, 'show'])->name('.show');
+        Route::post('/{handover}/scan', [CourierHandoverController::class, 'scan'])->name('.scan');
+        Route::delete('/{handover}/paket/{order}', [CourierHandoverController::class, 'removeItem'])->name('.remove');
+        Route::post('/{handover}/serahkan', [CourierHandoverController::class, 'finish'])->name('.finish');
+        Route::get('/{handover}/manifest', [CourierHandoverController::class, 'print'])->name('.print');
+        Route::delete('/{handover}', [CourierHandoverController::class, 'destroy'])->name('.destroy');
     });
 
 // ==================== PACKING (GUDANG) ====================

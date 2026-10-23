@@ -161,6 +161,11 @@
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                 Siap kirim <span class="{{ $pill }} bg-emerald-500/20 text-emerald-400">{{ $toShip->count() }}</span>
             </h3>
+            @if ($toShip->isNotEmpty())
+                <a href="{{ route('gudang.handover') }}" class="{{ $bigButton }} block bg-slate-800 border border-emerald-500/50 text-emerald-300">
+                    Serahkan ke kurir (scan resi)
+                </a>
+            @endif
             @forelse ($toShip as $order)
                 <div class="{{ $card }}">
                     <div class="flex items-start justify-between gap-3">

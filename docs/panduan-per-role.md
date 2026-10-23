@@ -46,6 +46,13 @@ Di semua role, ikon **lonceng** di kanan atas menunjukkan pekerjaan yang sedang 
 2. Mulai sesi, lalu scan setiap barang yang masuk ke paket.
 3. Setelah semua barang lengkap, order otomatis berstatus siap kirim. Cetak label kirim lewat **Cetak label kirim**.
 
+### Serah terima paket ke kurir
+1. Saat kurir datang, buka **Serah Terima Kurir** (atau **Serahkan ke kurir** di Tugas Saya), lalu klik **Mulai scan** di kurir yang sesuai. Paket dikelompokkan per kurir, misalnya SPX Standard dan SPX Instant masuk ke SPX.
+2. Scan resi di label setiap paket yang diserahkan. Paket untuk kurir lain, paket yang belum selesai dikemas, paket tanpa resi, dan paket yang sudah pernah dikirim akan ditolak dengan bunyi peringatan.
+3. Daftar di bawah menunjukkan paket kurir itu yang **Belum di-scan**, jadi paket yang tertinggal mudah ketahuan. Jika kurir menolak satu paket, klik **keluarkan**.
+4. Isi nama kurir (opsional), lalu klik **Serahkan dan cetak manifest**. Semua paket di daftar berubah menjadi **Dikirim**, dan manifest A4 terbuka untuk dicetak dan ditandatangani kedua pihak.
+5. Manifest lama bisa dibuka lagi dari **Riwayat** di halaman Serah Terima Kurir.
+
 ### Retur dari pelanggan
 1. Buka **Retur**, lalu klik **Terima Retur**.
 2. Scan QR di label kirim atau ketik nomor order/resi.
