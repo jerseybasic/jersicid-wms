@@ -98,6 +98,7 @@
                     </div>
                     <p class="text-xs text-slate-500 mt-1">
                         Order yang masuk sebelum jam potong harus dikirim hari itu, sesudahnya besok. Batas dari file marketplace (jika ada) tetap dipakai.
+                        Pengingat WhatsApp untuk order yang belum dikirim masuk antrean 2 jam sebelum jam potong.
                     </p>
                 </div>
 
@@ -119,7 +120,7 @@
                     <span class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-700 text-slate-300">Belum aktif</span>
                 @endif
             </div>
-            <p class="text-sm text-slate-400 mb-4">Setiap pagi pukul 08:00, daftar SKU yang stoknya menipis masuk ke antrean WhatsApp. Makro WhatsApp toko (<code>./wa-login.sh --wms</code>) mengambil antrean ini lalu mengirimnya lewat WhatsApp Web.</p>
+            <p class="text-sm text-slate-400 mb-4">Setiap pagi pukul 08:00, daftar SKU yang stoknya menipis masuk ke antrean WhatsApp. Pukul {{ sprintf('%02d:00', \App\Console\Commands\SendShipReminder::hour()) }} (2 jam sebelum jam potong), daftar order yang terlambat atau harus dikirim hari ini juga dikirim. Makro WhatsApp toko (<code>./wa-login.sh --wms</code>) mengambil antrean ini lalu mengirimnya lewat WhatsApp Web.</p>
 
             @error('whatsapp')
                 <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-300">{{ $message }}</div>

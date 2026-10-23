@@ -54,6 +54,15 @@ class WorkQueue
         }
 
         $items[] = [
+            'key' => 'ship_late',
+            'label' => 'Order lewat batas kirim',
+            'hint' => 'Kerjakan lebih dulu',
+            'count' => Order::whereIn('status', ShipDeadline::OPEN_STATUSES)->where('ship_by', '<', now())->count(),
+            'url' => route('gudang.outbound', ['batas' => 'terlambat']),
+            'color' => 'red',
+        ];
+
+        $items[] = [
             'key' => 'order_confirm',
             'label' => 'Order baru perlu dikonfirmasi',
             'hint' => 'Cek lalu konfirmasi',
