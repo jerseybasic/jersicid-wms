@@ -43,7 +43,7 @@ class ScanCommandController extends Controller
     }
 
     /**
-     * Picking yang sedang dikerjakan user ini dulu; bila tidak ada, ambil order CONFIRMED terlama.
+     * Picking yang sedang dikerjakan user ini dulu; bila tidak ada, ambil order CONFIRMED dengan batas kirim paling dekat.
      */
     private function startPicking(Request $request): JsonResponse
     {
@@ -65,6 +65,7 @@ class ScanCommandController extends Controller
             if (!$session) {
                 $order = Order::where('status', 'CONFIRMED')
                     ->whereDoesntHave('pickingSession')
+                    ->orderBy('ship_by')
                     ->orderBy('created_at')
                     ->lockForUpdate()
                     ->first();
@@ -105,6 +106,7 @@ class ScanCommandController extends Controller
             if (!$session) {
                 $order = Order::where('status', 'PACKING')
                     ->whereDoesntHave('packingSession')
+                    ->orderBy('ship_by')
                     ->orderBy('picked_at')
                     ->orderBy('created_at')
                     ->lockForUpdate()

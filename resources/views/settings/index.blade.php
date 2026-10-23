@@ -82,6 +82,25 @@
                     </p>
                 </div>
 
+                <div class="pt-4 border-t border-slate-700/50">
+                    <p class="text-sm font-medium text-slate-300 mb-2">Batas kirim order</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="ship_cutoff_hour" class="block text-xs text-slate-400 mb-1">Jam potong (0–23)</label>
+                            <input type="number" id="ship_cutoff_hour" name="ship_cutoff_hour" min="0" max="23"
+                                value="{{ old('ship_cutoff_hour', $company['ship_cutoff_hour']) }}" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all md:w-48"/>
+                        </div>
+                        <div>
+                            <label for="ship_grace_days" class="block text-xs text-slate-400 mb-1">Tambahan hari</label>
+                            <input type="number" id="ship_grace_days" name="ship_grace_days" min="0" max="14"
+                                value="{{ old('ship_grace_days', $company['ship_grace_days']) }}" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all md:w-48"/>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">
+                        Order yang masuk sebelum jam potong harus dikirim hari itu, sesudahnya besok. Batas dari file marketplace (jika ada) tetap dipakai.
+                    </p>
+                </div>
+
                 <div class="flex justify-end pt-2">
                     <button type="submit" class="px-6 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">
                         Simpan Pengaturan

@@ -17,6 +17,9 @@ class BigSellerOrderImport
     /** Kolom yang wajib ada di baris judul */
     public const REQUIRED_COLUMNS = ['Nomor Pesanan', 'SKU', 'Jumlah'];
 
+    /** Kolom batas kirim dari marketplace (nama berbeda per versi ekspor) */
+    public const DEADLINE_COLUMNS = ['Batas Waktu Pengiriman', 'Waktu Kirim Paling Lambat', 'Batas Kirim', 'Ship By Date'];
+
     /**
      * Baca file lalu kembalikan daftar pesanan siap ditinjau:
      * [order_number, marketplace, customer_name, ..., items[], problems[], warnings[]].
@@ -55,6 +58,7 @@ class BigSellerOrderImport
                 'courier' => $r['Jasa Kirim yang Dipilih Pembeli'] ?? ($r['Nama Jasa Kirim'] ?? null),
                 'tracking_number' => $r['Nomor Resi'] ?? null,
                 'ordered_at' => $r['Waktu Pesanan Dibuat'] ?? null,
+                'ship_by' => $this->firstOf($r, self::DEADLINE_COLUMNS),
                 'buyer_message' => $r['Pesan dari Pembeli'] ?? null,
                 'seller_note' => $r['Catatan Penjual'] ?? null,
             ];
@@ -151,6 +155,17 @@ class BigSellerOrderImport
         }
 
         return $orders;
+    }
+
+    private function firstOf(array $row, array $columns): ?string
+    {
+        foreach ($columns as $column) {
+            if (!empty($row[$column])) {
+                return $row[$column];
+            }
+        }
+
+        return null;
     }
 
     /** BigSeller mengisi sel kosong dengan "--" */

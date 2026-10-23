@@ -41,6 +41,22 @@
             </a>
         </div>
 
+        @php
+            $late = $deadlines[\App\Services\ShipDeadline::LATE] ?? 0;
+            $dueToday = $deadlines[\App\Services\ShipDeadline::TODAY] ?? 0;
+        @endphp
+        @if ($late || $dueToday)
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 bg-slate-900 border {{ $late ? 'border-red-500/40' : 'border-amber-500/40' }} rounded-2xl p-4 text-sm text-slate-300">
+                @if ($late)
+                    <a href="{{ route('gudang.outbound', ['batas' => 'terlambat']) }}"><span class="text-lg font-bold text-red-400">{{ $late }}</span> order terlambat dikirim</a>
+                @endif
+                @if ($dueToday)
+                    <a href="{{ route('gudang.outbound', ['batas' => 'hari-ini']) }}"><span class="text-lg font-bold text-amber-400">{{ $dueToday }}</span> order harus dikirim hari ini</a>
+                @endif
+                <span class="text-xs text-slate-500 w-full">Daftar di bawah sudah diurutkan dari batas kirim paling dekat.</span>
+            </div>
+        @endif
+
         @if ($toRefill > 0)
             <a href="{{ route('gudang.replenishment') }}" class="flex items-center justify-between gap-3 bg-slate-900 border border-cyan-500/40 rounded-2xl p-4">
                 <span class="text-sm text-slate-300"><span class="text-lg font-bold text-cyan-400">{{ $toRefill }}</span> SKU di rak hampir habis, cadangannya ada di bin lain</span>
@@ -120,7 +136,7 @@
                 <div class="{{ $card }}">
                     <div class="flex items-start justify-between gap-3">
                         <div>
-                            <p class="text-base font-bold text-white">{{ $order->order_number }}</p>
+                            <p class="text-base font-bold text-white">{{ $order->order_number }} <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
                             <p class="text-sm text-slate-400">{{ $order->customer_name }} · {{ $order->courier ?: 'kurir belum diisi' }}</p>
                         </div>
                         <p class="text-right text-sm text-slate-300">{{ $order->items_count }} SKU<br><span class="font-bold text-white">{{ (int) $order->items_sum_qty_ordered }} pcs</span></p>
@@ -149,7 +165,7 @@
                             @if ($order->pickingSession?->basket_no)
                                 <p class="text-xs font-bold text-cyan-400">KERANJANG {{ $order->pickingSession->basket_no }} · {{ $order->pickingSession->batch?->batch_number }}</p>
                             @endif
-                            <p class="text-base font-bold text-white">{{ $order->order_number }}</p>
+                            <p class="text-base font-bold text-white">{{ $order->order_number }} <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
                             <p class="text-sm text-slate-400">{{ $order->customer_name }} · {{ $order->courier ?: 'kurir belum diisi' }}</p>
                         </div>
                         <p class="text-right text-sm text-slate-300">{{ $order->items_count }} SKU<br><span class="font-bold text-white">{{ (int) $order->items_sum_qty_ordered }} pcs</span></p>
@@ -181,7 +197,7 @@
                 <div class="{{ $card }}">
                     <div class="flex items-start justify-between gap-3">
                         <div>
-                            <p class="text-base font-bold text-white">{{ $order->order_number }}</p>
+                            <p class="text-base font-bold text-white">{{ $order->order_number }} <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
                             <p class="text-sm text-slate-400">{{ $order->customer_name }} · {{ $order->courier ?: 'kurir belum diisi' }}</p>
                         </div>
                         <p class="text-right text-sm font-bold text-white">{{ (int) $order->items_sum_qty_ordered }} pcs</p>

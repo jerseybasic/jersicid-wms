@@ -53,6 +53,11 @@
                         <option value="READY_TO_SHIP" {{ request('status') == 'READY_TO_SHIP' ? 'selected' : '' }}>Siap Kirim</option>
                         <option value="SHIPPED" {{ request('status') == 'SHIPPED' ? 'selected' : '' }}>Shipped</option>
                     </select>
+                    <select name="batas" class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none">
+                        <option value="">Semua batas kirim</option>
+                        <option value="terlambat" @selected(request('batas') === 'terlambat')>Terlambat</option>
+                        <option value="hari-ini" @selected(request('batas') === 'hari-ini')>Kirim hari ini</option>
+                    </select>
                     <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium">Filter</button>
                     <a href="{{ route('gudang.outbound') }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium border border-slate-700">Reset</a>
                     @if ($stats['ready'] > 0)
@@ -115,7 +120,10 @@
                                     {{ $order->status_label }}
                                 </span>
                             </td>
-                            <td class="py-3 px-4 text-xs text-slate-400">{{ $order->created_at->format('d M Y') }}</td>
+                            <td class="py-3 px-4 text-xs text-slate-400">
+                                {{ $order->created_at->format('d M Y') }}
+                                <x-ship-badge :order="$order" class="block w-max mt-1" />
+                            </td>
                             <td class="py-3 px-4 text-right">
                                 <div class="flex justify-end gap-1">
                                     @if($order->status === 'PENDING')

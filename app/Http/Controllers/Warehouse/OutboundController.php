@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\MasterSku;
 use App\Models\StockActive;
+use App\Services\ShipDeadline;
 use App\Services\StockAvailability;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -34,7 +35,16 @@ class OutboundController extends Controller
             });
         }
 
-        $orders = $query->paginate(15);
+        // Filter batas kirim: hanya order yang belum dikirim, diurutkan dari yang paling mendesak
+        if (in_array($request->batas, ['terlambat', 'hari-ini'], true)) {
+            $query->whereIn('status', ShipDeadline::OPEN_STATUSES)
+                ->reorder('ship_by')->orderBy('created_at');
+            $request->batas === 'terlambat'
+                ? $query->where('ship_by', '<', now())
+                : $query->whereBetween('ship_by', [now(), now()->endOfDay()]);
+        }
+
+        $orders = $query->paginate(15)->withQueryString();
 
         // Stats
         $stats = [
