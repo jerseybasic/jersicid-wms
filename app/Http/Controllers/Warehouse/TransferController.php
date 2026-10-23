@@ -34,7 +34,15 @@ class TransferController extends Controller
             ->paginate(20)
             ->withQueryString();
 
-        return view('warehouse.transfer.index', compact('transfers', 'search'));
+        // Dari Isi Ulang Rak: bin asal, SKU, jumlah, dan bin tujuan sudah terisi
+        $prefill = [
+            'from' => strtoupper(trim((string) $request->query('dari', ''))),
+            'sku' => strtoupper(trim((string) $request->query('sku', ''))),
+            'qty' => max(0, (int) $request->query('jumlah', 0)),
+            'to' => strtoupper(trim((string) $request->query('ke', ''))),
+        ];
+
+        return view('warehouse.transfer.index', compact('transfers', 'search', 'prefill'));
     }
 
     /**
@@ -194,7 +202,7 @@ class TransferController extends Controller
             return back()->withInput()->with('error', 'Gagal transfer: ' . safe_error_message($e));
         }
 
-        return redirect()->route('gudang.transfer')->with(
+        return redirect()->route($request->input('kembali') === 'isi-ulang' ? 'gudang.replenishment' : 'gudang.transfer')->with(
             'success',
             "Berhasil memindahkan {$items->sum()} pcs ({$items->count()} SKU) dari {$binFrom} ke {$binTo}. No. {$refNo}"
         );

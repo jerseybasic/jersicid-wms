@@ -41,6 +41,13 @@
             </a>
         </div>
 
+        @if ($toRefill > 0)
+            <a href="{{ route('gudang.replenishment') }}" class="flex items-center justify-between gap-3 bg-slate-900 border border-cyan-500/40 rounded-2xl p-4">
+                <span class="text-sm text-slate-300"><span class="text-lg font-bold text-cyan-400">{{ $toRefill }}</span> SKU di rak hampir habis, cadangannya ada di bin lain</span>
+                <span class="text-sm font-bold text-cyan-400 shrink-0">Isi ulang rak</span>
+            </a>
+        @endif
+
         {{-- Sedang berjalan --}}
         @if ($activePicking->isNotEmpty() || $activeBatches->isNotEmpty() || $activePacking->isNotEmpty())
             <section class="space-y-3">

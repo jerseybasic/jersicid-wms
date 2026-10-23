@@ -53,6 +53,8 @@ class TaskController extends Controller
             ->orderBy('packed_at')
             ->get();
 
-        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'toPick', 'toPack', 'toShip'));
+        $toRefill = ReplenishmentController::pendingCount();
+
+        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'toPick', 'toPack', 'toShip', 'toRefill'));
     }
 }

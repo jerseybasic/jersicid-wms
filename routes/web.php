@@ -18,6 +18,7 @@ use App\Http\Controllers\Warehouse\PickingBatchController;
 use App\Http\Controllers\Warehouse\PickingController;
 use App\Http\Controllers\Warehouse\PackingController;
 use App\Http\Controllers\Warehouse\TransferController;
+use App\Http\Controllers\Warehouse\ReplenishmentController;
 use App\Http\Controllers\Warehouse\StockOpnameController;
 use App\Http\Controllers\Warehouse\WarehouseMappingController;
 use App\Http\Controllers\Warehouse\BarcodeScannerController;
@@ -255,6 +256,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->name('gudang.')
     ->group(function () {
         Route::get('/tugas', [TaskController::class, 'index'])->name('tugas');
+        Route::get('/isi-ulang-rak', [ReplenishmentController::class, 'index'])->name('replenishment');
         Route::get('/label/sku', [LabelController::class, 'sku'])->name('label.sku');
         Route::get('/label/rak', [LabelController::class, 'bins'])->name('label.bins');
         Route::get('/label/perintah', [LabelController::class, 'commands'])->name('label.commands');
