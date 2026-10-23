@@ -10,6 +10,7 @@ use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Services\ShipDeadline;
 use App\Services\StockAvailability;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -96,13 +97,29 @@ class OutboundController extends Controller
         // Perubahan status manual (konfirmasi, batal, kirim, selesai) dari audit trail
         $labels = ['CONFIRMED' => ['Dikonfirmasi', 'blue'], 'CANCELLED' => ['Dibatalkan', 'red'], 'SHIPPED' => ['Dikirim', 'emerald'], 'COMPLETED' => ['Selesai', 'slate']];
         AuditTrail::with('user:id,name')
-            ->where('module', 'OUTBOUND')->where('action', 'UPDATE_STATUS')
+            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE'])
             ->where('new_values', 'like', '%' . $order->order_number . '%')
             ->orderBy('created_at')
             ->get()
             ->each(function ($trail) use ($order, $labels, $steps) {
                 $values = is_string($trail->new_values) ? json_decode($trail->new_values, true) : $trail->new_values;
-                if (($values['order_number'] ?? null) !== $order->order_number || !isset($labels[$values['status'] ?? ''])) {
+                if (($values['order_number'] ?? null) !== $order->order_number) {
+                    return;
+                }
+                if ($trail->action === 'UPDATE') {
+                    $names = ['customer_name' => 'nama', 'customer_phone' => 'telepon', 'shipping_address' => 'alamat', 'courier' => 'kurir',
+                        'tracking_number' => 'resi', 'notes' => 'catatan', 'ship_by' => 'batas kirim', 'items' => 'item'];
+                    $steps->push([
+                        'at' => $trail->created_at,
+                        'title' => 'Data order diubah',
+                        'detail' => 'Diubah: ' . collect(array_keys($values))->map(fn ($key) => $names[$key] ?? null)->filter()->implode(', '),
+                        'user' => $trail->user?->name,
+                        'color' => 'amber',
+                    ]);
+
+                    return;
+                }
+                if (!isset($labels[$values['status'] ?? ''])) {
                     return;
                 }
                 [$title, $color] = $labels[$values['status']];
@@ -145,7 +162,7 @@ class OutboundController extends Controller
 
         // Urut waktu; langkah di detik yang sama mengikuti urutan alur order
         $rank = array_flip(['Order masuk', 'Dikonfirmasi', 'Dibatalkan', 'Mulai diambil (picking)', 'Selesai diambil', 'Mulai dikemas (packing)',
-            'Selesai dikemas', 'Discan untuk serah terima kurir', 'Dikirim', 'Selesai', 'Retur diterima']);
+            'Selesai dikemas', 'Discan untuk serah terima kurir', 'Dikirim', 'Selesai', 'Retur diterima', 'Data order diubah']);
 
         return $steps->filter(fn ($step) => $step['at'])
             ->sortBy([fn ($a, $b) => [$a['at']->getTimestamp(), $rank[$a['title']] ?? 99] <=> [$b['at']->getTimestamp(), $rank[$b['title']] ?? 99]])
@@ -207,6 +224,112 @@ class OutboundController extends Controller
         } catch (\Exception $e) {
             return back()->withInput()->with('error', 'Gagal membuat order: ' . safe_error_message($e));
         }
+    }
+
+    public function edit($id)
+    {
+        $order = Order::with('items.masterSku:sku,product_name,size', 'pickingSession:id,order_id')->findOrFail($id);
+        abort_unless($order->isEditable(), 403, 'Order yang sudah selesai atau dibatalkan tidak bisa diubah.');
+
+        // SKU yang sudah ada di order tetap bisa dipilih walau sudah tidak aktif
+        $skus = MasterSku::where(fn ($query) => $query->where('status', 'AKTIF')->orWhereIn('sku', $order->items->pluck('sku')))
+            ->orderBy('product_name')
+            ->get(['sku', 'product_name', 'size']);
+
+        return view('warehouse.outbound.create', compact('order', 'skus'));
+    }
+
+    /**
+     * Ubah data order. Data pembeli, kurir, resi, catatan, dan batas kirim bisa diubah sampai order selesai;
+     * item hanya bisa diubah sebelum picking dimulai.
+     */
+    public function update(Request $request, $id)
+    {
+        $order = Order::with('items', 'pickingSession:id,order_id')->findOrFail($id);
+        abort_unless($order->isEditable(), 403, 'Order yang sudah selesai atau dibatalkan tidak bisa diubah.');
+
+        $itemsEditable = $order->itemsEditable();
+        $validated = $request->validate([
+            'customer_name' => ['required', 'string', 'max:255'],
+            'customer_phone' => ['nullable', 'string', 'max:20'],
+            'shipping_address' => ['required', 'string'],
+            'courier' => ['nullable', 'string', 'max:50'],
+            'tracking_number' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+            'ship_by' => ['nullable', 'date'],
+            'items' => [$itemsEditable ? 'required' : 'prohibited', 'array', 'min:1'],
+            'items.*.sku' => ['required', 'exists:master_skus,sku'],
+            'items.*.qty' => ['required', 'integer', 'min:1'],
+        ], [
+            'items.prohibited' => 'Item tidak bisa diubah karena order sudah mulai di-picking.',
+        ]);
+
+        $fields = ['customer_name', 'customer_phone', 'shipping_address', 'courier', 'tracking_number', 'notes'];
+        $data = collect($fields)->mapWithKeys(fn ($field) => [$field => $validated[$field] ?? null])->all();
+        $data['ship_by'] = !empty($validated['ship_by']) ? Carbon::parse($validated['ship_by']) : $order->ship_by;
+
+        // Item digabung per SKU; harga lama dipakai untuk SKU yang sudah ada di order
+        $newItems = $itemsEditable
+            ? collect($validated['items'])->groupBy(fn ($item) => strtoupper($item['sku']))->map(fn ($rows) => (int) $rows->sum('qty'))
+            : null;
+        $oldItems = $order->items->groupBy(fn ($item) => strtoupper($item->sku))->map(fn ($rows) => (int) $rows->sum('qty_ordered'));
+
+        $changes = [];
+        foreach ($data as $field => $value) {
+            $old = $order->{$field};
+            $same = $field === 'ship_by' ? $old?->equalTo($value) ?? $value === null : (string) $old === (string) $value;
+            if (!$same) {
+                $changes[$field] = [$field === 'ship_by' ? $old?->format('Y-m-d H:i') : $old, $field === 'ship_by' ? $value?->format('Y-m-d H:i') : $value];
+            }
+        }
+        $itemsChanged = $newItems !== null && $newItems->sortKeys()->all() !== $oldItems->sortKeys()->all();
+        if ($itemsChanged) {
+            $changes['items'] = [$oldItems->all(), $newItems->all()];
+        }
+
+        if (!$changes) {
+            return redirect()->route('gudang.outbound.show', $order->id)->with('success', 'Tidak ada perubahan.');
+        }
+
+        try {
+            DB::transaction(function () use ($order, $data, $itemsChanged, $newItems, $changes, $request) {
+                $order->update($data);
+
+                if ($itemsChanged) {
+                    $prices = $order->items->mapWithKeys(fn ($item) => [strtoupper($item->sku) => $item->price]);
+                    $catalog = MasterSku::whereIn('sku', $newItems->keys())->get(['sku', 'price'])->keyBy(fn ($sku) => strtoupper($sku->sku));
+                    $order->items()->delete();
+                    foreach ($newItems as $sku => $qty) {
+                        OrderItem::create([
+                            'order_id' => $order->id,
+                            'sku' => $catalog[$sku]->sku ?? $sku,
+                            'qty_ordered' => $qty,
+                            'qty_picked' => 0,
+                            'qty_packed' => 0,
+                            'price' => $prices[$sku] ?? $catalog[$sku]->price ?? 0,
+                        ]);
+                    }
+
+                    // Order yang sudah dikonfirmasi harus tetap bisa dipenuhi stoknya
+                    if ($order->status === 'CONFIRMED' && $shortages = StockAvailability::shortages($order)) {
+                        throw new \RuntimeException('Stok tidak cukup untuk item baru: ' . StockAvailability::describe($shortages) . '.');
+                    }
+                }
+
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'UPDATE',
+                    'module' => 'OUTBOUND',
+                    'old_values' => json_encode(array_map(fn ($c) => $c[0], $changes)),
+                    'new_values' => json_encode(['order_number' => $order->order_number] + array_map(fn ($c) => $c[1], $changes)),
+                    'ip_address' => $request->ip(),
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('gudang.outbound.show', $order->id)->with('success', "Order {$order->order_number} berhasil diubah.");
     }
 
     /**

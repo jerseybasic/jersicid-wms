@@ -116,6 +116,18 @@ class Order extends Model
         return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 
+    /** Data order masih boleh diubah (belum selesai atau dibatalkan) */
+    public function isEditable(): bool
+    {
+        return !in_array($this->status, ['COMPLETED', 'CANCELLED'], true);
+    }
+
+    /** Item order masih boleh diubah: belum ada sesi picking */
+    public function itemsEditable(): bool
+    {
+        return in_array($this->status, ['PENDING', 'CONFIRMED'], true) && !$this->pickingSession;
+    }
+
     /** Order dengan nomor order atau nomor resi ini (huruf besar/kecil diabaikan) */
     public static function findByCode(string $code): ?self
     {
