@@ -136,7 +136,7 @@
                 <div class="{{ $card }}">
                     <div class="flex items-start justify-between gap-3">
                         <div>
-                            <p class="text-base font-bold text-white">{{ $order->order_number }} <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
+                            <p class="text-base font-bold text-white"><a href="{{ route('gudang.outbound.show', $order->id) }}" class="hover:underline">{{ $order->order_number }}</a> <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
                             <p class="text-sm text-slate-400">{{ $order->customer_name }} · {{ $order->courier ?: 'kurir belum diisi' }}</p>
                         </div>
                         <p class="text-right text-sm text-slate-300">{{ $order->items_count }} SKU<br><span class="font-bold text-white">{{ (int) $order->items_sum_qty_ordered }} pcs</span></p>
@@ -165,7 +165,7 @@
                             @if ($order->pickingSession?->basket_no)
                                 <p class="text-xs font-bold text-cyan-400">KERANJANG {{ $order->pickingSession->basket_no }} · {{ $order->pickingSession->batch?->batch_number }}</p>
                             @endif
-                            <p class="text-base font-bold text-white">{{ $order->order_number }} <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
+                            <p class="text-base font-bold text-white"><a href="{{ route('gudang.outbound.show', $order->id) }}" class="hover:underline">{{ $order->order_number }}</a> <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
                             <p class="text-sm text-slate-400">{{ $order->customer_name }} · {{ $order->courier ?: 'kurir belum diisi' }}</p>
                         </div>
                         <p class="text-right text-sm text-slate-300">{{ $order->items_count }} SKU<br><span class="font-bold text-white">{{ (int) $order->items_sum_qty_ordered }} pcs</span></p>
@@ -197,7 +197,7 @@
                 <div class="{{ $card }}">
                     <div class="flex items-start justify-between gap-3">
                         <div>
-                            <p class="text-base font-bold text-white">{{ $order->order_number }} <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
+                            <p class="text-base font-bold text-white"><a href="{{ route('gudang.outbound.show', $order->id) }}" class="hover:underline">{{ $order->order_number }}</a> <x-ship-badge :order="$order" class="align-middle ml-1" /></p>
                             <p class="text-sm text-slate-400">{{ $order->customer_name }} · {{ $order->courier ?: 'kurir belum diisi' }}</p>
                         </div>
                         <p class="text-right text-sm font-bold text-white">{{ (int) $order->items_sum_qty_ordered }} pcs</p>

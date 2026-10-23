@@ -88,7 +88,7 @@
                             @endphp
                             <tr class="hover:bg-slate-800/30">
                                 <td class="py-3 px-4">
-                                    <a href="{{ route('gudang.outbound', ['search' => $order->order_number]) }}" class="font-mono font-bold text-cyan-400">{{ $order->order_number }}</a>
+                                    <a href="{{ route('gudang.outbound.show', $order->id) }}" class="font-mono font-bold text-cyan-400">{{ $order->order_number }}</a>
                                     <p class="text-xs text-slate-500">{{ $order->customer_name }}</p>
                                 </td>
                                 <td class="py-3 px-4 text-slate-300">{{ $order->courier ?: '-' }}</td>

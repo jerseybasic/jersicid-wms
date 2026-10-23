@@ -72,6 +72,8 @@ class OrderReturnTest extends TestCase
         $this->assertSame(2, $movement->qty);
 
         $this->get(route('gudang.retur.show', $return->id))->assertOk()->assertSee('Tukar ukuran')->assertSee('Minta XL');
+        $this->get(route('gudang.outbound.show', $order->id))->assertOk()
+            ->assertSee('Retur diterima')->assertSee($return->return_number . ' · Tukar ukuran');
         $this->get(route('gudang.retur'))->assertOk()->assertSee($return->return_number);
         $this->get(route('gudang.label.sku', ['ref' => $return->return_number]))->assertOk();
 
