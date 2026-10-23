@@ -99,7 +99,19 @@ class OrderFulfillmentFlowTest extends TestCase
         $this->assertSame('COMPLETED', $order->fresh()->status);
 
         // Halaman daftar order tetap terbuka untuk semua status
-        $this->get(route('gudang.outbound'))->assertOk()->assertSee($order->order_number);
+        $this->get(route('gudang.outbound'))->assertOk()->assertSee($order->order_number)
+            ->assertSee(route('gudang.outbound.show', $order->id), false);
+
+        // Detail order: item dengan bin asalnya dan riwayat lengkap berurutan
+        $this->get(route('gudang.outbound.show', $order->id))->assertOk()
+            ->assertSee('Jl. Merdeka 1, Bandung')
+            ->assertSee('A1-01')
+            ->assertSeeInOrder(['Order masuk', 'Dikonfirmasi', 'Mulai diambil (picking)', 'Selesai diambil', 'Mulai dikemas (packing)', 'Selesai dikemas', 'Dikirim', 'Resi JNE123', 'Selesai'])
+            ->assertSee('Retur');
+
+        // Bisa dibuka dengan nomor order juga (mis. dari hasil scan)
+        $this->get(route('gudang.outbound.show', $order->order_number))->assertOk()->assertSee('Riwayat');
+        $this->get(route('gudang.outbound.show', 'TIDAK-ADA'))->assertNotFound();
     }
 
     public function test_outbound_list_renders_action_for_every_status(): void

@@ -58,6 +58,100 @@ class OutboundController extends Controller
         return view('warehouse.outbound.index', compact('orders', 'stats'));
     }
 
+    /**
+     * Detail satu order: data pembeli, item, dan riwayat prosesnya dari masuk sampai dikirim/diretur.
+     */
+    public function show($id)
+    {
+        $order = Order::with([
+            'items.masterSku:sku,product_name,size',
+            'creator:id,name',
+            'pickingSession.user:id,name', 'pickingSession.batch:id,batch_number', 'pickingSession.items:id,picking_session_id,order_item_id,bin_code',
+            'packingSession.user:id,name',
+            'handoverItem.handover.user:id,name',
+            'returns.receiver:id,name',
+        ])->where('id', $id)->orWhere('order_number', $id)->firstOrFail();
+
+        // Bin asal tiap item, dari sesi picking
+        $bins = $order->pickingSession?->items->groupBy('order_item_id')->map(fn ($rows) => $rows->pluck('bin_code')->unique()->implode(', ')) ?? collect();
+
+        return view('warehouse.outbound.show', [
+            'order' => $order,
+            'bins' => $bins,
+            'timeline' => $this->timeline($order),
+        ]);
+    }
+
+    /** Langkah-langkah order, diurutkan dari yang paling awal */
+    private function timeline(Order $order): \Illuminate\Support\Collection
+    {
+        $steps = collect([[
+            'at' => $order->created_at,
+            'title' => 'Order masuk',
+            'detail' => str_starts_with((string) $order->notes, 'Import BigSeller') ? strtok($order->notes, "\n") : 'Dibuat manual',
+            'user' => $order->creator?->name,
+            'color' => 'slate',
+        ]]);
+
+        // Perubahan status manual (konfirmasi, batal, kirim, selesai) dari audit trail
+        $labels = ['CONFIRMED' => ['Dikonfirmasi', 'blue'], 'CANCELLED' => ['Dibatalkan', 'red'], 'SHIPPED' => ['Dikirim', 'emerald'], 'COMPLETED' => ['Selesai', 'slate']];
+        AuditTrail::with('user:id,name')
+            ->where('module', 'OUTBOUND')->where('action', 'UPDATE_STATUS')
+            ->where('new_values', 'like', '%' . $order->order_number . '%')
+            ->orderBy('created_at')
+            ->get()
+            ->each(function ($trail) use ($order, $labels, $steps) {
+                $values = is_string($trail->new_values) ? json_decode($trail->new_values, true) : $trail->new_values;
+                if (($values['order_number'] ?? null) !== $order->order_number || !isset($labels[$values['status'] ?? ''])) {
+                    return;
+                }
+                [$title, $color] = $labels[$values['status']];
+                $steps->push([
+                    'at' => $trail->created_at,
+                    'title' => $title,
+                    'detail' => !empty($values['tracking_number']) ? 'Resi ' . $values['tracking_number'] . (!empty($values['courier']) ? " · {$values['courier']}" : '') : null,
+                    'user' => $trail->user?->name,
+                    'color' => $color,
+                ]);
+            });
+
+        if ($picking = $order->pickingSession) {
+            $where = $picking->batch ? "Picking gabungan {$picking->batch->batch_number}, keranjang {$picking->basket_no}" : $picking->session_number;
+            $steps->push(['at' => $picking->started_at ?? $picking->created_at, 'title' => 'Mulai diambil (picking)', 'detail' => $where, 'user' => $picking->user?->name, 'color' => 'purple', 'url' => route('gudang.picking.show', $picking->id)]);
+            if ($picking->completed_at) {
+                $steps->push(['at' => $picking->completed_at, 'title' => 'Selesai diambil', 'detail' => null, 'user' => $picking->user?->name, 'color' => 'purple']);
+            }
+        }
+
+        if ($packing = $order->packingSession) {
+            $steps->push(['at' => $packing->started_at ?? $packing->created_at, 'title' => 'Mulai dikemas (packing)', 'detail' => $packing->session_number, 'user' => $packing->user?->name, 'color' => 'cyan', 'url' => route('gudang.packing.show', $packing->id)]);
+            if ($packing->completed_at) {
+                $steps->push(['at' => $packing->completed_at, 'title' => 'Selesai dikemas', 'detail' => $packing->package_weight_gram ? number_format($packing->package_weight_gram) . ' gram' : null, 'user' => $packing->user?->name, 'color' => 'cyan']);
+            }
+        }
+
+        if ($handover = $order->handoverItem?->handover) {
+            $steps->push(['at' => $order->handoverItem->created_at, 'title' => 'Discan untuk serah terima kurir', 'detail' => $handover->handover_number . ($handover->driver_name ? " · kurir {$handover->driver_name}" : ''), 'user' => $handover->user?->name, 'color' => 'emerald']);
+        }
+
+        // Order lama tanpa audit "Dikirim" tetap punya waktu kirim
+        if ($order->shipped_at && !$steps->contains('title', 'Dikirim')) {
+            $steps->push(['at' => $order->shipped_at, 'title' => 'Dikirim', 'detail' => $order->tracking_number ? "Resi {$order->tracking_number}" : null, 'user' => null, 'color' => 'emerald']);
+        }
+
+        foreach ($order->returns as $return) {
+            $steps->push(['at' => $return->created_at, 'title' => 'Retur diterima', 'detail' => "{$return->return_number} · {$return->reason_label}", 'user' => $return->receiver?->name, 'color' => 'orange', 'url' => route('gudang.retur.show', $return->id)]);
+        }
+
+        // Urut waktu; langkah di detik yang sama mengikuti urutan alur order
+        $rank = array_flip(['Order masuk', 'Dikonfirmasi', 'Dibatalkan', 'Mulai diambil (picking)', 'Selesai diambil', 'Mulai dikemas (packing)',
+            'Selesai dikemas', 'Discan untuk serah terima kurir', 'Dikirim', 'Selesai', 'Retur diterima']);
+
+        return $steps->filter(fn ($step) => $step['at'])
+            ->sortBy([fn ($a, $b) => [$a['at']->getTimestamp(), $rank[$a['title']] ?? 99] <=> [$b['at']->getTimestamp(), $rank[$b['title']] ?? 99]])
+            ->values();
+    }
+
     public function create()
     {
         $skus = MasterSku::where('status', 'AKTIF')

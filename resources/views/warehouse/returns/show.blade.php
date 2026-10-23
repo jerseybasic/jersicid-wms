@@ -28,7 +28,13 @@
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
                 <p class="text-xs text-slate-400">Order</p>
-                <p class="font-mono font-bold text-cyan-400">{{ $return->order?->order_number }}</p>
+                <p class="font-mono font-bold text-cyan-400">
+                    @if ($return->order && !$return->order->trashed())
+                        <a href="{{ route('gudang.outbound.show', $return->order->id) }}" class="hover:underline">{{ $return->order->order_number }}</a>
+                    @else
+                        {{ $return->order?->order_number }}
+                    @endif
+                </p>
             </div>
             <div>
                 <p class="text-xs text-slate-400">Pelanggan</p>
