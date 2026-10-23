@@ -21,6 +21,10 @@
             <div class="p-4 bg-red-900/30 border border-red-500/50 text-red-400 rounded-xl">{{ session('error') }}</div>
         @endif
 
+        {{-- QR perintah yang ditempel di meja: Mulai Picking, Mulai Packing, Cek Retur, Tutup Kiriman --}}
+        <x-scan-box :endpoint="route('gudang.command')" storage-key="tugas" :with-bin="false"
+            hint="Scan QR perintah: Mulai Picking, Mulai Packing, Cek Retur, atau Tutup Kiriman." />
+
         {{-- Ringkasan --}}
         <div class="grid grid-cols-3 gap-3">
             <a href="#ambil" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">

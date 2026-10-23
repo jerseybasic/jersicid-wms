@@ -8,7 +8,7 @@
     'hint' => 'Scan lokasi rak dulu, lalu scan barang. Setiap scan barang menambah 1.',
 ])
 
-<div x-data="scanBox(@js($endpoint), @js($storageKey))"
+<div x-data="scanBox(@js($endpoint), @js($storageKey), @js(route('gudang.command')))"
     class="rounded-2xl border-2 p-4 transition-colors"
     :class="{
         'border-slate-700 bg-slate-900': status === 'idle',
@@ -46,9 +46,10 @@
 
 @once
     <script>
-        function scanBox(endpoint, storageKey) {
+        function scanBox(endpoint, storageKey, commandUrl) {
             return {
                 endpoint: endpoint,
+                commandUrl: commandUrl,
                 storageKey: storageKey,
                 bin: '',
                 status: 'idle',
@@ -81,7 +82,10 @@
                         return;
                     }
 
-                    if (!this.endpoint) {
+                    // QR perintah (CMD-...) bekerja di kotak scan mana pun
+                    const url = code.startsWith('CMD-') ? this.commandUrl : this.endpoint;
+
+                    if (!url) {
                         // Mode lokal: halaman memproses kode lalu memanggil respond()
                         window.dispatchEvent(new CustomEvent('scan-code', {
                             detail: { code: code, bin: this.bin, respond: (result) => this.handle(result) }
@@ -91,7 +95,7 @@
 
                     this.busy = true;
                     try {
-                        const response = await fetch(this.endpoint, {
+                        const response = await fetch(url, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -130,6 +134,11 @@
                     this.message = result.message;
                     this.beep(result.ok);
                     this.focus();
+
+                    if (result.ok && result.redirect) {
+                        setTimeout(() => window.location.href = result.redirect, 400);
+                        return;
+                    }
 
                     if (result.completed) {
                         this.message = result.message + ' Semua item selesai.';

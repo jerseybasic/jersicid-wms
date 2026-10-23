@@ -6,6 +6,7 @@ use App\Rules\LanPrinterIp;
 use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
 use App\Models\PrinterTemplate;
+use App\Models\WarehouseRack;
 use App\Services\ZebraPrinterService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -20,15 +21,19 @@ class PrinterController extends Controller
         $this->printerService = $printerService;
     }
 
+    /**
+     * Halaman cetak label QR dari browser: master SKU, rak & bin, dan QR perintah.
+     * Label dicetak lewat dialog print browser ke printer thermal yang terpasang di komputer.
+     */
     public function index()
     {
-        $templates = PrinterTemplate::orderBy('name')->get();
-
         $skus = MasterSku::where('status', 'AKTIF')
-            ->orderBy('product_name')
-            ->get(['sku', 'product_name', 'size', 'article', 'price']);
+            ->orderBy('sku')
+            ->get(['sku', 'product_name', 'size']);
 
-        return view('warehouse.printer.index', compact('templates', 'skus'));
+        $racks = WarehouseRack::orderBy('code')->pluck('code');
+
+        return view('warehouse.printer.index', compact('skus', 'racks'));
     }
 
     /**

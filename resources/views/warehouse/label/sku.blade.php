@@ -47,6 +47,9 @@
         @if ($truncated)
             <span class="note">Total {{ $total }} pcs, yang ditampilkan hanya {{ count($labels) }} label pertama. Cetak sisanya dari menu Thermal Printer.</span>
         @endif
+        @if (!empty($missing))
+            <span class="note">SKU tidak ditemukan dan dilewati: {{ implode(', ', $missing) }}</span>
+        @endif
     </div>
 
     @php($qrCache = [])

@@ -7,6 +7,10 @@
     </x-slot>
 
     <div class="max-w-3xl mx-auto space-y-6">
+        <a href="{{ route('gudang.closing') }}" class="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-2xl p-4 hover:bg-slate-800/60">
+            <span class="text-sm text-slate-300">Semua kurir hari ini sudah datang?</span>
+            <span class="text-sm font-bold text-emerald-400">Tutup kiriman hari ini</span>
+        </a>
         @if (session('success'))
             <div class="p-3 bg-emerald-900/30 border border-emerald-500/50 text-emerald-400 rounded-lg text-sm">{{ session('success') }}</div>
         @endif
