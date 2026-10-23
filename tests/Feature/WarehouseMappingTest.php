@@ -118,4 +118,62 @@ class WarehouseMappingTest extends TestCase
         $this->post(route('gudang.mapping.assign', 'B'), ['products' => [['sku' => 'JSC-GHOTIC-L', 'max_capacity' => 10]]]);
         $this->assertSame(5, $this->stockQty('JSC-GHOTIC-L', 'DEFAULT-01'));
     }
+
+    public function test_bulk_edit_fixes_capacity_and_moves_wrong_bins(): void
+    {
+        $a = WarehouseRack::create(['code' => 'A', 'position_x' => 1, 'position_y' => 1]);
+        $b = WarehouseRack::create(['code' => 'B', 'position_x' => 2, 'position_y' => 1]);
+        foreach (['JSC-X-M', 'JSC-X-L', 'JSC-Y-L'] as $sku) {
+            $this->makeSku($sku);
+        }
+        $this->putStock('JSC-X-M', 'A-01-01', 4);
+        $this->putStock('JSC-X-M', 'A-02-01', 1);
+        $this->putStock('JSC-X-L', 'A-01-01', 3);
+        DB::table('rack_products')->insert([
+            ['warehouse_rack_id' => $a->id, 'sku' => 'JSC-X-L', 'max_capacity' => 10, 'current_qty' => 0, 'bin_location' => 'A-01-01'],
+            ['warehouse_rack_id' => $a->id, 'sku' => 'JSC-Y-L', 'max_capacity' => 10, 'current_qty' => 0, 'bin_location' => 'A-01-01'],
+        ]);
+
+        $this->actingAs($this->userWithRole('STAFF_GUDANG'));
+        $this->get(route('gudang.mapping.show', 'A'))->assertOk()->assertSee('Edit semua')->assertSee('Hapus terpilih');
+
+        // Bin di luar denah ditolak tanpa mengubah apa pun
+        $this->post(route('gudang.mapping.bulk-update', 'A'), ['items' => [['sku' => 'JSC-X-M', 'bin_code' => 'Z-01-01']]])
+            ->assertSessionHas('error');
+        $this->assertSame(4, $this->stockQty('JSC-X-M', 'A-01-01'));
+
+        $this->post(route('gudang.mapping.bulk-update', 'A'), ['items' => [
+            ['sku' => 'JSC-X-M', 'max_capacity' => 30, 'bin_code' => 'a-02-01'],
+            ['sku' => 'JSC-X-L', 'max_capacity' => '', 'bin_code' => 'B-01-01'],
+            ['sku' => 'JSC-Y-L', 'max_capacity' => 25, 'bin_code' => ''],
+        ]])->assertSessionHas('success', '3 SKU diperbarui. 7 pcs stok dipindah ke lokasi baru.');
+
+        // Semua stok X-M di rak A pindah ke A-02-01, X-L pindah ke rak B beserta penetapannya
+        $this->assertSame([0, 5], [$this->stockQty('JSC-X-M', 'A-01-01'), $this->stockQty('JSC-X-M', 'A-02-01')]);
+        $this->assertSame([0, 3], [$this->stockQty('JSC-X-L', 'A-01-01'), $this->stockQty('JSC-X-L', 'B-01-01')]);
+        $this->assertDatabaseHas('rack_products', ['warehouse_rack_id' => $a->id, 'sku' => 'JSC-X-M', 'max_capacity' => 30, 'bin_location' => 'A-02-01']);
+        $this->assertDatabaseHas('rack_products', ['warehouse_rack_id' => $b->id, 'sku' => 'JSC-X-L', 'max_capacity' => 10, 'bin_location' => 'B-01-01']);
+        $this->assertDatabaseMissing('rack_products', ['warehouse_rack_id' => $a->id, 'sku' => 'JSC-X-L']);
+        $this->assertDatabaseHas('rack_products', ['warehouse_rack_id' => $a->id, 'sku' => 'JSC-Y-L', 'max_capacity' => 25]);
+        $this->assertSame(2, DB::table('stock_movements')->where('type', 'TRANSFER')->where('reference_type', 'MAPPING')->count());
+    }
+
+    public function test_bulk_delete_unassigns_selected_or_all_without_touching_stock(): void
+    {
+        $a = WarehouseRack::create(['code' => 'A', 'position_x' => 1, 'position_y' => 1]);
+        foreach (['JSC-X-M', 'JSC-X-L', 'JSC-Y-L'] as $sku) {
+            $this->makeSku($sku);
+            DB::table('rack_products')->insert(['warehouse_rack_id' => $a->id, 'sku' => $sku, 'max_capacity' => 10, 'current_qty' => 0]);
+        }
+        $this->putStock('JSC-Y-L', 'A-01-01', 2);
+
+        $this->actingAs($this->userWithRole('STAFF_GUDANG'));
+        $this->post(route('gudang.mapping.bulk-delete', 'A'), ['skus' => ['JSC-X-M']])->assertSessionHas('success');
+        $this->assertSame(['JSC-X-L', 'JSC-Y-L'], DB::table('rack_products')->orderBy('sku')->pluck('sku')->all());
+
+        $this->post(route('gudang.mapping.bulk-delete', 'A'), ['skus' => ['JSC-X-L', 'JSC-Y-L']])
+            ->assertSessionHas('success', fn ($message) => str_contains($message, '1 SKU masih tampil'));
+        $this->assertSame(0, DB::table('rack_products')->count());
+        $this->assertSame(2, $this->stockQty('JSC-Y-L', 'A-01-01'));
+    }
 }

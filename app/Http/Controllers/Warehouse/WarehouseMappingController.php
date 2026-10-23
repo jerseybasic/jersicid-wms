@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\MasterSku;
+use App\Models\PickingSessionItem;
 use App\Models\StockActive;
 use App\Models\StockMovement;
 use App\Models\WarehouseRack;
@@ -231,6 +232,183 @@ class WarehouseMappingController extends Controller
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal melepas produk: ' . safe_error_message($e));
         }
+    }
+
+    /**
+     * Edit beberapa SKU sekaligus di rak ini (dipilih atau semua).
+     * Kapasitas kosong = tidak diubah. Lokasi bin baru memindahkan semua stok SKU itu
+     * dari bin rak ini ke bin baru (tercatat TRANSFER); bin di rak lain ikut memindahkan penetapannya.
+     */
+    public function bulkUpdate(Request $request, $rackCode)
+    {
+        $rack = WarehouseRack::where('code', $rackCode)->firstOrFail();
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.sku' => 'required|exists:master_skus,sku',
+            'items.*.max_capacity' => 'nullable|integer|min:1',
+            'items.*.bin_code' => 'nullable|string|max:50',
+        ]);
+
+        $rackIds = WarehouseRack::pluck('id', 'code');
+        $items = collect($validated['items'])->map(function ($item) {
+            $item['bin_code'] = strtoupper(preg_replace('/\s+/', '', $item['bin_code'] ?? ''));
+
+            return $item;
+        });
+
+        $badBin = $items->first(fn ($item) => $item['bin_code'] !== '' && !$rackIds->has(WarehouseRack::codeFromBin($item['bin_code'])));
+        if ($badBin) {
+            return back()->with('error', "Lokasi {$badBin['bin_code']} bukan bin rak yang ada di denah. Contoh: {$rack->code}-01-01.");
+        }
+
+        $changed = 0;
+        $moved = 0;
+        $skipped = [];
+
+        try {
+            DB::transaction(function () use ($rack, $items, $rackIds, $request, &$changed, &$moved, &$skipped) {
+                $reference = 'MAP-' . now()->format('YmdHis');
+
+                foreach ($items as $item) {
+                    $sku = $item['sku'];
+                    $assignment = DB::table('rack_products')->where('warehouse_rack_id', $rack->id)->where('sku', $sku)->first();
+                    $sources = StockActive::where('sku', $sku)->where('qty', '>', 0)->lockForUpdate()->get()
+                        ->filter(fn ($stock) => WarehouseRack::codeFromBin($stock->bin_code) === $rack->code);
+                    $targetBin = $item['bin_code'];
+                    $didChange = false;
+
+                    // Pindah lokasi: semua bin lain di rak ini masuk ke bin baru
+                    $toMove = $targetBin === '' ? collect() : $sources->filter(fn ($stock) => strtoupper($stock->bin_code) !== $targetBin);
+                    if ($toMove->isNotEmpty()) {
+                        $busy = PickingSessionItem::where('sku', $sku)
+                            ->whereIn('bin_code', $toMove->pluck('bin_code'))
+                            ->whereColumn('qty_picked', '<', 'qty_ordered')
+                            ->whereHas('session', fn ($q) => $q->whereIn('status', ['PENDING', 'IN_PROGRESS']))
+                            ->exists();
+                        if ($busy) {
+                            $skipped[] = $sku;
+                            continue;
+                        }
+
+                        foreach ($toMove as $source) {
+                            $qty = (int) $source->qty;
+                            $target = StockActive::lockForUpdate()->firstOrCreate(
+                                ['sku' => $sku, 'bin_code' => $targetBin],
+                                ['qty' => 0, 'reserved_qty' => 0]
+                            );
+                            $targetBefore = (int) $target->qty;
+                            $target->update(['qty' => $targetBefore + $qty, 'last_movement_at' => now()]);
+
+                            StockMovement::create([
+                                'user_id' => auth()->id(),
+                                'sku' => $sku,
+                                'bin_code' => $source->bin_code,
+                                'type' => 'TRANSFER',
+                                'qty' => $qty,
+                                'qty_before' => $qty,
+                                'qty_after' => 0,
+                                'reference_no' => $reference,
+                                'reference_type' => 'MAPPING',
+                                'notes' => "Koreksi lokasi di denah: {$source->bin_code} ke {$targetBin} (sebelumnya {$targetBefore} pcs di sana)",
+                                'ip_address' => $request->ip(),
+                            ]);
+
+                            $source->delete();
+                            $moved += $qty;
+                        }
+                        $didChange = true;
+                    }
+
+                    // Penetapan SKU ke rak: ikut pindah bila bin baru ada di rak lain
+                    $targetRackId = $targetBin !== '' ? $rackIds[WarehouseRack::codeFromBin($targetBin)] : $rack->id;
+                    $capacity = $item['max_capacity'] ?? null;
+                    if ($assignment || $capacity) {
+                        $values = array_filter([
+                            'max_capacity' => $capacity ?? $assignment?->max_capacity,
+                            'bin_location' => $targetBin !== '' ? $targetBin : $assignment?->bin_location,
+                        ], fn ($value) => $value !== null);
+
+                        if ($assignment) {
+                            DB::table('rack_products')->where('id', $assignment->id)->delete();
+                        }
+                        DB::table('rack_products')->updateOrInsert(
+                            ['warehouse_rack_id' => $targetRackId, 'sku' => $sku],
+                            $values + ['current_qty' => 0, 'created_at' => $assignment?->created_at ?? now(), 'updated_at' => now()]
+                        );
+
+                        $didChange = $didChange
+                            || !$assignment
+                            || $targetRackId !== $rack->id
+                            || (int) $assignment->max_capacity !== (int) ($values['max_capacity'] ?? 0)
+                            || ($targetBin !== '' && $assignment->bin_location !== $targetBin);
+                    }
+
+                    $changed += $didChange ? 1 : 0;
+                }
+
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'BULK_UPDATE',
+                    'module' => 'WAREHOUSE_MAPPING',
+                    'new_values' => json_encode([
+                        'rack' => $rack->code,
+                        'items' => $items->values()->all(),
+                        'moved_qty' => $moved,
+                        'skipped' => $skipped,
+                    ]),
+                    'ip_address' => $request->ip(),
+                ]);
+            });
+        } catch (\Exception $e) {
+            return back()->with('error', 'Gagal menyimpan perubahan: ' . safe_error_message($e));
+        }
+
+        $message = "{$changed} SKU diperbarui.";
+        if ($moved) {
+            $message .= " {$moved} pcs stok dipindah ke lokasi baru.";
+        }
+        $redirect = back()->with('success', $message);
+
+        return $skipped
+            ? $redirect->with('error', 'Lokasi tidak dipindah karena sedang dipakai picking: ' . implode(', ', $skipped) . '.')
+            : $redirect;
+    }
+
+    /**
+     * Lepas beberapa SKU dari rak sekaligus (dipilih atau semua). Stok di bin tidak berubah.
+     */
+    public function bulkDelete(Request $request, $rackCode)
+    {
+        $rack = WarehouseRack::where('code', $rackCode)->firstOrFail();
+        $validated = $request->validate([
+            'skus' => 'required|array|min:1',
+            'skus.*' => 'required|string',
+        ]);
+
+        $removed = DB::transaction(function () use ($rack, $validated, $request) {
+            $removed = DB::table('rack_products')
+                ->where('warehouse_rack_id', $rack->id)
+                ->whereIn('sku', $validated['skus'])
+                ->delete();
+
+            AuditTrail::create([
+                'user_id' => auth()->id(),
+                'action' => 'BULK_UNASSIGN',
+                'module' => 'WAREHOUSE_MAPPING',
+                'new_values' => json_encode(['rack' => $rack->code, 'skus' => $validated['skus']]),
+                'ip_address' => $request->ip(),
+            ]);
+
+            return $removed;
+        });
+
+        $stillStocked = $this->rackProducts($rack)->whereIn('sku', $validated['skus'])->pluck('sku');
+        $message = "{$removed} SKU dilepas dari rak {$rack->code}.";
+        if ($stillStocked->isNotEmpty()) {
+            $message .= " {$stillStocked->count()} SKU masih tampil karena stoknya ada di bin rak ini; pindahkan lokasinya lewat Edit atau kurangi lewat Stock Opname.";
+        }
+
+        return back()->with('success', $message);
     }
 
     /**
