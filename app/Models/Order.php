@@ -116,6 +116,18 @@ class Order extends Model
         return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 
+    /** Order dengan nomor order atau nomor resi ini (huruf besar/kecil diabaikan) */
+    public static function findByCode(string $code): ?self
+    {
+        $code = strtoupper(trim($code));
+        if ($code === '') {
+            return null;
+        }
+
+        return static::whereRaw('UPPER(order_number) = ?', [$code])->first()
+            ?? static::whereRaw('UPPER(tracking_number) = ?', [$code])->latest()->first();
+    }
+
     /** Batas kirim order ini (lihat ShipDeadline) */
     public function shipDeadline(): \Carbon\Carbon
     {

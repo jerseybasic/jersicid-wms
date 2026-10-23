@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
+use App\Models\Order;
 use App\Models\StockActive;
 use App\Models\WarehouseRack;
 use Illuminate\Http\Request;
@@ -51,6 +52,16 @@ class BarcodeScannerController extends Controller
             ]);
         }
 
+        // No. order atau no. resi (QR di label kirim): buka detail order
+        if ($order = Order::findByCode($code)) {
+            return response()->json([
+                'ok' => true,
+                'type' => 'order',
+                'message' => "Order {$order->order_number}: {$order->status_label}",
+                'redirect' => route('gudang.outbound.show', $order->id),
+            ]);
+        }
+
         // Kode bin persis, atau kode rak (semua bin di rak itu)
         $rackCode = WarehouseRack::codeFromBin($code);
         $isRack = WarehouseRack::where('code', $code)->exists();
@@ -67,7 +78,7 @@ class BarcodeScannerController extends Controller
         if ($stocks->isEmpty() && !WarehouseRack::isKnownBin($code)) {
             return response()->json([
                 'ok' => false,
-                'message' => "Kode {$code} tidak dikenal sebagai SKU maupun lokasi rak.",
+                'message' => "Kode {$code} tidak dikenal sebagai SKU, lokasi rak, maupun nomor order/resi.",
             ], 404);
         }
 

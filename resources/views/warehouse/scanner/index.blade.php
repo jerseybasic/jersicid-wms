@@ -11,12 +11,13 @@
             </a>
             <div>
                 <h2 class="font-semibold text-xl text-white leading-tight">Cek Barang &amp; Lokasi</h2>
-                <p class="text-sm text-slate-400 mt-1">Scan SKU untuk melihat lokasinya, atau scan bin/rak untuk melihat isinya</p>
+                <p class="text-sm text-slate-400 mt-1">Scan SKU, bin/rak, atau no. order/resi</p>
             </div>
         </div>
     </x-slot>
 
-    <div class="max-w-4xl mx-auto space-y-6" x-data="stockCheck()" @scan-code.window="check($event.detail)">
+    <div class="max-w-4xl mx-auto space-y-6" x-data="stockCheck()" @scan-code.window="check($event.detail)"
+        x-init="@js(request('kode')) && check({ code: @js(request('kode')), respond: () => {} })">
 
         <x-scan-box storage-key="cek-lokasi" :with-bin="false"
             hint="Halaman ini hanya untuk cek. Untuk menambah atau mengurangi stok, scan di layar Inbound, Picking, atau Stock Opname." />
@@ -71,7 +72,9 @@
                             headers: { 'Accept': 'application/json' },
                         });
                         const data = await response.json();
-                        if (data.ok) {
+                        if (data.ok && data.redirect) {
+                            window.location = data.redirect;
+                        } else if (data.ok) {
                             this.result = data;
                         }
                         respond({ ok: !!data.ok, message: data.message || 'Kode tidak dikenal.' });

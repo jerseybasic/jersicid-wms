@@ -30,10 +30,12 @@ class ScanCommandController extends Controller
             'CMD-PACKING' => $this->startPacking($request),
             'CMD-RETUR' => $this->open('Membuka cek retur...', route('gudang.retur.create')),
             'CMD-TUTUP' => $this->open('Membuka tutup kiriman hari ini...', route('gudang.closing')),
-            default => response()->json([
-                'ok' => false,
-                'message' => 'Ini bukan QR perintah. Scan barang di layar picking, packing, atau cek barang.',
-            ], 422),
+            default => ($order = Order::findByCode($validated['code']))
+                ? $this->open("Membuka order {$order->order_number}...", route('gudang.outbound.show', $order->id))
+                : response()->json([
+                    'ok' => false,
+                    'message' => 'Ini bukan QR perintah atau nomor order. Scan barang di layar picking, packing, atau cek barang.',
+                ], 422),
         };
     }
 

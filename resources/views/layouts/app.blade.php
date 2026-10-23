@@ -661,6 +661,8 @@
                     <!-- Right Side: Notifications & User Menu -->
                     <div class="flex items-center gap-3">
 
+                        <x-quick-search />
+
                         <!-- Notifications Dropdown -->
                         <div class="relative" x-data="{ open: false }" @click.away="open = false">
                             <button @click="open = !open"
