@@ -195,6 +195,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->prefix('gudang/transfer')->group(function () {
     Route::get('/', [TransferController::class, 'index'])->name('gudang.transfer');
     Route::post('/', [TransferController::class, 'store'])->name('gudang.transfer.store');
+    Route::get('/isi', [TransferController::class, 'lookup'])->name('gudang.transfer.lookup');
 });
 
 // ==================== STOCK OPNAME (GUDANG) ====================
