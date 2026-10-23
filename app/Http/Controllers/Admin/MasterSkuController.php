@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
 use App\Models\StockActive;
+use App\Services\MasterSkuSync;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -14,12 +16,7 @@ use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Concerns\WithStrictNullComparison;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Maatwebsite\Excel\Concerns\WithBatchInserts;
-use Illuminate\Database\Eloquent\Model;
 
 class MasterSkuExport implements FromCollection, WithHeadings, WithMapping, WithStrictNullComparison
 {
@@ -72,154 +69,10 @@ class MasterSkuExport implements FromCollection, WithHeadings, WithMapping, With
     }
 }
 
-class MasterSkuImport implements ToModel, WithHeadingRow, WithChunkReading, WithBatchInserts
-{
-    private $stockEntries = [];
-    private $stats = [
-        'inserted' => 0,
-        'skipped' => 0,
-        'updated' => 0,
-        'stock_inserted' => 0,
-    ];
-
-    public function model(array $row): ?Model
-    {
-        // Skip baris kosong
-        if (empty($row['sku']) || empty($row['product_name'])) {
-            return null;
-        }
-
-        $sku = trim($row['sku'] ?? '');
-        $sizeCategory = strtoupper(trim($row['size_category'] ?? ''));
-        $status = strtoupper(trim($row['status'] ?? 'AKTIF'));
-
-        // Validasi size_category
-        if (!in_array($sizeCategory, ['DEWASA', 'KIDS', 'TEENS'])) {
-            $this->stats['skipped']++;
-            return null;
-        }
-
-        // ✅ FIX: Incremental import - cek apakah SKU sudah ada
-        $existingSku = MasterSku::where('sku', $sku)->first();
-
-        if ($existingSku) {
-            // ✅ UPDATE jika SKU sudah ada (jika ada perubahan data)
-            $hasChanges = false;
-            $updateData = [];
-
-            $fields = ['article', 'product_name', 'version', 'sub_version', 'size_category', 'size', 'size_token', 'price', 'standard_weight_gram', 'min_stock', 'status'];
-
-            // Harga modal hanya diubah kalau kolomnya ada di file, supaya file lama tidak menghapusnya
-            if (($cost = MasterSku::costFromRow($row)) !== null) {
-                $fields[] = 'cost_price';
-                $row['cost_price'] = $cost;
-            }
-
-            foreach ($fields as $field) {
-                $newValue = $this->normalizeValue($row[$field] ?? null, $field);
-                if ($existingSku->$field != $newValue) {
-                    $updateData[$field] = $newValue;
-                    $hasChanges = true;
-                }
-            }
-
-            if ($hasChanges) {
-                $existingSku->update($updateData);
-                $this->stats['updated']++;
-            } else {
-                $this->stats['skipped']++;
-            }
-
-            // Tetap proses stok untuk SKU yang sudah ada
-            $currentStock = $this->parseNumber($row['current_stock'] ?? 0);
-            if ($currentStock > 0) {
-                $this->stockEntries[] = [
-                    'sku' => $sku,
-                    'qty' => $currentStock,
-                ];
-            }
-
-            return null; // Return null karena sudah diupdate manual
-        }
-
-        // ✅ INSERT SKU baru
-        $currentStock = $this->parseNumber($row['current_stock'] ?? 0);
-
-        if ($currentStock > 0) {
-            $this->stockEntries[] = [
-                'sku' => $sku,
-                'qty' => $currentStock,
-            ];
-        }
-
-        $this->stats['inserted']++;
-
-        return new MasterSku([
-            'sku' => $sku,
-            'article' => trim($row['article'] ?? ''),
-            'product_name' => trim($row['product_name'] ?? ''),
-            'version' => trim($row['version'] ?? ''),
-            'sub_version' => !empty($row['sub_version']) && $row['sub_version'] !== '-' ? trim($row['sub_version']) : null,
-            'size_category' => $sizeCategory,
-            'size' => trim($row['size'] ?? ''),
-            'size_token' => !empty($row['size_token']) && $row['size_token'] !== '-' ? trim($row['size_token']) : null,
-            'price' => $this->parseNumber($row['price'] ?? 0),
-            'cost_price' => MasterSku::costFromRow($row) ?? 0,
-            'standard_weight_gram' => (int) ($row['standard_weight_gram'] ?? 250),
-            'min_stock' => (int) ($row['min_stock'] ?? 0),
-            'status' => in_array($status, ['AKTIF', 'NONAKTIF']) ? $status : 'AKTIF',
-        ]);
-    }
-
-    private function normalizeValue($value, $field): mixed
-    {
-        if ($field === 'price' || $field === 'cost_price' || $field === 'standard_weight_gram' || $field === 'min_stock') {
-            return $this->parseNumber($value ?? 0);
-        }
-
-        if ($field === 'sub_version' || $field === 'size_token') {
-            return !empty($value) && $value !== '-' ? trim($value) : null;
-        }
-
-        if ($field === 'size_category' || $field === 'status') {
-            return strtoupper(trim($value ?? ''));
-        }
-
-        return trim($value ?? '');
-    }
-
-    private function parseNumber($value): int
-    {
-        if (is_numeric($value)) {
-            return (int) $value;
-        }
-        $cleaned = preg_replace('/[^0-9]/', '', (string) $value);
-        return (int) ($cleaned ?: 0);
-    }
-
-    public function getStockEntries(): array
-    {
-        return $this->stockEntries;
-    }
-
-    public function getStats(): array
-    {
-        return $this->stats;
-    }
-
-    public function chunkSize(): int
-    {
-        return 1000; // ✅ Lebih besar untuk performa
-    }
-
-    public function batchSize(): int
-    {
-        return 1000; // ✅ Batch insert untuk performa
-    }
-}
-
 class MasterSkuController extends Controller
 {
+    private const IMPORT_CACHE_MINUTES = 60;
+
     public function index(Request $request)
     {
         // ✅ FIX: Group by product_name + version (lebih akurat daripada article)
@@ -426,105 +279,77 @@ class MasterSkuController extends Controller
     }
 
     /**
-     * ✅ FIX: Incremental Import dengan Optimasi Performa
+     * Import ulang langkah 1: baca file lalu tampilkan pratinjau perubahan dibanding data saat ini.
      */
-    public function import(Request $request)
+    public function import(Request $request, MasterSkuSync $sync)
     {
-        // ✅ OPTIMASI: Increase execution time untuk file besar
-        set_time_limit(300); // 5 menit
-        ini_set('memory_limit', '512M');
-
         $request->validate([
-            'file' => 'required|file|mimes:xlsx,xls,csv|max:10240', // 10MB
+            'file' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+        ], [
+            'file.mimes' => 'File harus Excel (.xlsx/.xls) atau CSV.',
         ]);
 
+        set_time_limit(300);
+
         try {
-            DB::beginTransaction();
-
-            // ✅ OPTIMASI: Disable query log untuk performa
-            DB::connection()->disableQueryLog();
-
-            // ✅ FIX: Incremental import - TIDAK hapus data lama
-            $import = new MasterSkuImport();
-
-            $startTime = microtime(true);
-
-            Excel::import($import, $request->file('file'));
-
-            // ✅ FIX: Insert/update stok ke stock_actives
-            $stockEntries = $import->getStockEntries();
-            $stats = $import->getStats();
-            $stockInserted = 0;
-            $stockUpdated = 0;
-
-            // Group by SKU untuk aggregate stok
-            $stockBySku = [];
-            foreach ($stockEntries as $entry) {
-                if (!isset($stockBySku[$entry['sku']])) {
-                    $stockBySku[$entry['sku']] = 0;
-                }
-                $stockBySku[$entry['sku']] += $entry['qty'];
-            }
-
-            // ✅ OPTIMASI: Batch upsert stock_actives
-            foreach ($stockBySku as $sku => $totalQty) {
-                $existingStock = StockActive::where('sku', $sku)->where('bin_code', 'GUDANG-UTAMA')->first();
-
-                if ($existingStock) {
-                    // Update stok yang sudah ada
-                    $existingStock->update([
-                        'qty' => $totalQty,
-                        'last_movement_at' => now(),
-                    ]);
-                    $stockUpdated++;
-                } else {
-                    // Insert stok baru
-                    StockActive::create([
-                        'id' => (string) Str::uuid(),
-                        'sku' => $sku,
-                        'bin_code' => 'GUDANG-UTAMA',
-                        'qty' => $totalQty,
-                        'reserved_qty' => 0,
-                        'received_at' => now(),
-                        'last_movement_at' => now(),
-                    ]);
-                    $stockInserted++;
-                }
-            }
-
-            DB::commit();
-
-            $endTime = microtime(true);
-            $executionTime = round($endTime - $startTime, 2);
-
-            $message = sprintf(
-                "✅ Import berhasil! (%.2f detik)\n" .
-                    "📦 SKU: %d baru, %d diupdate, %d diskip\n" .
-                    "📊 Stok: %d insert, %d update",
-                $executionTime,
-                $stats['inserted'],
-                $stats['updated'],
-                $stats['skipped'],
-                $stockInserted,
-                $stockUpdated
-            );
-
-            return back()->with('success', $message);
-        } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
-            DB::rollBack();
-            $failures = $e->failures();
-            $errors = [];
-            foreach ($failures as $failure) {
-                $errors[] = "Baris {$failure->row()}: " . implode(', ', $failure->errors());
-            }
-            return back()->withErrors(['error' => 'Import gagal: ' . implode('; ', array_slice($errors, 0, 5))]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Import Master SKU failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return back()->withErrors(['error' => 'Gagal import: ' . safe_error_message($e)]);
+            $result = $sync->compare($sync->parse($request->file('file')->getRealPath()));
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Import Master SKU: file tidak bisa dibaca', ['error' => $e->getMessage()]);
+            return back()->with('error', 'File tidak bisa dibaca: ' . safe_error_message($e));
         }
+
+        if (!$result['rows']) {
+            return back()->with('error', 'Tidak ada baris SKU di file ini.');
+        }
+
+        $token = (string) Str::uuid();
+        $fileName = $request->file('file')->getClientOriginalName();
+        Cache::put($this->importCacheKey($token), $result + ['fileName' => $fileName], now()->addMinutes(self::IMPORT_CACHE_MINUTES));
+
+        return view('admin.master-skus.import-preview', $result + [
+            'token' => $token,
+            'fileName' => $fileName,
+            'summary' => MasterSkuSync::summary($result['rows']),
+            'hasWork' => MasterSkuSync::hasWork($result['rows']),
+        ]);
+    }
+
+    /**
+     * Import ulang langkah 2: simpan perubahan yang sudah ditinjau.
+     */
+    public function storeImport(Request $request, MasterSkuSync $sync)
+    {
+        $validated = $request->validate(['token' => ['required', 'string']]);
+
+        $cached = Cache::pull($this->importCacheKey($validated['token']));
+        if (!$cached) {
+            return redirect()->route('master-skus.index')->with('error', 'Pratinjau sudah kedaluwarsa. Upload ulang filenya.');
+        }
+
+        try {
+            $done = DB::transaction(fn () => $sync->apply($cached['rows'], auth()->id(), $request->ip(), $cached['fileName']));
+        } catch (\Throwable $e) {
+            Log::error('Import Master SKU gagal disimpan', ['error' => $e->getMessage()]);
+            return redirect()->route('master-skus.index')->with('error', 'Gagal menyimpan import: ' . safe_error_message($e));
+        }
+
+        $parts = array_filter([
+            $done['new'] ? "{$done['new']} SKU baru" : null,
+            $done['up'] ? "{$done['up']} SKU stoknya bertambah" : null,
+            $done['down'] ? "{$done['down']} SKU stoknya berkurang" : null,
+            $done['changed'] ? "{$done['changed']} SKU data produknya diperbarui" : null,
+        ]);
+        $message = $parts
+            ? 'Import selesai: ' . implode(', ', $parts) . ". Perubahan stok tercatat di Laporan Pergerakan Stok dengan referensi {$done['reference']}."
+            : 'Import selesai, tidak ada perubahan.';
+
+        return redirect()->route('master-skus.index')->with('success', $message);
+    }
+
+    private function importCacheKey(string $token): string
+    {
+        return 'master-sku-import:' . auth()->id() . ':' . $token;
     }
 }

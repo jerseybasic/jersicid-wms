@@ -7,7 +7,6 @@ use App\Exports\MovementReportExport;
 use App\Exports\OpnameReportExport;
 use App\Exports\StockReportExport;
 use App\Exports\TemplateExport;
-use App\Imports\MasterSkuImport;
 use App\Models\StockActive;
 use App\Models\StockMovement;
 use App\Models\StockOpname;
@@ -113,47 +112,6 @@ class ReportController extends Controller
 
         return view('reports.opname', compact('opnames'));
     }
-    public function importSku(Request $request)
-    {
-        $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
-        ]);
-
-        try {
-            $import = new MasterSkuImport();
-
-            DB::transaction(function () use ($request, $import) {
-                Excel::import($import, $request->file('file'));
-            });
-
-            $imported = $import->getImportedCount();
-            $updated = $import->getUpdatedCount();
-            $skipped = $import->getSkippedCount();
-            $stockCreated = $import->getStockCreatedCount();
-
-            $message = "Import selesai! ";
-            if ($imported > 0) $message .= "{$imported} SKU baru ditambahkan. ";
-            if ($updated > 0) $message .= "{$updated} SKU diupdate. ";
-            if ($stockCreated > 0) $message .= "{$stockCreated} stok diimport. ";
-            if ($skipped > 0) $message .= "({$skipped} baris dilewati).";
-
-            return back()->with('success', $message);
-        } catch (\Maatwebsite\Excel\Validators\ValidationException $e) {
-            $failures = $e->failures();
-            $errors = [];
-            foreach ($failures as $failure) {
-                $errors[] = "Baris {$failure->row()}: " . implode(', ', $failure->errors());
-            }
-            $errorMsg = implode('; ', array_slice($errors, 0, 5));
-            if (count($errors) > 5) {
-                $errorMsg .= " ... dan " . (count($errors) - 5) . " error lainnya";
-            }
-            return back()->with('error', 'Gagal import: ' . $errorMsg);
-        } catch (\Exception $e) {
-            return back()->with('error', 'Gagal import: ' . safe_error_message($e));
-        }
-    }
-
     public function downloadTemplate(Request $request)
     {
         $includeStock = $request->has('with_stock');
