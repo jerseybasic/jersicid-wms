@@ -47,6 +47,7 @@ class AccessAndPagesTest extends TestCase
         'reports.stock',
         'reports.movement',
         'reports.opname',
+        'reports.shipping',
         'settings.index',
         'users.index',
         'users.create',

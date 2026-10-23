@@ -104,6 +104,13 @@
             <h3 class="text-lg font-bold text-white mb-1">Nilai Stok</h3>
             <p class="text-sm text-slate-400">Nilai jual, nilai modal (HPP), dan potensi laba per kategori dan produk.</p>
         </a>
+        <a href="{{ route('reports.shipping') }}" class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl hover:border-rose-500/50 transition-all group">
+            <div class="w-12 h-12 bg-rose-500/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <svg class="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-1">Ketepatan Kirim</h3>
+            <p class="text-sm text-slate-400">Persentase order yang dikirim sebelum batas kirim, per hari dan per kurir.</p>
+        </a>
     </div>
 
     <!-- Quick Stats Summary -->

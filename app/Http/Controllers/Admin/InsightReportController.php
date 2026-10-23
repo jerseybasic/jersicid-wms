@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Exports\ArrayExport;
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\PackingSession;
 use App\Models\PickingSession;
 use App\Models\StockActive;
 use App\Models\StockMovement;
 use App\Models\StockOpname;
 use App\Models\StockOpnameItem;
+use App\Services\ShipDeadline;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -204,6 +206,57 @@ class InsightReportController extends Controller
         }
 
         return view('reports.stock-value', compact('categories', 'products', 'total'));
+    }
+
+    /**
+     * Ketepatan kirim: order yang dikirim dalam periode dibandingkan dengan batas kirimnya,
+     * per hari dan per kurir, plus order yang sekarang sudah lewat batas tapi belum dikirim.
+     */
+    public function shipping(Request $request)
+    {
+        [$start, $end] = $this->period($request);
+
+        $orders = Order::whereNotNull('shipped_at')
+            ->whereBetween('shipped_at', [$start, $end])
+            ->whereNotIn('status', ['CANCELLED'])
+            ->get(['id', 'order_number', 'customer_name', 'courier', 'created_at', 'shipped_at', 'ship_by'])
+            ->each(function ($order) {
+                $order->deadline = ShipDeadline::of($order);
+                $order->on_time = $order->shipped_at->lte($order->deadline);
+                // Order yang dicatat setelah dikirim (input susulan) tidak ikut rata-rata
+                $minutes = $order->created_at->diffInMinutes($order->shipped_at);
+                $order->hours = $minutes >= 0 ? round($minutes / 60, 1) : null;
+            });
+
+        $stats = function ($group) {
+            $onTime = $group->where('on_time', true)->count();
+
+            return [
+                'shipped' => $group->count(),
+                'on_time' => $onTime,
+                'late' => $group->count() - $onTime,
+                'rate' => $group->count() ? round($onTime / $group->count() * 100, 1) : null,
+                'avg_hours' => $group->count() ? round($group->avg('hours'), 1) : null,
+            ];
+        };
+
+        $summary = $stats($orders) + [
+            'open_late' => Order::whereIn('status', ShipDeadline::OPEN_STATUSES)->where('ship_by', '<', now())->count(),
+        ];
+        $daily = $orders->groupBy(fn ($o) => $o->shipped_at->toDateString())->sortKeysDesc()->map($stats);
+        $couriers = $orders->groupBy(fn ($o) => $o->courier ?: 'Tanpa kurir')->map($stats)->sortByDesc('shipped');
+        $late = $orders->where('on_time', false)
+            ->sortByDesc(fn ($o) => $o->deadline->diffInMinutes($o->shipped_at))->values();
+
+        if ($request->query('export') === 'excel') {
+            return $this->excel('Ketepatan_Kirim', ['No. Order', 'Pembeli', 'Kurir', 'Order masuk', 'Batas kirim', 'Dikirim', 'Status'],
+                $orders->sortBy('shipped_at')->map(fn ($o) => [
+                    $o->order_number, $o->customer_name, $o->courier, $o->created_at->format('Y-m-d H:i'),
+                    $o->deadline->format('Y-m-d H:i'), $o->shipped_at->format('Y-m-d H:i'), $o->on_time ? 'Tepat waktu' : 'Terlambat',
+                ])->values()->all(), $start, $end);
+        }
+
+        return view('reports.shipping', compact('start', 'end', 'summary', 'daily', 'couriers', 'late'));
     }
 
     private function excel(string $name, array $headings, array $rows, ?Carbon $start = null, ?Carbon $end = null)
