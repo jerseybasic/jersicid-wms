@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\PackingSession;
 use App\Models\PickingBatch;
 use App\Models\PickingSession;
+use App\Services\ShipDeadline;
 
 /**
  * Daftar tugas staf gudang dalam satu layar yang nyaman dipakai di HP:
@@ -37,6 +38,7 @@ class TaskController extends Controller
             ->whereDoesntHave('pickingSession')
             ->withSum('items', 'qty_ordered')
             ->withCount('items')
+            ->orderBy('ship_by')
             ->orderBy('created_at')
             ->get();
 
@@ -45,16 +47,22 @@ class TaskController extends Controller
             ->with('pickingSession:id,order_id,batch_id,basket_no', 'pickingSession.batch:id,batch_number')
             ->withSum('items', 'qty_ordered')
             ->withCount('items')
+            ->orderBy('ship_by')
             ->orderBy('picked_at')
             ->get();
 
         $toShip = Order::where('status', 'READY_TO_SHIP')
             ->withSum('items', 'qty_ordered')
+            ->orderBy('ship_by')
             ->orderBy('packed_at')
             ->get();
 
+        // Order yang belum dikirim, dihitung per batas kirim (terlambat / harus kirim hari ini)
+        $deadlines = Order::whereIn('status', ShipDeadline::OPEN_STATUSES)->get(['id', 'ship_by', 'created_at'])
+            ->countBy(fn ($order) => $order->shipStatus());
+
         $toRefill = ReplenishmentController::pendingCount();
 
-        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'toPick', 'toPack', 'toShip', 'toRefill'));
+        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'toPick', 'toPack', 'toShip', 'toRefill', 'deadlines'));
     }
 }

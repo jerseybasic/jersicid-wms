@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Services\ShipDeadline;
 use Illuminate\Support\Str;
 
 class Order extends Model
@@ -47,6 +48,7 @@ class Order extends Model
         'picked_at',
         'packed_at',
         'shipped_at',
+        'ship_by',
         'notes',
     ];
 
@@ -54,6 +56,7 @@ class Order extends Model
         'picked_at' => 'datetime',
         'packed_at' => 'datetime',
         'shipped_at' => 'datetime',
+        'ship_by' => 'datetime',
     ];
 
     protected static function boot()
@@ -63,6 +66,7 @@ class Order extends Model
             if (empty($model->id)) {
                 $model->id = (string) Str::uuid();
             }
+            $model->ship_by ??= ShipDeadline::forOrderedAt(now());
         });
     }
 
@@ -110,5 +114,17 @@ class Order extends Model
     public function getStatusLabelAttribute(): string
     {
         return self::STATUS_LABELS[$this->status] ?? $this->status;
+    }
+
+    /** Batas kirim order ini (lihat ShipDeadline) */
+    public function shipDeadline(): \Carbon\Carbon
+    {
+        return ShipDeadline::of($this);
+    }
+
+    /** late / today / tomorrow / later */
+    public function shipStatus(): string
+    {
+        return ShipDeadline::status($this);
     }
 }

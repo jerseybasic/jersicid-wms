@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\WhatsAppMessage;
 use App\Console\Commands\SendLowStockAlert;
 use App\Services\LowStock;
+use App\Services\ShipDeadline;
 use App\Services\WhatsApp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -35,6 +36,8 @@ class SettingsController extends Controller
             'company_phone' => SystemSetting::get('company_phone', ''),
             'company_address' => SystemSetting::get('company_address', ''),
             'low_stock_threshold' => LowStock::defaultThreshold(),
+            'ship_cutoff_hour' => ShipDeadline::cutoffHour(),
+            'ship_grace_days' => ShipDeadline::graceDays(),
         ];
 
         $whatsapp = [
@@ -60,6 +63,8 @@ class SettingsController extends Controller
             'company_phone' => ['nullable', 'string', 'max:30'],
             'company_address' => ['nullable', 'string', 'max:255'],
             'low_stock_threshold' => ['required', 'integer', 'min:0', 'max:100000'],
+            'ship_cutoff_hour' => ['nullable', 'integer', 'min:0', 'max:23'],
+            'ship_grace_days' => ['nullable', 'integer', 'min:0', 'max:14'],
         ]);
 
         SystemSetting::set('company_name', $validated['company_name'], 'COMPANY', 'Nama pengirim di label kirim');
@@ -67,6 +72,14 @@ class SettingsController extends Controller
         SystemSetting::set('company_address', $validated['company_address'] ?? '', 'COMPANY', 'Alamat pengirim di label kirim');
         SystemSetting::set('low_stock_threshold', (string) $validated['low_stock_threshold'], 'INVENTORY',
             'Batas stok menipis untuk SKU yang min stoknya 0 (0 = tidak dipakai)');
+        if (isset($validated['ship_cutoff_hour'])) {
+            SystemSetting::set('ship_cutoff_hour', (string) $validated['ship_cutoff_hour'], 'ORDER',
+                'Jam potong: order masuk sebelum jam ini harus dikirim hari itu juga');
+        }
+        if (isset($validated['ship_grace_days'])) {
+            SystemSetting::set('ship_grace_days', (string) $validated['ship_grace_days'], 'ORDER',
+                'Tambahan hari dari batas kirim order');
+        }
 
         return back()->with('success', 'Pengaturan berhasil disimpan.');
     }

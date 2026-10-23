@@ -54,6 +54,7 @@
                                    class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500">
                             <div class="flex-1 min-w-0">
                                 <p class="font-bold text-white truncate">{{ $order->order_number }}</p>
+                                <x-ship-badge :order="$order" class="mt-0.5" />
                                 <p class="text-sm text-slate-400 truncate">{{ $order->customer_name }} · {{ $order->courier ?: 'kurir belum diisi' }}</p>
                             </div>
                             <p class="text-right text-sm text-slate-300 shrink-0">{{ $order->items_count }} SKU<br><span class="font-bold text-white">{{ (int) $order->items_sum_qty_ordered }} pcs</span></p>

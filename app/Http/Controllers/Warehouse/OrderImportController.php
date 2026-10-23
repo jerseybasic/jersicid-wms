@@ -9,7 +9,9 @@ use App\Models\MasterSku;
 use App\Models\OrderItem;
 use App\Models\SkuAlias;
 use App\Services\BigSellerOrderImport;
+use App\Services\ShipDeadline;
 use App\Services\StockAvailability;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -169,6 +171,7 @@ class OrderImportController extends Controller
                     'tracking_number' => $data['tracking_number'],
                     'status' => 'PENDING',
                     'notes' => $this->notes($data),
+                    'ship_by' => $this->shipBy($data),
                     'created_by' => auth()->id(),
                 ]);
 
@@ -217,6 +220,17 @@ class OrderImportController extends Controller
         }
 
         return redirect()->route('gudang.outbound')->with(count($created) ? 'success' : 'error', $message);
+    }
+
+    /** Batas kirim dari file; jika tidak ada, dihitung dari waktu pesanan dibuat di marketplace */
+    private function shipBy(array $data): ?Carbon
+    {
+        if ($deadline = ShipDeadline::parse($data['ship_by'] ?? null)) {
+            return $deadline;
+        }
+        $orderedAt = ShipDeadline::parse($data['ordered_at'] ?? null);
+
+        return $orderedAt ? ShipDeadline::forOrderedAt($orderedAt) : null;
     }
 
     private function notes(array $data): string

@@ -28,6 +28,7 @@ class PickingBatchController extends Controller
             ->whereDoesntHave('pickingSession')
             ->withSum('items', 'qty_ordered')
             ->withCount('items')
+            ->orderBy('ship_by')
             ->orderBy('created_at')
             ->get();
 
