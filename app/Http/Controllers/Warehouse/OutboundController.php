@@ -45,7 +45,8 @@ class OutboundController extends Controller
                 : $query->whereBetween('ship_by', [now(), now()->endOfDay()]);
         }
 
-        $orders = $query->paginate(15)->withQueryString();
+        $perPage = in_array((int) $request->per_page, [15, 50, 100], true) ? (int) $request->per_page : 15;
+        $orders = $query->paginate($perPage)->withQueryString();
 
         // Stats
         $stats = [
@@ -347,8 +348,57 @@ class OutboundController extends Controller
         ]);
 
         $order = Order::findOrFail($id);
-        $newStatus = $validated['status'];
+        $error = $this->changeStatus($order, $validated['status'], $request, $validated);
 
+        return $error
+            ? back()->with('error', $error)
+            : back()->with('success', "Order {$order->order_number} sekarang: {$order->status_label}.");
+    }
+
+    /**
+     * Aksi massal dari daftar Outbound: konfirmasi, selesai, atau batalkan banyak order sekaligus.
+     * Order yang tidak bisa diproses (status tidak cocok, stok kurang) dilewati dan disebutkan alasannya.
+     */
+    public function bulkStatus(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['string'],
+            'status' => ['required', 'in:CONFIRMED,CANCELLED,COMPLETED'],
+        ], [
+            'ids.required' => 'Pilih minimal satu order.',
+        ]);
+
+        // Yang paling mendesak diproses dulu, supaya stok terbatas jatuh ke order dengan batas kirim terdekat
+        $orders = Order::whereIn('id', $validated['ids'])->orderBy('ship_by')->orderBy('created_at')->get();
+
+        $done = 0;
+        $skipped = [];
+        foreach ($orders as $order) {
+            $error = $this->changeStatus($order, $validated['status'], $request);
+            if ($error) {
+                $skipped[] = $error;
+            } else {
+                $done++;
+            }
+        }
+
+        $verbs = ['CONFIRMED' => 'dikonfirmasi', 'CANCELLED' => 'dibatalkan', 'COMPLETED' => 'diselesaikan'];
+        $redirect = back();
+        if ($done) {
+            $redirect = $redirect->with('success', "{$done} order {$verbs[$validated['status']]}.");
+        }
+        if ($skipped) {
+            $more = count($skipped) > 10 ? ' (dan ' . (count($skipped) - 10) . ' lainnya)' : '';
+            $redirect = $redirect->with('error', count($skipped) . ' order dilewati: ' . implode(' ', array_slice($skipped, 0, 10)) . $more);
+        }
+
+        return $redirect;
+    }
+
+    /** Ubah status satu order sesuai alur yang diizinkan. Mengembalikan pesan error, atau null jika berhasil. */
+    private function changeStatus(Order $order, string $newStatus, Request $request, array $input = []): ?string
+    {
         $allowedTransitions = [
             'PENDING' => ['CONFIRMED', 'CANCELLED'],
             'CONFIRMED' => ['CANCELLED'],
@@ -357,19 +407,19 @@ class OutboundController extends Controller
         ];
 
         if (!in_array($newStatus, $allowedTransitions[$order->status] ?? [])) {
-            return back()->with('error', "Order {$order->order_number} tidak bisa diubah dari {$order->status_label} ke " . Order::STATUS_LABELS[$newStatus] . '.');
+            return "Order {$order->order_number} tidak bisa diubah dari {$order->status_label} ke " . Order::STATUS_LABELS[$newStatus] . '.';
         }
 
         // Konfirmasi hanya jika stok cukup, supaya picker tidak berangkat mengambil barang yang tidak ada
         if ($newStatus === 'CONFIRMED' && $shortages = StockAvailability::shortages($order)) {
-            return back()->with('error', "Order {$order->order_number} belum bisa dikonfirmasi, stok kurang: " . StockAvailability::describe($shortages) . '.');
+            return "Order {$order->order_number} belum bisa dikonfirmasi, stok kurang: " . StockAvailability::describe($shortages) . '.';
         }
 
         $updateData = ['status' => $newStatus];
 
         if ($newStatus === 'SHIPPED') {
-            $updateData['tracking_number'] = $validated['tracking_number'];
-            $updateData['courier'] = $validated['courier'] ?? $order->courier;
+            $updateData['tracking_number'] = $input['tracking_number'];
+            $updateData['courier'] = $input['courier'] ?? $order->courier;
             $updateData['shipped_at'] = now();
         }
 
@@ -387,6 +437,6 @@ class OutboundController extends Controller
             ]);
         });
 
-        return back()->with('success', "Order {$order->order_number} sekarang: {$order->status_label}.");
+        return null;
     }
 }

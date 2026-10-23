@@ -124,6 +124,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/import/map', [OrderImportController::class, 'map'])->name('outbound.import.map');
     Route::post('/import', [OrderImportController::class, 'store'])->name('outbound.import.store');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
+    Route::post('/massal', [OutboundController::class, 'bulkStatus'])->name('outbound.bulk-status');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
     Route::get('/{id}/edit', [OutboundController::class, 'edit'])->name('outbound.edit');
     Route::put('/{id}', [OutboundController::class, 'update'])->name('outbound.update');
