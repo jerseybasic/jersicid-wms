@@ -36,7 +36,7 @@ class SystemChecksTest extends TestCase
         $this->actingAs($this->userWithRole('STAFF_GUDANG'))
             ->from(route('gudang.transfer'))
             ->post(route('gudang.transfer.store'), [])
-            ->assertSessionHasErrors(['sku' => 'SKU wajib diisi.']);
+            ->assertSessionHasErrors(['bin_from' => 'rak asal wajib diisi.']);
     }
 
     public function test_order_cannot_be_confirmed_without_enough_free_stock(): void
