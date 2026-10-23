@@ -24,6 +24,8 @@ use App\Http\Controllers\Warehouse\BarcodeScannerController;
 use App\Http\Controllers\Warehouse\PrinterController;
 use App\Http\Controllers\Warehouse\LabelController;
 use App\Http\Controllers\Warehouse\TaskController;
+use App\Http\Controllers\Warehouse\ScanCommandController;
+use App\Http\Controllers\Warehouse\ShipmentClosingController;
 use App\Http\Controllers\Warehouse\ReturnController;
 use App\Http\Controllers\Auth\LoginController;
 
@@ -244,13 +246,18 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/test-connection', [PrinterController::class, 'testConnection'])->name('printer.test');
     });
 
-// Tugas staf (tampilan HP) dan cetak label dari browser
+// Tugas staf (tampilan HP), cetak label dari browser, QR perintah, dan tutup kiriman harian
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang')
     ->name('gudang.')
     ->group(function () {
         Route::get('/tugas', [TaskController::class, 'index'])->name('tugas');
         Route::get('/label/sku', [LabelController::class, 'sku'])->name('label.sku');
+        Route::get('/label/rak', [LabelController::class, 'bins'])->name('label.bins');
+        Route::get('/label/perintah', [LabelController::class, 'commands'])->name('label.commands');
+        Route::post('/perintah', [ScanCommandController::class, 'run'])->name('command');
+        Route::get('/tutup-kiriman', [ShipmentClosingController::class, 'index'])->name('closing');
+        Route::post('/tutup-kiriman', [ShipmentClosingController::class, 'store'])->name('closing.store');
         Route::get('/label/kirim-massal', [LabelController::class, 'shippingBulk'])->name('label.shipping-bulk');
         Route::get('/label/kirim/{order}', [LabelController::class, 'shipping'])->name('label.shipping');
     });

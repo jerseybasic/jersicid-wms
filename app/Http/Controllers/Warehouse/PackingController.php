@@ -8,6 +8,7 @@ use App\Models\PackingSession;
 use App\Models\PackingSessionItem;
 use App\Models\PickingSession;
 use App\Models\AuditTrail;
+use App\Services\Packing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -62,32 +63,10 @@ class PackingController extends Controller
             $session = DB::transaction(function () use ($validated, $request) {
                 $user = auth()->user();
                 $order = Order::with('pickingSession.items')->lockForUpdate()->findOrFail($validated['order_id']);
-                if ($order->status !== 'PACKING' || $order->packingSession()->exists()) {
-                    throw new \RuntimeException('Order harus sudah selesai picking dan belum punya sesi packing.');
-                }
-
-                $session = PackingSession::create([
-                    'order_id' => $validated['order_id'],
-                    'picking_session_id' => $order->pickingSession?->id,
-                    'user_id' => $user->id,
-                    'status' => 'PENDING',
+                $session = Packing::createForOrder($order, $user->id, [
                     'courier' => $validated['courier'] ?? null,
                     'notes' => $validated['notes'] ?? null,
                 ]);
-
-                // Ambil items dari picking session
-                if ($order->pickingSession) {
-                    foreach ($order->pickingSession->items as $pickItem) {
-                        PackingSessionItem::create([
-                            'packing_session_id' => $session->id,
-                            'order_item_id' => $pickItem->order_item_id,
-                            'sku' => $pickItem->sku,
-                            'qty_ordered' => $pickItem->qty_ordered,
-                            'qty_packed' => 0,
-                            'status' => 'PENDING',
-                        ]);
-                    }
-                }
 
                 AuditTrail::create([
                     'user_id' => $user->id,
