@@ -277,6 +277,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('reports')->group(f
     Route::get('/barang-lambat', [InsightReportController::class, 'slowMoving'])->name('reports.slow-moving');
     Route::get('/akurasi-opname', [InsightReportController::class, 'opnameAccuracy'])->name('reports.opname-accuracy');
     Route::get('/nilai-stok', [InsightReportController::class, 'stockValue'])->name('reports.stock-value');
+    Route::get('/ketepatan-kirim', [InsightReportController::class, 'shipping'])->name('reports.shipping');
     Route::get('/import-sku', function () {
         return view('reports.import-sku');
     })->name('reports.import-sku-form');
