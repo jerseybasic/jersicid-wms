@@ -38,9 +38,25 @@
         </div>
 
         {{-- Sedang berjalan --}}
-        @if ($activePicking->isNotEmpty() || $activePacking->isNotEmpty())
+        @if ($activePicking->isNotEmpty() || $activeBatches->isNotEmpty() || $activePacking->isNotEmpty())
             <section class="space-y-3">
                 <h3 class="text-lg font-semibold text-white">Sedang berjalan</h3>
+                @foreach ($activeBatches as $batch)
+                    @php $batchItems = $batch->sessions->flatMap->items; @endphp
+                    <div class="{{ $card }} border-cyan-500/40">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-bold text-cyan-400">PICKING GABUNGAN</p>
+                                <p class="text-base font-bold text-white">{{ $batch->sessions->count() }} order · {{ $batch->sessions->where('status', 'COMPLETED')->count() }} keranjang lengkap</p>
+                                <p class="text-sm text-slate-400 font-mono">{{ $batch->batch_number }}</p>
+                            </div>
+                            <p class="text-right text-sm text-slate-300">
+                                <span class="text-xl font-bold text-white">{{ $batchItems->sum('qty_picked') }}</span>/{{ $batchItems->sum('qty_ordered') }} pcs
+                            </p>
+                        </div>
+                        <a href="{{ route('gudang.picking-batch.show', $batch) }}" class="{{ $bigButton }} bg-cyan-500 text-slate-900">Lanjutkan picking gabungan</a>
+                    </div>
+                @endforeach
                 @foreach ($activePicking as $session)
                     <div class="{{ $card }} border-amber-500/40">
                         <div class="flex items-start justify-between gap-3">
@@ -84,6 +100,11 @@
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                 Perlu diambil (picking) <span class="{{ $pill }} bg-amber-500/20 text-amber-400">{{ $toPick->count() }}</span>
             </h3>
+            @if ($toPick->count() >= 2)
+                <a href="{{ route('gudang.picking-batch.create') }}" class="{{ $bigButton }} block bg-slate-800 border border-cyan-500/50 text-cyan-300">
+                    Ambil beberapa order sekaligus
+                </a>
+            @endif
             @forelse ($toPick as $order)
                 <div class="{{ $card }}">
                     <div class="flex items-start justify-between gap-3">
@@ -114,6 +135,9 @@
                 <div class="{{ $card }}">
                     <div class="flex items-start justify-between gap-3">
                         <div>
+                            @if ($order->pickingSession?->basket_no)
+                                <p class="text-xs font-bold text-cyan-400">KERANJANG {{ $order->pickingSession->basket_no }} · {{ $order->pickingSession->batch?->batch_number }}</p>
+                            @endif
                             <p class="text-base font-bold text-white">{{ $order->order_number }}</p>
                             <p class="text-sm text-slate-400">{{ $order->customer_name }} · {{ $order->courier ?: 'kurir belum diisi' }}</p>
                         </div>

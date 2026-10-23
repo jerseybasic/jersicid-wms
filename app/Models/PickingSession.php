@@ -18,6 +18,8 @@ class PickingSession extends Model
         'id',
         'session_number',
         'order_id',
+        'batch_id',
+        'basket_no',
         'user_id',
         'status',
         'started_at',
@@ -46,6 +48,11 @@ class PickingSession extends Model
     public function order()
     {
         return $this->belongsTo(Order::class, 'order_id');
+    }
+
+    public function batch()
+    {
+        return $this->belongsTo(PickingBatch::class, 'batch_id');
     }
 
     public function user()

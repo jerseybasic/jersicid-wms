@@ -33,6 +33,14 @@ Di semua role, ikon **lonceng** di kanan atas menunjukkan pekerjaan yang sedang 
 2. Mulai sesi, pergi ke rak yang disarankan, scan rak, lalu scan setiap barang.
 3. Setelah semua barang terambil, order otomatis pindah ke packing.
 
+### Picking gabungan (beberapa order sekaligus)
+1. Di **Tugas Saya**, klik **Ambil beberapa order sekaligus** (atau **Picking Gabungan** di halaman Picking).
+2. Centang order yang mau diambil (2 sampai 20), atau klik **5 terlama** / **10 terlama**, lalu klik **Mulai picking gabungan**.
+3. Siapkan keranjang bernomor 1, 2, 3, dan seterusnya. Keranjang 1 untuk order terlama.
+4. Ikuti **Daftar ambil**: setiap SKU cukup diambil sekali per rak, sudah diurutkan per rak. Scan rak, lalu scan barang. Layar menampilkan **Masukkan ke keranjang N** dengan angka besar.
+5. Begitu satu keranjang lengkap, order-nya langsung masuk **Perlu dikemas**, lengkap dengan nomor keranjangnya.
+6. Jika harus berhenti, klik **Batalkan keranjang yang belum lengkap**, lalu kembalikan barang dari keranjang itu ke raknya. Stoknya otomatis dikembalikan dan order kembali ke antrean picking.
+
 ### Mengemas (Packing)
 1. Buka **Packing**, lalu pilih order yang perlu dikemas.
 2. Mulai sesi, lalu scan setiap barang yang masuk ke paket.

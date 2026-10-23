@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\PackingSession;
+use App\Models\PickingBatch;
 use App\Models\PickingSession;
 
 /**
@@ -18,6 +19,12 @@ class TaskController extends Controller
     {
         $activePicking = PickingSession::with(['order:id,order_number,customer_name', 'items:id,picking_session_id,bin_code,qty_ordered,qty_picked'])
             ->whereIn('status', ['PENDING', 'IN_PROGRESS'])
+            ->whereNull('batch_id')
+            ->orderBy('created_at')
+            ->get();
+
+        $activeBatches = PickingBatch::with('sessions.items:id,picking_session_id,qty_ordered,qty_picked')
+            ->where('status', 'IN_PROGRESS')
             ->orderBy('created_at')
             ->get();
 
@@ -35,6 +42,7 @@ class TaskController extends Controller
 
         $toPack = Order::where('status', 'PACKING')
             ->whereDoesntHave('packingSession')
+            ->with('pickingSession:id,order_id,batch_id,basket_no', 'pickingSession.batch:id,batch_number')
             ->withSum('items', 'qty_ordered')
             ->withCount('items')
             ->orderBy('picked_at')
@@ -45,6 +53,6 @@ class TaskController extends Controller
             ->orderBy('packed_at')
             ->get();
 
-        return view('warehouse.tasks.index', compact('activePicking', 'activePacking', 'toPick', 'toPack', 'toShip'));
+        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'toPick', 'toPack', 'toShip'));
     }
 }

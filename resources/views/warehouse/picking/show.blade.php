@@ -37,6 +37,13 @@
             </div>
         @endif
 
+        @if ($session->batch_id)
+            <div class="p-4 bg-cyan-900/20 border border-cyan-500/40 text-cyan-200 rounded-xl text-sm">
+                Order ini bagian dari picking gabungan (keranjang {{ $session->basket_no }}).
+                <a href="{{ route('gudang.picking-batch.show', $session->batch_id) }}" class="font-semibold underline">Buka picking gabungan</a>
+            </div>
+        @endif
+
         <!-- Action Bar -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
             <div class="text-sm text-slate-400">

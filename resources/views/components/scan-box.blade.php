@@ -34,6 +34,11 @@
             </div>
         @endif
     </div>
+    {{-- Picking gabungan: nomor keranjang tujuan barang yang baru di-scan --}}
+    <div x-show="basket" x-cloak class="mt-3 flex items-center gap-3 px-4 py-3 rounded-xl bg-cyan-500 text-slate-900">
+        <span class="text-sm font-bold uppercase">Masukkan ke keranjang</span>
+        <span class="ml-auto text-4xl font-black leading-none" x-text="basket"></span>
+    </div>
     <p class="mt-3 text-sm font-semibold"
         :class="{ 'text-slate-400': status === 'idle', 'text-emerald-400': status === 'ok', 'text-red-400': status === 'error' }"
         x-text="message || @js($hint)"></p>
@@ -48,6 +53,7 @@
                 bin: '',
                 status: 'idle',
                 message: '',
+                basket: null,
                 busy: false,
                 audio: null,
 
@@ -119,6 +125,7 @@
                         });
                     });
 
+                    this.basket = result.ok && result.basket ? result.basket : null;
                     this.status = result.ok ? 'ok' : 'error';
                     this.message = result.message;
                     this.beep(result.ok);
