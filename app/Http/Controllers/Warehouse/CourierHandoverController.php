@@ -7,8 +7,12 @@ use App\Models\AuditTrail;
 use App\Models\CourierHandover;
 use App\Models\CourierHandoverItem;
 use App\Models\Order;
+use App\Models\CourierAlias;
+use App\Models\SkuAlias;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Serah terima paket ke kurir: pilih kurir, scan resi setiap paket yang diserahkan,
@@ -16,21 +20,67 @@ use Illuminate\Support\Facades\DB;
  */
 class CourierHandoverController extends Controller
 {
-    public function index()
+    /**
+     * Serah terima per ekspedisi: paket hasil packing dikelompokkan per ekspedisi dengan
+     * statusnya (belum di-scan, sudah di-scan, sudah diserahkan pada tanggal yang dipilih),
+     * supaya staf dan kurir bisa mengecek paket mana yang sudah terkirim.
+     */
+    public function index(Request $request)
     {
-        $open = CourierHandover::with('user:id,name')->withCount('items')
-            ->where('status', 'OPEN')->orderBy('created_at')->get();
+        $validated = $request->validate(['tanggal' => ['nullable', 'date']]);
+        $date = Carbon::parse($validated['tanggal'] ?? today())->startOfDay();
 
-        // Paket Siap Kirim per kurir, yang belum masuk serah terima mana pun
-        $couriers = Order::where('status', 'READY_TO_SHIP')->whereDoesntHave('handoverItem')
-            ->get(['id', 'courier'])
-            ->countBy(fn ($order) => CourierHandover::brand($order->courier))
-            ->sortKeys();
+        $ready = Order::where('status', 'READY_TO_SHIP')
+            ->with('handoverItem.handover:id,handover_number,status')
+            ->withSum('items', 'qty_ordered')
+            ->orderBy('packed_at')
+            ->get();
+
+        $shipped = Order::whereIn('status', ['SHIPPED', 'COMPLETED'])
+            ->whereBetween('shipped_at', [$date, $date->copy()->endOfDay()])
+            ->with('handoverItem.handover:id,handover_number,driver_name,completed_at')
+            ->withSum('items', 'qty_ordered')
+            ->orderBy('shipped_at')
+            ->get();
+
+        $open = CourierHandover::with('user:id,name')->where('status', 'OPEN')->get()->keyBy('courier');
+
+        // Paket tanpa resi tidak bisa di-scan; ditampilkan terpisah supaya resinya dilengkapi
+        [$noResi, $ready] = $ready->partition(fn (Order $order) => blank($order->tracking_number));
+
+        $groups = $ready->concat($shipped)
+            ->groupBy(fn (Order $order) => CourierHandover::brand($order->courier))
+            ->map(function ($orders, $courier) use ($open) {
+                $state = fn (Order $order) => match (true) {
+                    $order->status !== 'READY_TO_SHIP' => 'shipped',
+                    $order->handoverItem !== null => 'scanned',
+                    default => 'waiting',
+                };
+                $orders = $orders->sortBy(fn ($order) => ['waiting' => 0, 'scanned' => 1, 'shipped' => 2][$state($order)])->values();
+
+                return [
+                    'courier' => $courier,
+                    'key' => self::key($courier),
+                    'open' => $open[$courier] ?? null,
+                    'orders' => $orders->map(fn ($order) => ['order' => $order, 'state' => $state($order)]),
+                    'counts' => array_merge(['waiting' => 0, 'scanned' => 0, 'shipped' => 0], $orders->countBy($state)->all()),
+                ];
+            })
+            ->sortBy(fn ($group) => [$group['counts']['waiting'] + $group['counts']['scanned'] > 0 ? 0 : 1, $group['courier']])
+            ->values();
 
         $history = CourierHandover::with('user:id,name')->withCount('items')
             ->where('status', 'COMPLETED')->latest('completed_at')->limit(20)->get();
 
-        return view('warehouse.handover.index', compact('open', 'couriers', 'history'));
+        $canMap = in_array(auth()->user()->role, SkuAlias::MANAGER_ROLES, true);
+
+        return view('warehouse.handover.index', compact('groups', 'noResi', 'history', 'date', 'canMap'));
+    }
+
+    /** Kunci HTML untuk angka per ekspedisi yang diperbarui setelah scan */
+    public static function key(string $courier): string
+    {
+        return Str::slug($courier) ?: 'x';
     }
 
     public function store(Request $request)
@@ -74,35 +124,12 @@ class CourierHandoverController extends Controller
                     throw new \RuntimeException('Serah terima ini sudah selesai.');
                 }
 
-                $order = Order::with('handoverItem.handover:id,handover_number,courier')
-                    ->withSum('items', 'qty_ordered')
-                    ->where(fn ($q) => $q->whereRaw('UPPER(tracking_number) = ?', [$code])->orWhereRaw('UPPER(order_number) = ?', [$code]))
-                    ->lockForUpdate()
-                    ->first();
-
-                if (!$order) {
-                    throw new \RuntimeException("Resi atau nomor order {$code} tidak ditemukan.");
-                }
-                if ($order->status === 'SHIPPED' || $order->status === 'COMPLETED') {
-                    throw new \RuntimeException("{$order->order_number} sudah dikirim sebelumnya" . ($order->shipped_at ? ' (' . $order->shipped_at->format('d/m H:i') . ')' : '') . '.');
-                }
-                if ($order->status !== 'READY_TO_SHIP') {
-                    throw new \RuntimeException("{$order->order_number} belum siap kirim (status: {$order->status_label}). Jangan diserahkan.");
-                }
+                $order = $this->scannableOrder($code);
                 if (($brand = CourierHandover::brand($order->courier)) !== $handover->courier) {
                     throw new \RuntimeException("{$order->order_number} untuk kurir {$brand}, bukan {$handover->courier}. Pisahkan paket ini.");
                 }
-                if (blank($order->tracking_number)) {
-                    throw new \RuntimeException("{$order->order_number} belum punya nomor resi. Isi resinya dulu di Outbound.");
-                }
-                if ($item = $order->handoverItem) {
-                    throw new \RuntimeException($item->courier_handover_id === $handover->id
-                        ? "{$order->order_number} sudah ada di daftar."
-                        : "{$order->order_number} sudah masuk serah terima {$item->handover?->handover_number}.");
-                }
 
-                CourierHandoverItem::create(['courier_handover_id' => $handover->id, 'order_id' => $order->id]);
-                $count = $handover->items()->count();
+                $count = $this->add($handover, $order);
 
                 return [
                     'ok' => true,
@@ -119,6 +146,83 @@ class CourierHandoverController extends Controller
         } catch (\RuntimeException $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
         }
+    }
+
+    /**
+     * Scan resi di halaman per ekspedisi: paket langsung masuk ke serah terima ekspedisinya
+     * (dibuka otomatis bila belum ada), tanpa harus memilih kurir dulu.
+     */
+    public function scanAny(Request $request)
+    {
+        $validated = $request->validate(['code' => ['required', 'string', 'max:100']]);
+        $code = strtoupper(trim($validated['code']));
+
+        try {
+            $result = DB::transaction(function () use ($code) {
+                $order = $this->scannableOrder($code);
+                $courier = CourierHandover::brand($order->courier);
+
+                $handover = CourierHandover::where('status', 'OPEN')->where('courier', $courier)->lockForUpdate()->first()
+                    ?? CourierHandover::create(['courier' => $courier, 'user_id' => auth()->id(), 'status' => 'OPEN']);
+                $count = $this->add($handover, $order);
+                $waiting = CourierHandover::readyOrders($courier, $handover->id)->filter(fn ($o) => !$o->handoverItem && filled($o->tracking_number))->count();
+                $key = self::key($courier);
+
+                return [
+                    'ok' => true,
+                    'type' => 'order',
+                    'message' => "✓ {$courier} · {$order->order_number} · {$order->tracking_number}. {$courier}: {$count} paket di-scan" . ($waiting ? ", {$waiting} belum." : ', semua sudah.'),
+                    'items' => [
+                        ['id' => 'scanned-' . $key, 'qty' => $count],
+                        ['id' => 'waiting-' . $key, 'qty' => $waiting],
+                        ['id' => 'pkg-' . $order->id, 'qty' => 'Di-scan', 'class' => 'font-semibold text-cyan-400'],
+                    ],
+                ];
+            });
+
+            return response()->json($result);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    /** Order Siap Kirim dengan resi/no. order ini yang boleh diserahkan (dikunci), atau pesan kenapa tidak */
+    private function scannableOrder(string $code): Order
+    {
+        $order = Order::with('handoverItem.handover:id,handover_number,courier')
+            ->withSum('items', 'qty_ordered')
+            ->where(fn ($q) => $q->whereRaw('UPPER(tracking_number) = ?', [$code])->orWhereRaw('UPPER(order_number) = ?', [$code]))
+            ->lockForUpdate()
+            ->first();
+
+        if (!$order) {
+            throw new \RuntimeException("Resi atau nomor order {$code} tidak ditemukan.");
+        }
+        if ($order->status === 'SHIPPED' || $order->status === 'COMPLETED') {
+            throw new \RuntimeException("{$order->order_number} sudah dikirim sebelumnya" . ($order->shipped_at ? ' (' . $order->shipped_at->format('d/m H:i') . ')' : '') . '.');
+        }
+        if ($order->status !== 'READY_TO_SHIP') {
+            throw new \RuntimeException("{$order->order_number} belum siap kirim (status: {$order->status_label}). Jangan diserahkan.");
+        }
+        if (blank($order->tracking_number)) {
+            throw new \RuntimeException("{$order->order_number} belum punya nomor resi. Cek di BigSeller lalu isi resinya di detail order.");
+        }
+
+        return $order;
+    }
+
+    /** Masukkan order ke daftar serah terima; mengembalikan jumlah paket di daftar */
+    private function add(CourierHandover $handover, Order $order): int
+    {
+        if ($item = $order->handoverItem) {
+            throw new \RuntimeException($item->courier_handover_id === $handover->id
+                ? "{$order->order_number} sudah ada di daftar."
+                : "{$order->order_number} sudah masuk serah terima {$item->handover?->handover_number}.");
+        }
+
+        CourierHandoverItem::create(['courier_handover_id' => $handover->id, 'order_id' => $order->id]);
+
+        return $handover->items()->count();
     }
 
     /** Keluarkan paket dari daftar (misalnya kurir menolak paketnya) */
@@ -182,6 +286,73 @@ class CourierHandoverController extends Controller
 
         return redirect()->route('gudang.handover.print', $handover)
             ->with('success', "{$count} paket diserahkan ke {$handover->courier} dan berstatus Dikirim.");
+    }
+
+    /**
+     * Pemetaan nama jasa kirim ke ekspedisi: setiap nama yang pernah muncul di order
+     * beserta ekspedisi tempat paketnya dikelompokkan.
+     */
+    public function couriers()
+    {
+        abort_unless(in_array(auth()->user()->role, SkuAlias::MANAGER_ROLES, true), 403);
+
+        $aliases = CourierAlias::pluck('courier', 'name');
+        $names = Order::whereNotNull('courier')->where('created_at', '>=', now()->subDays(90))
+            ->distinct()->pluck('courier')
+            ->map(fn ($name) => CourierHandover::normalizeName($name))
+            ->concat($aliases->keys())
+            ->filter()->unique()->sort()->values()
+            ->map(fn ($name) => ['name' => $name, 'courier' => CourierHandover::brand($name), 'custom' => isset($aliases[$name])]);
+
+        return view('warehouse.handover.couriers', [
+            'names' => $names,
+            'brands' => $names->pluck('courier')->concat(array_values(CourierHandover::DEFAULT_BRANDS))->unique()->sort()->values(),
+        ]);
+    }
+
+    public function saveCouriers(Request $request)
+    {
+        abort_unless(in_array(auth()->user()->role, SkuAlias::MANAGER_ROLES, true), 403);
+
+        $validated = $request->validate([
+            'map' => ['required', 'array'],
+            'map.*.name' => ['required', 'string', 'max:100'],
+            'map.*.courier' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $changed = DB::transaction(function () use ($validated, $request) {
+            $changed = [];
+            foreach ($validated['map'] as ['name' => $name, 'courier' => $courier]) {
+                $name = CourierHandover::normalizeName($name);
+                $courier = CourierHandover::normalizeName($courier);
+                $before = CourierHandover::brand($name);
+
+                // Kosong atau sama dengan aturan bawaan: cukup pakai aturan bawaan
+                CourierAlias::where('name', $name)->first()?->delete();
+                if ($courier !== '' && $courier !== CourierHandover::brand($name)) {
+                    CourierAlias::create(['name' => $name, 'courier' => $courier]);
+                }
+
+                if (($after = CourierHandover::brand($name)) !== $before) {
+                    $changed[$name] = $after;
+                }
+            }
+
+            if ($changed) {
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'UPDATE',
+                    'module' => 'EKSPEDISI',
+                    'new_values' => json_encode($changed),
+                    'ip_address' => $request->ip(),
+                ]);
+            }
+
+            return $changed;
+        });
+
+        return redirect()->route('gudang.handover.couriers')
+            ->with('success', $changed ? count($changed) . ' nama jasa kirim dipetakan ulang.' : 'Tidak ada yang berubah.');
     }
 
     public function print(CourierHandover $handover)

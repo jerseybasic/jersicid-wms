@@ -63,8 +63,13 @@
             @endif
         </section>
 
+        @php
+            // Paket ekspedisi ini yang masih tertinggal (dihitung ulang dari layar, karena scan tidak memuat ulang halaman)
+            $total = $orders->filter(fn ($order) => filled($order->tracking_number))->count();
+        @endphp
         <form method="POST" action="{{ route('gudang.handover.finish', $handover) }}" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3"
-              onsubmit="return confirm('Semua paket yang sudah di-scan akan berstatus Dikirim. Lanjutkan?')">
+              onsubmit="const left = {{ $total }} - parseInt(document.querySelector('[data-scan-qty=count]').textContent || '0', 10);
+                        return confirm((left > 0 ? 'Masih ada ' + left + ' paket ' + @js($handover->courier) + ' yang belum di-scan. Paket itu tetap Siap Kirim untuk penjemputan berikutnya.\n\n' : '') + 'Semua paket yang sudah di-scan akan berstatus Dikirim. Lanjutkan?')">
             @csrf
             <div>
                 <label for="driver_name" class="block text-xs font-medium text-slate-400 mb-1">Nama kurir yang menerima (opsional)</label>

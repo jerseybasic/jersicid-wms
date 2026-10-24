@@ -170,6 +170,9 @@
                             } else {
                                 el.textContent = item.qty;
                             }
+                            if (item.class) {
+                                el.className = item.class;
+                            }
                         });
                     });
 

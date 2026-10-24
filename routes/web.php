@@ -175,6 +175,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->group(function () {
         Route::get('/', [CourierHandoverController::class, 'index']);
         Route::post('/', [CourierHandoverController::class, 'store'])->name('.store');
+        Route::post('/scan', [CourierHandoverController::class, 'scanAny'])->name('.scan-any');
+        Route::get('/ekspedisi', [CourierHandoverController::class, 'couriers'])->name('.couriers');
+        Route::post('/ekspedisi', [CourierHandoverController::class, 'saveCouriers'])->name('.couriers.save');
         Route::get('/{handover}', [CourierHandoverController::class, 'show'])->name('.show');
         Route::post('/{handover}/scan', [CourierHandoverController::class, 'scan'])->name('.scan');
         Route::delete('/{handover}/paket/{order}', [CourierHandoverController::class, 'removeItem'])->name('.remove');
