@@ -67,6 +67,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
         Route::get('/article/{productName}/{version}/skus', [MasterSkuController::class, 'getArticleSkus'])->name('master-skus.article-skus');
         Route::get('/export', [MasterSkuController::class, 'export'])->name('export');
         Route::post('/import', [MasterSkuController::class, 'import'])->name('import');
+        Route::post('/import/simpan', [MasterSkuController::class, 'storeImport'])->name('import.store');
         // Reset menghapus seluruh Master SKU + stok, jadi hanya OWNER
     });
 
@@ -291,7 +292,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('reports')->group(f
     Route::get('/import-sku', function () {
         return view('reports.import-sku');
     })->name('reports.import-sku-form');
-    Route::post('/import-sku', [ReportController::class, 'importSku'])->name('reports.import-sku');
+    // Import ulang memakai alur pratinjau yang sama dengan halaman Master SKU
+    Route::post('/import-sku', [MasterSkuController::class, 'import'])->name('reports.import-sku');
     Route::get('/download-template', [ReportController::class, 'downloadTemplate'])->name('reports.download-template');
 });
 
