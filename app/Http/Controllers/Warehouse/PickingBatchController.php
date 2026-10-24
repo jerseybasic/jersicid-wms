@@ -24,12 +24,9 @@ class PickingBatchController extends Controller
 {
     public function create()
     {
-        $orders = Order::where('status', 'CONFIRMED')
-            ->whereDoesntHave('pickingSession')
+        $orders = self::waitingOrders()
             ->withSum('items', 'qty_ordered')
             ->withCount('items')
-            ->orderBy('ship_by')
-            ->orderBy('created_at')
             ->get();
 
         return view('warehouse.picking.batch-create', ['orders' => $orders, 'max' => PickingBatch::MAX_ORDERS]);
@@ -48,38 +45,88 @@ class PickingBatchController extends Controller
 
         try {
             $batch = DB::transaction(function () use ($validated, $request) {
-                $user = auth()->user();
                 $orders = Order::with('items')->whereIn('id', $validated['order_ids'])
                     ->orderBy('created_at')->lockForUpdate()->get();
                 if ($orders->count() !== count($validated['order_ids'])) {
                     throw new \RuntimeException('Sebagian order tidak ditemukan. Muat ulang halaman.');
                 }
 
-                // Langsung dimulai: yang membuat picking gabungan adalah yang mengambil barangnya
-                $batch = PickingBatch::create(['user_id' => $user->id, 'status' => 'IN_PROGRESS', 'started_at' => now()]);
-                foreach ($orders->values() as $i => $order) {
-                    Picking::createForOrder($order, $user->id, [
-                        'batch_id' => $batch->id,
-                        'basket_no' => $i + 1,
-                        'status' => 'IN_PROGRESS',
-                        'started_at' => now(),
-                    ]);
-                }
-
-                AuditTrail::create([
-                    'user_id' => $user->id,
-                    'action' => 'CREATE',
-                    'module' => 'PICKING',
-                    'new_values' => json_encode(['batch_number' => $batch->batch_number, 'orders' => $orders->pluck('order_number')]),
-                    'ip_address' => $request->ip(),
-                ]);
-
-                return $batch;
+                return self::createBatch($orders, auth()->id(), $request->ip());
             });
         } catch (\RuntimeException $e) {
             return back()->with('error', 'Gagal membuat picking gabungan: ' . $e->getMessage());
         }
 
+        return $this->started($batch);
+    }
+
+    /**
+     * Gabung otomatis: ambil order yang menunggu picking dengan batas kirim paling dekat,
+     * tanpa perlu mencentang satu per satu. Satu order saja langsung jadi picking biasa.
+     */
+    public function auto(Request $request)
+    {
+        $validated = $request->validate(['jumlah' => ['nullable', 'integer', 'min:2', 'max:' . PickingBatch::MAX_ORDERS]]);
+
+        $started = DB::transaction(function () use ($validated, $request) {
+            $orders = self::waitingOrders()->with('items')->limit($validated['jumlah'] ?? PickingBatch::AUTO_ORDERS)->lockForUpdate()->get();
+
+            if ($orders->count() === 1) {
+                return Picking::createForOrder($orders->first(), auth()->id(), ['status' => 'IN_PROGRESS', 'started_at' => now()]);
+            }
+
+            return $orders->isEmpty() ? null : self::createBatch($orders, auth()->id(), $request->ip());
+        });
+
+        if (!$started) {
+            return back()->with('error', 'Tidak ada order yang menunggu picking.');
+        }
+        if ($started instanceof PickingSession) {
+            return redirect()->route('gudang.picking.show', $started->id)->with('success', 'Hanya ada 1 order, langsung picking biasa. Mulai scan barang.');
+        }
+
+        return $this->started($started);
+    }
+
+    /** Order yang menunggu picking, batas kirim paling dekat dulu */
+    public static function waitingOrders()
+    {
+        return Order::where('status', 'CONFIRMED')
+            ->whereDoesntHave('pickingSession')
+            ->orderBy('ship_by')
+            ->orderBy('created_at');
+    }
+
+    /**
+     * Buat picking gabungan yang langsung berjalan untuk order-order ini (sudah dikunci).
+     * Nomor keranjang mengikuti urutan order. Harus dipanggil di dalam transaksi.
+     */
+    public static function createBatch($orders, string $userId, ?string $ip): PickingBatch
+    {
+        // Langsung dimulai: yang membuat picking gabungan adalah yang mengambil barangnya
+        $batch = PickingBatch::create(['user_id' => $userId, 'status' => 'IN_PROGRESS', 'started_at' => now()]);
+        foreach ($orders->values() as $i => $order) {
+            Picking::createForOrder($order, $userId, [
+                'batch_id' => $batch->id,
+                'basket_no' => $i + 1,
+                'status' => 'IN_PROGRESS',
+                'started_at' => now(),
+            ]);
+        }
+
+        AuditTrail::create([
+            'user_id' => $userId,
+            'action' => 'CREATE',
+            'module' => 'PICKING',
+            'new_values' => json_encode(['batch_number' => $batch->batch_number, 'orders' => $orders->pluck('order_number')]),
+            'ip_address' => $ip,
+        ]);
+
+        return $batch;
+    }
+
+    private function started(PickingBatch $batch)
+    {
         return redirect()->route('gudang.picking-batch.show', $batch)
             ->with('success', 'Picking gabungan dibuat. Siapkan keranjang bernomor 1 sampai ' . $batch->sessions()->count() . ', lalu mulai scan.');
     }
@@ -160,7 +207,7 @@ class PickingBatchController extends Controller
 
                 $session = PickingSession::with('order:id,order_number')->lockForUpdate()->findOrFail($chosen->picking_session_id);
                 $item = PickingSessionItem::lockForUpdate()->findOrFail($chosen->id);
-                $binCode = $bin ?: $item->bin_code;
+                [$binCode, $warning] = Picking::resolveBin($item, $bin ?: null);
 
                 Picking::apply($session, $item, $item->qty_picked + 1, $binCode, auth()->id(), $request->ip());
 
@@ -168,11 +215,6 @@ class PickingBatchController extends Controller
                 $session->refresh();
                 $batch->refresh();
                 $basket = $session->basket_no;
-
-                $batchItems = PickingSessionItem::whereIn('picking_session_id', PickingSession::where('batch_id', $batch->id)->select('id'));
-                $skuPicked = (int) (clone $batchItems)->where('sku', $code)->sum('qty_picked');
-                $totalPicked = (int) $batchItems->sum('qty_picked');
-                $basketPicked = (int) $session->items()->sum('qty_picked');
 
                 $message = "{$code} dari {$binCode} → keranjang {$basket} ({$session->order?->order_number}): {$item->qty_picked}/{$item->qty_ordered}";
                 if ($session->status === 'COMPLETED') {
@@ -183,12 +225,10 @@ class PickingBatchController extends Controller
                     'ok' => true,
                     'type' => 'sku',
                     'basket' => $basket,
-                    'message' => $message,
-                    'items' => [
-                        ['id' => 'sku-' . $code, 'qty' => $skuPicked],
-                        ['id' => 'basket-' . $basket, 'qty' => $basketPicked],
-                        ['id' => 'total', 'qty' => $totalPicked],
-                    ],
+                    'warning' => $warning,
+                    'active_bin' => $binCode,
+                    'message' => $message . ($warning ? ". {$warning}" : ''),
+                    'items' => $this->counters($batch, $session, $code),
                     'completed' => $batch->status === 'COMPLETED',
                 ];
             });
@@ -197,6 +237,65 @@ class PickingBatchController extends Controller
         } catch (\Exception $e) {
             return response()->json(['ok' => false, 'message' => safe_error_message($e)], 422);
         }
+    }
+
+    /**
+     * Ketuk "−1" di daftar ambil: 1 pcs SKU ini yang terakhir masuk keranjang dikembalikan ke raknya.
+     * (+1 dari daftar memakai endpoint scan dengan kode SKU.)
+     */
+    public function undo(Request $request, PickingBatch $batch)
+    {
+        $validated = $request->validate(['sku' => ['required', 'string', 'max:100']]);
+        $sku = strtoupper(trim($validated['sku']));
+
+        try {
+            $result = DB::transaction(function () use ($batch, $sku, $request) {
+                $batch = PickingBatch::lockForUpdate()->findOrFail($batch->id);
+
+                // Keranjang dengan nomor terbesar dulu, kebalikan dari urutan pengisian saat scan
+                $chosen = PickingSessionItem::query()
+                    ->join('picking_sessions as ps', 'ps.id', '=', 'picking_session_items.picking_session_id')
+                    ->where('ps.batch_id', $batch->id)
+                    ->where('picking_session_items.sku', $sku)
+                    ->where('picking_session_items.qty_picked', '>', 0)
+                    ->orderByDesc('ps.basket_no')
+                    ->select('picking_session_items.*')
+                    ->first();
+                if (!$chosen) {
+                    throw new \RuntimeException("{$sku} belum ada yang diambil.");
+                }
+
+                $session = PickingSession::with('order:id,order_number,status')->lockForUpdate()->findOrFail($chosen->picking_session_id);
+                $item = PickingSessionItem::lockForUpdate()->findOrFail($chosen->id);
+                Picking::unpick($session, $item, auth()->id(), $request->ip());
+
+                $session->refresh();
+
+                return [
+                    'ok' => true,
+                    'type' => 'undo',
+                    'basket' => $session->basket_no,
+                    'message' => "Keluarkan 1 pcs {$sku} dari keranjang {$session->basket_no}, kembalikan ke {$item->bin_code}.",
+                    'items' => $this->counters($batch, $session, $sku),
+                ];
+            });
+
+            return response()->json($result);
+        } catch (\Exception $e) {
+            return response()->json(['ok' => false, 'message' => safe_error_message($e)], 422);
+        }
+    }
+
+    /** Angka di layar yang berubah setelah scan: per SKU, per keranjang, dan total */
+    private function counters(PickingBatch $batch, PickingSession $session, string $sku): array
+    {
+        $batchItems = PickingSessionItem::whereIn('picking_session_id', PickingSession::where('batch_id', $batch->id)->select('id'));
+
+        return [
+            ['id' => 'sku-' . $sku, 'qty' => (int) (clone $batchItems)->where('sku', $sku)->sum('qty_picked')],
+            ['id' => 'basket-' . $session->basket_no, 'qty' => (int) $session->items()->sum('qty_picked')],
+            ['id' => 'total', 'qty' => (int) $batchItems->sum('qty_picked')],
+        ];
     }
 
     /**

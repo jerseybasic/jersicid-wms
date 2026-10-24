@@ -14,6 +14,7 @@ class Packing
 {
     /**
      * Buat sesi packing untuk order yang picking-nya selesai (status PACKING, order sudah dikunci).
+     * Sesi langsung berjalan: yang membuat sesi adalah yang mengemas.
      */
     public static function createForOrder(Order $order, string $userId, array $attributes = []): PackingSession
     {
@@ -26,7 +27,8 @@ class Packing
             'order_id' => $order->id,
             'picking_session_id' => $order->pickingSession?->id,
             'user_id' => $userId,
-            'status' => 'PENDING',
+            'status' => 'IN_PROGRESS',
+            'started_at' => now(),
         ]);
 
         // Ambil items dari picking session

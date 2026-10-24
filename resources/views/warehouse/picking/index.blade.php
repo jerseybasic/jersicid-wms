@@ -31,15 +31,15 @@
         <!-- Stats -->
         <div class="grid grid-cols-3 gap-4">
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                <p class="text-xs text-slate-400 mb-1">Pending</p>
+                <p class="text-xs text-slate-400 mb-1">Belum mulai</p>
                 <p class="text-2xl font-bold text-slate-400">{{ $stats['pending'] }}</p>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                <p class="text-xs text-amber-400 mb-1">In Progress</p>
+                <p class="text-xs text-amber-400 mb-1">Sedang dikerjakan</p>
                 <p class="text-2xl font-bold text-amber-400">{{ $stats['in_progress'] }}</p>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                <p class="text-xs text-emerald-400 mb-1">Completed</p>
+                <p class="text-xs text-emerald-400 mb-1">Selesai</p>
                 <p class="text-2xl font-bold text-emerald-400">{{ $stats['completed'] }}</p>
             </div>
         </div>
@@ -58,9 +58,9 @@
 
                 <select name="status" class="px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all">
                     <option value="">Semua Status</option>
-                    <option value="PENDING" {{ request('status') == 'PENDING' ? 'selected' : '' }}>Pending</option>
-                    <option value="IN_PROGRESS" {{ request('status') == 'IN_PROGRESS' ? 'selected' : '' }}>In Progress</option>
-                    <option value="COMPLETED" {{ request('status') == 'COMPLETED' ? 'selected' : '' }}>Completed</option>
+                    <option value="PENDING" {{ request('status') == 'PENDING' ? 'selected' : '' }}>Belum mulai</option>
+                    <option value="IN_PROGRESS" {{ request('status') == 'IN_PROGRESS' ? 'selected' : '' }}>Sedang dikerjakan</option>
+                    <option value="COMPLETED" {{ request('status') == 'COMPLETED' ? 'selected' : '' }}>Selesai</option>
                 </select>
 
                 <button type="submit" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition-all text-sm">Filter</button>
@@ -104,7 +104,7 @@
                                 @endif
                             </td>
                             <td class="py-3 px-4">
-                                <span class="text-xs px-2 py-1 rounded-full {{ $session->status_color }}">{{ $session->status }}</span>
+                                <span class="text-xs px-2 py-1 rounded-full {{ $session->status_color }}">{{ $session->status_label }}</span>
                             </td>
                             <td class="py-3 px-4 text-xs text-slate-300">{{ $session->user?->name }}</td>
                             <td class="py-3 px-4 text-xs text-slate-300">{{ $session->created_at->format('d M Y H:i') }}</td>

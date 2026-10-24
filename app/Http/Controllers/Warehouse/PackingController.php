@@ -79,21 +79,11 @@ class PackingController extends Controller
                     'ip_address' => $request->ip(),
                 ]);
 
-                // Dari layar Tugas: sesi langsung dimulai dan staf dibawa ke layar scan
-                if (!empty($validated['start_now'])) {
-                    $session->update(['status' => 'IN_PROGRESS', 'started_at' => now()]);
-                }
-
                 return $session;
             });
 
-            if (!empty($validated['start_now'])) {
-                return redirect()->route('gudang.packing.show', $session->id)
-                    ->with('success', 'Tugas diambil. Mulai scan barang.');
-            }
-
-            return redirect()->route('gudang.packing')
-                ->with('success', 'Packing session berhasil dibuat!');
+            return redirect()->route('gudang.packing.show', $session->id)
+                ->with('success', 'Mulai packing. Scan atau ketuk setiap barang yang dimasukkan ke paket.');
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal membuat packing session: ' . safe_error_message($e));
         }
@@ -179,23 +169,17 @@ class PackingController extends Controller
                     ->first();
 
                 if (!$item) {
+                    if (!$session->items()->where('sku', $code)->exists() && ($order = Order::findByCode($code))) {
+                        throw new \RuntimeException($order->id === $session->order_id
+                            ? "Ini label order {$order->order_number} yang sedang dikemas. Sekarang scan barangnya."
+                            : "Ini label order lain ({$order->order_number}). Selesaikan packing {$session->order?->order_number} dulu.");
+                    }
                     throw new \RuntimeException($session->items()->where('sku', $code)->exists()
                         ? "SKU {$code} sudah lengkap dikemas. Jangan dimasukkan lagi."
                         : "{$code} bukan bagian dari order ini. Jangan dikemas.");
                 }
 
-                $this->applyPack($session, $item, $item->qty_packed + 1);
-
-                $item->refresh();
-                $session->refresh();
-
-                return [
-                    'ok' => true,
-                    'type' => 'sku',
-                    'message' => "{$code}: {$item->qty_packed}/{$item->qty_ordered}",
-                    'items' => [['id' => $item->id, 'qty' => $item->qty_packed, 'status' => $item->status]],
-                    'completed' => $session->status === 'COMPLETED',
-                ];
+                return $this->packOne($session, $item);
             });
 
             return response()->json($result);
@@ -217,7 +201,7 @@ class PackingController extends Controller
 
         $item->update([
             'qty_packed' => $qtyPacked,
-            'status' => $qtyPacked >= $item->qty_ordered ? 'COMPLETED' : 'PARTIAL',
+            'status' => $qtyPacked >= $item->qty_ordered ? 'COMPLETED' : ($qtyPacked > 0 ? 'PARTIAL' : 'PENDING'),
         ]);
 
         $item->orderItem?->update(['qty_packed' => $qtyPacked]);
@@ -230,7 +214,7 @@ class PackingController extends Controller
                 'completed_at' => now(),
             ]);
 
-            // Semua barang sudah dikemas: order siap dikirim (resi diisi di Outbound)
+            // Semua barang sudah dikemas: order siap diserahkan ke kurir
             $session->order->update([
                 'status' => 'READY_TO_SHIP',
                 'packed_by' => auth()->id(),
@@ -240,47 +224,74 @@ class PackingController extends Controller
         }
     }
 
-    public function complete(Request $request, $id)
+    /**
+     * Ketuk barang di daftar: +1 sama dengan scan barangnya (untuk barang yang belum ada
+     * barcode-nya), -1 mengoreksi barang yang salah dimasukkan.
+     */
+    public function tap(Request $request, $sessionId, $itemId)
     {
-        $validated = $request->validate([
-            'tracking_number' => ['nullable', 'string', 'max:255'],
-            'package_weight_gram' => ['nullable', 'integer', 'min:0'],
-        ]);
+        $validated = $request->validate(['delta' => ['required', 'integer', 'in:1,-1']]);
 
         try {
-            DB::transaction(function () use ($id, $validated, $request) {
-                $session = PackingSession::findOrFail($id);
-                $user = auth()->user();
+            $result = DB::transaction(function () use ($sessionId, $itemId, $validated, $request) {
+                $session = PackingSession::lockForUpdate()->findOrFail($sessionId);
+                $item = $session->items()->lockForUpdate()->findOrFail($itemId);
 
-                $session->update([
-                    'tracking_number' => $validated['tracking_number'],
-                    'package_weight_gram' => $validated['package_weight_gram'],
-                    'status' => 'COMPLETED',
-                    'completed_at' => now(),
-                ]);
+                if ($session->status !== 'IN_PROGRESS') {
+                    throw new \RuntimeException('Packing ini sudah selesai.');
+                }
 
-                $session->order->update([
-                    'status' => 'READY_TO_SHIP',
-                    'tracking_number' => $validated['tracking_number'],
-                    'packed_at' => now(),
-                ]);
+                if ((int) $validated['delta'] === -1) {
+                    if ($item->qty_packed < 1) {
+                        throw new \RuntimeException("{$item->sku} belum ada yang dikemas.");
+                    }
+                    $this->applyPack($session, $item, $item->qty_packed - 1);
+                    $item->refresh();
+
+                    return [
+                        'ok' => true,
+                        'type' => 'undo',
+                        'message' => "Keluarkan 1 pcs {$item->sku} dari paket: {$item->qty_packed}/{$item->qty_ordered}",
+                        'items' => [['id' => $item->id, 'qty' => $item->qty_packed, 'status' => $item->status]],
+                    ];
+                }
+
+                if ($item->qty_packed >= $item->qty_ordered) {
+                    throw new \RuntimeException("{$item->sku} sudah lengkap dikemas.");
+                }
 
                 AuditTrail::create([
-                    'user_id' => $user->id,
-                    'action' => 'COMPLETE',
+                    'user_id' => auth()->id(),
+                    'action' => 'MANUAL_PACK',
                     'module' => 'PACKING',
-                    'new_values' => json_encode([
-                        'session_number' => $session->session_number,
-                        'tracking_number' => $validated['tracking_number'],
-                    ]),
+                    'new_values' => json_encode(['session_number' => $session->session_number, 'sku' => $item->sku]),
                     'ip_address' => $request->ip(),
                 ]);
+
+                return $this->packOne($session, $item);
             });
 
-            return back()->with('success', 'Packing selesai! Order siap dikirim.');
+            return response()->json($result);
         } catch (\Exception $e) {
-            return back()->with('error', 'Gagal menyelesaikan packing: ' . safe_error_message($e));
+            return response()->json(['ok' => false, 'message' => safe_error_message($e)], 422);
         }
+    }
+
+    /** Kemas 1 pcs item lalu jawaban untuk kotak scan */
+    private function packOne(PackingSession $session, PackingSessionItem $item): array
+    {
+        $this->applyPack($session, $item, $item->qty_packed + 1);
+
+        $item->refresh();
+        $session->refresh();
+
+        return [
+            'ok' => true,
+            'type' => 'sku',
+            'message' => "{$item->sku}: {$item->qty_packed}/{$item->qty_ordered}",
+            'items' => [['id' => $item->id, 'qty' => $item->qty_packed, 'status' => $item->status]],
+            'completed' => $session->status === 'COMPLETED',
+        ];
     }
 
     public function destroy($id)
@@ -293,6 +304,7 @@ class PackingController extends Controller
         }
 
         DB::transaction(function () use ($session, $user) {
+            $session->order?->items()->update(['qty_packed' => 0]);
             $session->items()->delete();
             $session->delete();
 

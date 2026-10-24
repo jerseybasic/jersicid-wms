@@ -42,12 +42,16 @@
         </div>
 
         @if ($done)
-            <div class="p-4 bg-emerald-900/30 border border-emerald-500/50 text-emerald-300 rounded-xl text-sm">
-                Semua keranjang lengkap. Bawa keranjang ke meja packing; setiap order sudah ada di daftar <a href="{{ route('gudang.tugas') }}#kemas" class="underline font-semibold">Perlu dikemas</a>.
+            <div class="p-4 bg-emerald-900/30 border border-emerald-500/50 text-emerald-300 rounded-xl text-sm space-y-3">
+                <p>Semua keranjang lengkap. Bawa keranjang ke meja packing, lalu scan no. order/resi di keranjang untuk mulai packing.</p>
+                <form method="POST" action="{{ route('gudang.picking-batch.auto') }}">
+                    @csrf
+                    <button type="submit" class="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl">Ambil picking berikutnya</button>
+                </form>
             </div>
         @else
             <x-scan-box :endpoint="route('gudang.picking-batch.scan', $batch)" storage-key="batch-bin-{{ $batch->id }}"
-                hint="Scan lokasi rak, lalu scan barang. Layar menunjukkan nomor keranjangnya." />
+                hint="Scan rak lalu scan barang (atau ketuk +1 di daftar). Layar menunjukkan nomor keranjangnya." />
         @endif
 
         {{-- Daftar ambil per SKU, urut per rak --}}
@@ -56,7 +60,8 @@
             <div class="divide-y divide-slate-800">
                 @foreach ($pickList as $row)
                     @php $complete = $row['qty_picked'] >= $row['qty_ordered']; @endphp
-                    <div class="p-4 flex gap-3 {{ $complete ? 'opacity-60' : '' }}">
+                    <div class="p-4 space-y-3 {{ $complete ? 'opacity-60' : '' }}">
+                    <div class="flex gap-3">
                         <div class="shrink-0 w-20">
                             <p class="text-[11px] text-slate-500 uppercase">Rak</p>
                             @foreach ($row['bins'] as $bin)
@@ -77,6 +82,16 @@
                         <p class="shrink-0 text-right">
                             <span class="text-2xl font-bold {{ $complete ? 'text-emerald-400' : 'text-white' }}" data-scan-qty="sku-{{ $row['sku'] }}">{{ $row['qty_picked'] }}</span><span class="text-slate-500">/{{ $row['qty_ordered'] }}</span>
                         </p>
+                    </div>
+                    @unless ($done)
+                        {{-- Untuk barang yang belum ada barcode-nya: ketuk sama dengan scan --}}
+                        <div class="grid grid-cols-3 gap-2">
+                            <button type="button" onclick="scanTap(@js(route('gudang.picking-batch.undo', $batch)), { sku: @js($row['sku']) })"
+                                class="py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl">−1</button>
+                            <button type="button" onclick="scanTap(@js(route('gudang.picking-batch.scan', $batch)), { code: @js($row['sku']) })"
+                                class="col-span-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl">+1 Ambil</button>
+                        </div>
+                    @endunless
                     </div>
                 @endforeach
             </div>

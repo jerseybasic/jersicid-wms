@@ -140,6 +140,92 @@ class Picking
     }
 
     /**
+     * Bin untuk mengambil 1 pcs item ini. Lokasi aktif (rak yang terakhir di-scan) dipakai jika
+     * stoknya ada di sana; bila tidak, pakai bin saran atau bin lain yang masih ada stoknya,
+     * supaya lokasi yang tertinggal dari scan sebelumnya tidak membuat picker macet.
+     *
+     * @return array{0: string, 1: ?string} [bin, peringatan untuk picker]
+     */
+    public static function resolveBin(PickingSessionItem $item, ?string $activeBin): array
+    {
+        $activeBin = $activeBin ? strtoupper(trim($activeBin)) : null;
+
+        // Satu item diambil dari satu bin: setelah mulai, lanjutkan dari bin yang sama
+        if ($item->qty_picked > 0) {
+            return [$item->bin_code, $activeBin && $activeBin !== $item->bin_code
+                ? "Barang ini sudah mulai diambil dari {$item->bin_code}, jadi dicatat dari {$item->bin_code}."
+                : null];
+        }
+
+        $stock = StockActive::where('sku', $item->sku)->where('qty', '>', 0)->pluck('qty', 'bin_code');
+        $bin = collect([$activeBin, $item->bin_code])->filter()->first(fn ($bin) => isset($stock[$bin]))
+            ?? $stock->sortDesc()->keys()->first();
+
+        if (!$bin) {
+            throw new \RuntimeException("Stok {$item->sku} kosong di semua rak.");
+        }
+
+        return [$bin, $activeBin && $activeBin !== $bin
+            ? "Di rak {$activeBin} tidak ada {$item->sku}, dicatat dari {$bin}."
+            : null];
+    }
+
+    /**
+     * Kembalikan 1 pcs yang salah diambil (salah scan/salah ketuk) ke bin asalnya.
+     * Jika keranjang order sudah lengkap tapi belum mulai dikemas, order kembali ke picking.
+     * Sesi dan item harus sudah dikunci.
+     */
+    public static function unpick(PickingSession $session, PickingSessionItem $item, string $userId, ?string $ip): void
+    {
+        if ($item->qty_picked < 1) {
+            throw new \RuntimeException("{$item->sku} belum ada yang diambil.");
+        }
+
+        $order = $session->order;
+        if ($session->status === 'COMPLETED') {
+            if ($order?->status !== 'PACKING' || $order->packingSession()->exists()) {
+                throw new \RuntimeException('Order ini sudah mulai dikemas, koreksi lewat packing.');
+            }
+        } elseif ($session->status !== 'IN_PROGRESS') {
+            throw new \RuntimeException('Mulai sesi picking dulu.');
+        }
+
+        $stock = StockActive::firstOrCreate(
+            ['sku' => $item->sku, 'bin_code' => $item->bin_code],
+            ['qty' => 0, 'reserved_qty' => 0]
+        );
+        $oldQty = $stock->qty;
+        $stock->update(['qty' => $oldQty + 1, 'last_movement_at' => now()]);
+
+        StockMovement::create([
+            'user_id' => $userId,
+            'sku' => $item->sku,
+            'bin_code' => $item->bin_code,
+            'type' => 'RETURN',
+            'qty' => 1,
+            'qty_before' => $oldQty,
+            'qty_after' => $oldQty + 1,
+            'reference_no' => $session->session_number,
+            'reference_type' => 'PICKING_CANCEL',
+            'notes' => 'Koreksi picking: 1 pcs dikembalikan ke rak',
+            'ip_address' => $ip,
+        ]);
+
+        $newQty = $item->qty_picked - 1;
+        $item->update(['qty_picked' => $newQty, 'status' => $newQty > 0 ? 'PARTIAL' : 'PENDING']);
+        $item->orderItem?->update(['qty_picked' => $newQty]);
+
+        if ($session->status === 'COMPLETED') {
+            $session->update(['status' => 'IN_PROGRESS', 'completed_at' => null]);
+            $order->update(['status' => 'PICKING', 'picked_by' => null, 'picked_at' => null]);
+
+            if ($session->batch && $session->batch->status === 'COMPLETED') {
+                $session->batch->update(['status' => 'IN_PROGRESS', 'completed_at' => null]);
+            }
+        }
+    }
+
+    /**
      * Hapus sesi yang belum selesai: stok yang sudah diambil dikembalikan ke bin-nya
      * dan order kembali ke antrean picking (CONFIRMED).
      */

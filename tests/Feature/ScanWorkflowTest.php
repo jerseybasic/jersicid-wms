@@ -62,12 +62,11 @@ class ScanWorkflowTest extends TestCase
             ->assertOk()->assertJson(['ok' => true, 'completed' => false]);
         $this->assertSame(4, $this->stockQty('JSC-A-L', 'A-01-01'));
 
-        // Item yang sudah mulai diambil dari A-01-01 tidak boleh pindah bin
-        $this->postJson($scan, ['code' => 'JSC-A-L', 'bin_code' => 'A-02-01'])->assertStatus(422);
+        // Item yang sudah mulai diambil dari A-01-01 tetap dicatat dari A-01-01, dengan peringatan
+        $this->postJson($scan, ['code' => 'JSC-A-L', 'bin_code' => 'A-02-01'])
+            ->assertOk()->assertJson(['completed' => true, 'active_bin' => 'A-01-01'])
+            ->assertJsonPath('warning', fn ($w) => str_contains($w, 'sudah mulai diambil dari A-01-01'));
         $this->assertSame(9, $this->stockQty('JSC-A-L', 'A-02-01'));
-
-        $this->postJson($scan, ['code' => 'JSC-A-L', 'bin_code' => 'A-01-01'])
-            ->assertOk()->assertJson(['completed' => true]);
         $this->assertSame(3, $this->stockQty('JSC-A-L', 'A-01-01'));
         $this->assertSame('COMPLETED', $picking->fresh()->status);
         $this->assertSame('PACKING', $picking->order->fresh()->status);
@@ -90,7 +89,6 @@ class ScanWorkflowTest extends TestCase
 
         $this->post(route('gudang.packing.store'), ['order_id' => $picking->order_id, 'courier' => 'JNE']);
         $packing = PackingSession::where('order_id', $picking->order_id)->firstOrFail();
-        $this->post(route('gudang.packing.start', $packing->id));
         $this->get(route('gudang.packing.show', $packing->id))->assertOk()->assertSee('Scan barcode');
         $scan = route('gudang.packing.scan', $packing->id);
 
@@ -100,6 +98,69 @@ class ScanWorkflowTest extends TestCase
 
         $this->assertSame('READY_TO_SHIP', $picking->order->fresh()->status);
         $this->postJson($scan, ['code' => 'JSC-A-L'])->assertStatus(422);
+    }
+
+    public function test_rack_left_from_previous_scan_does_not_block_picking(): void
+    {
+        $staff = $this->userWithRole('STAFF_GUDANG');
+        WarehouseRack::create(['code' => 'A']);
+        WarehouseRack::create(['code' => 'B']);
+        $this->makeSku('JSC-A-L');
+        $this->makeSku('JSC-B-L');
+        $this->putStock('JSC-A-L', 'A-01-01', 5);
+
+        $picking = $this->startedPicking($staff, 'JSC-A-L', 1);
+
+        // Lokasi aktif masih B-01-01 dari barang sebelumnya: dicatat dari rak yang ada stoknya
+        $this->postJson(route('gudang.picking.scan', $picking->id), ['code' => 'JSC-A-L', 'bin_code' => 'B-01-01'])
+            ->assertOk()->assertJson(['ok' => true, 'active_bin' => 'A-01-01', 'completed' => true])
+            ->assertJsonPath('warning', 'Di rak B-01-01 tidak ada JSC-A-L, dicatat dari A-01-01.');
+        $this->assertSame(4, $this->stockQty('JSC-A-L', 'A-01-01'));
+
+        // Stok habis di semua rak: pesannya jelas, bukan "tidak cukup di bin X"
+        $this->putStock('JSC-B-L', 'B-01-01', 1);
+        $this->travel(1)->minutes();
+        $empty = $this->startedPicking($staff, 'JSC-B-L', 1);
+        \App\Models\StockActive::where('sku', 'JSC-B-L')->update(['qty' => 0]);
+        $this->postJson(route('gudang.picking.scan', $empty->id), ['code' => 'JSC-B-L'])
+            ->assertStatus(422)->assertJson(['message' => 'Stok JSC-B-L kosong di semua rak.']);
+    }
+
+    public function test_tapping_items_counts_like_scanning_and_minus_one_corrects_mistakes(): void
+    {
+        $staff = $this->userWithRole('STAFF_GUDANG');
+        $this->makeSku('JSC-A-L');
+        $this->putStock('JSC-A-L', 'A-01-01', 5);
+
+        $picking = $this->startedPicking($staff, 'JSC-A-L', 2);
+        $item = $picking->items()->first();
+        $tap = route('gudang.picking.tap', [$picking->id, $item->id]);
+        $this->get(route('gudang.picking.show', $picking->id))->assertSee('+1 Ambil')->assertDontSee('Input jumlah manual');
+
+        $this->postJson($tap, ['delta' => -1])->assertStatus(422);
+        $this->postJson($tap, ['delta' => 1])->assertOk()->assertJson(['ok' => true, 'completed' => false]);
+        $this->postJson($tap, ['delta' => 1])->assertOk();
+        $this->assertSame(3, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame(2, \App\Models\AuditTrail::where('action', 'MANUAL_PICK')->count());
+
+        // Salah ambil setelah keranjang lengkap tapi belum dikemas: -1 mengembalikan ke rak dan order kembali ke picking
+        $this->assertSame('PACKING', $picking->order->fresh()->status);
+        $this->postJson($tap, ['delta' => -1])->assertOk()->assertJson(['type' => 'undo']);
+        $this->assertSame(4, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame(['IN_PROGRESS', 'PICKING'], [$picking->fresh()->status, $picking->order->fresh()->status]);
+        $this->postJson($tap, ['delta' => 1])->assertJson(['completed' => true]);
+
+        // Packing: ketuk +1/-1, koreksi tidak bisa lebih kecil dari 0
+        $this->post(route('gudang.packing.store'), ['order_id' => $picking->order_id]);
+        $packing = PackingSession::where('order_id', $picking->order_id)->firstOrFail();
+        $packTap = route('gudang.packing.tap', [$packing->id, $packing->items()->first()->id]);
+        $this->postJson($packTap, ['delta' => -1])->assertStatus(422);
+        $this->postJson($packTap, ['delta' => 1])->assertOk()->assertJson(['completed' => false]);
+        $this->postJson($packTap, ['delta' => -1])->assertOk()->assertJson(['type' => 'undo']);
+        $this->postJson($packTap, ['delta' => 1]);
+        $this->postJson($packTap, ['delta' => 1])->assertJson(['completed' => true]);
+        $this->assertSame('READY_TO_SHIP', $picking->order->fresh()->status);
+        $this->postJson($packTap, ['delta' => -1])->assertStatus(422);
     }
 
     public function test_scan_endpoints_need_a_started_session(): void

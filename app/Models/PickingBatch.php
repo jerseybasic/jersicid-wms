@@ -17,6 +17,9 @@ class PickingBatch extends Model
     /** Batas order per picking gabungan, supaya keranjang tidak tertukar */
     public const MAX_ORDERS = 20;
 
+    /** Jumlah order yang diambil tombol/QR "gabung otomatis" */
+    public const AUTO_ORDERS = 10;
+
     protected $fillable = ['batch_number', 'user_id', 'status', 'started_at', 'completed_at'];
 
     protected $casts = [

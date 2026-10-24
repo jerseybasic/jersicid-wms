@@ -46,4 +46,9 @@ class PickingSessionItem extends Model
     {
         return $this->belongsTo(MasterSku::class, 'sku', 'sku');
     }
+
+    public function getStatusLabelAttribute(): string
+    {
+        return ['PENDING' => 'Belum', 'PARTIAL' => 'Sebagian', 'COMPLETED' => 'Lengkap'][$this->status] ?? $this->status;
+    }
 }

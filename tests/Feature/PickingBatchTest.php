@@ -52,7 +52,7 @@ class PickingBatchTest extends TestCase
         $second = $this->confirmedOrder('Budi', ['JSC-A-L' => 1, 'JSC-B-L' => 1]);
         $third = $this->confirmedOrder('Citra', ['JSC-B-L' => 1]);
 
-        $this->get(route('gudang.tugas'))->assertSee('Ambil beberapa order sekaligus');
+        $this->get(route('gudang.tugas'))->assertSee('Ambil 3 order sekaligus')->assertSee('Pilih sendiri order yang digabung');
         $this->get(route('gudang.picking-batch.create'))->assertOk()
             ->assertSee($first->order_number)->assertSee($third->order_number);
 
@@ -103,6 +103,48 @@ class PickingBatchTest extends TestCase
         // Selesai: scan ditolak, dan packer melihat nomor keranjangnya
         $this->postJson($scan, ['code' => 'JSC-B-L'])->assertStatus(422);
         $this->get(route('gudang.tugas'))->assertSee('KERANJANG 3')->assertDontSee('Lanjutkan picking gabungan');
+    }
+
+    public function test_one_tap_batch_takes_orders_with_the_nearest_deadline(): void
+    {
+        $this->actingAs($this->userWithRole('STAFF_GUDANG'));
+        $first = $this->confirmedOrder('Ani', ['JSC-A-L' => 1]);
+        $second = $this->confirmedOrder('Budi', ['JSC-B-L' => 1]);
+        $urgent = $this->confirmedOrder('Citra', ['JSC-A-L' => 1]);
+        $urgent->update(['ship_by' => now()->subDay()]);
+
+        $this->post(route('gudang.picking-batch.auto'), ['jumlah' => 2]);
+        $batch = PickingBatch::firstOrFail();
+        $this->assertSame([$urgent->id => 1, $first->id => 2],
+            PickingSession::where('batch_id', $batch->id)->orderBy('basket_no')->pluck('basket_no', 'order_id')->all());
+
+        // Tersisa satu order: langsung picking biasa
+        $this->post(route('gudang.picking-batch.auto'))
+            ->assertRedirect(route('gudang.picking.show', PickingSession::where('order_id', $second->id)->value('id')));
+        $this->assertSame('IN_PROGRESS', PickingSession::where('order_id', $second->id)->value('status'));
+        $this->post(route('gudang.picking-batch.auto'))->assertSessionHas('error', 'Tidak ada order yang menunggu picking.');
+    }
+
+    public function test_minus_one_takes_the_piece_back_out_of_the_last_basket(): void
+    {
+        $this->actingAs($this->userWithRole('STAFF_GUDANG'));
+        $first = $this->confirmedOrder('Ani', ['JSC-A-L' => 1]);
+        $second = $this->confirmedOrder('Budi', ['JSC-A-L' => 1]);
+        $this->post(route('gudang.picking-batch.store'), ['order_ids' => [$first->id, $second->id]]);
+        $batch = PickingBatch::firstOrFail();
+        $this->get(route('gudang.picking-batch.show', $batch))->assertSee('+1 Ambil');
+
+        $scan = route('gudang.picking-batch.scan', $batch);
+        $this->postJson($scan, ['code' => 'JSC-A-L'])->assertJson(['basket' => 1]);
+        $this->postJson($scan, ['code' => 'JSC-A-L'])->assertJson(['basket' => 2, 'completed' => true]);
+        $this->assertSame('COMPLETED', $batch->fresh()->status);
+
+        $this->postJson(route('gudang.picking-batch.undo', $batch), ['sku' => 'JSC-A-L'])
+            ->assertOk()->assertJson(['type' => 'undo', 'basket' => 2])
+            ->assertJsonPath('message', 'Keluarkan 1 pcs JSC-A-L dari keranjang 2, kembalikan ke A-01-01.');
+        $this->assertSame(4, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame(['IN_PROGRESS', 'PICKING', 'PACKING'], [$batch->fresh()->status, $second->fresh()->status, $first->fresh()->status]);
+        $this->postJson(route('gudang.picking-batch.undo', $batch), ['sku' => 'JSC-B-L'])->assertStatus(422);
     }
 
     public function test_cancelling_returns_stock_of_unfinished_baskets_only(): void

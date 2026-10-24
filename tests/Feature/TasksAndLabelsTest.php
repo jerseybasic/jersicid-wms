@@ -39,7 +39,7 @@ class TasksAndLabelsTest extends TestCase
         $this->putStock('JSC-A-L', 'A-01-01', 5);
         $order = $this->confirmedOrder($staff, 'JSC-A-L', 1);
 
-        $this->get(route('gudang.tugas'))->assertOk()->assertSee($order->order_number)->assertSee('Ambil & mulai picking', false);
+        $this->get(route('gudang.tugas'))->assertOk()->assertSee($order->order_number)->assertSee('Ambil order ini saja', false);
 
         // Label kirim belum boleh sebelum packing selesai
         $this->get(route('gudang.label.shipping', $order->id))->assertStatus(422);
@@ -59,8 +59,9 @@ class TasksAndLabelsTest extends TestCase
         $response->assertRedirect(route('gudang.packing.show', $packing->id));
         $this->postJson(route('gudang.packing.scan', $packing->id), ['code' => 'JSC-A-L'])->assertJson(['completed' => true]);
 
-        $this->get(route('gudang.packing.show', $packing->id))->assertSee('Cetak label kirim');
-        $this->get(route('gudang.tugas'))->assertSee('Siap kirim')->assertSee('Cetak label kirim');
+        // Paket hanya ditempel label BigSeller: alur kerja tidak menyuruh cetak label WMS
+        $this->get(route('gudang.packing.show', $packing->id))->assertSee('Tempel label BigSeller', false)->assertDontSee('Cetak label kirim');
+        $this->get(route('gudang.tugas'))->assertSee('Siap kirim')->assertSee('Belum ada resi')->assertDontSee('Cetak label kirim');
 
         $this->get(route('gudang.label.shipping', $order->id))
             ->assertOk()

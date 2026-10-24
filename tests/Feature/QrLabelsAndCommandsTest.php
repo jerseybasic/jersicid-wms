@@ -78,11 +78,10 @@ class QrLabelsAndCommandsTest extends TestCase
         $staff = $this->userWithRole('STAFF_GUDANG');
         $other = $this->userWithRole('STAFF_GUDANG');
         $first = $this->order('SP-1', 'CONFIRMED');
-        $second = $this->order('SP-2', 'CONFIRMED');
 
         $this->actingAs($staff)->get(route('gudang.tugas'))->assertSee('Scan QR perintah');
 
-        // Order terlama diambil dan langsung dimulai
+        // Hanya satu order menunggu: picking biasa yang langsung dimulai
         $response = $this->postJson(route('gudang.command'), ['code' => 'cmd-picking'])->assertOk()->assertJson(['ok' => true]);
         $session = PickingSession::where('order_id', $first->id)->firstOrFail();
         $this->assertSame([$staff->id, 'IN_PROGRESS'], [$session->user_id, $session->status]);
@@ -94,6 +93,7 @@ class QrLabelsAndCommandsTest extends TestCase
         $this->assertSame(1, PickingSession::count());
 
         // Staf lain mendapat order berikutnya, lalu tidak ada lagi
+        $second = $this->order('SP-2', 'CONFIRMED');
         $this->actingAs($other)->postJson(route('gudang.command'), ['code' => 'CMD-PICKING'])->assertOk();
         $this->assertTrue(PickingSession::where('order_id', $second->id)->where('user_id', $other->id)->exists());
         $this->actingAs($this->userWithRole('STAFF_GUDANG'))->postJson(route('gudang.command'), ['code' => 'CMD-PICKING'])
@@ -107,6 +107,25 @@ class QrLabelsAndCommandsTest extends TestCase
         $packing = PackingSession::where('order_id', $picked->id)->firstOrFail();
         $this->assertSame(['IN_PROGRESS', $staff->id], [$packing->status, $packing->user_id]);
         $this->assertSame(route('gudang.packing.show', $packing->id), $response->json('redirect'));
+
+        // Packer scan no. order/resi dari keranjang: order itu yang langsung dikemas
+        $basket = $this->order('SP-5', 'PACKING', ['picked_at' => now(), 'tracking_number' => 'SPXID555']);
+        $response = $this->actingAs($other)->postJson(route('gudang.command'), ['code' => 'spxid555'])->assertOk();
+        $packing = PackingSession::where('order_id', $basket->id)->firstOrFail();
+        $this->assertSame(['IN_PROGRESS', $other->id], [$packing->status, $packing->user_id]);
+        $this->assertSame(route('gudang.packing.show', $packing->id), $response->json('redirect'));
+        $this->postJson(route('gudang.command'), ['code' => 'SP-5'])->assertJsonPath('redirect', route('gudang.packing.show', $packing->id));
+        $this->assertSame(1, PackingSession::where('order_id', $basket->id)->count());
+        $this->postJson(route('gudang.command'), ['code' => 'SP-1'])->assertJsonPath('redirect', route('gudang.outbound.show', $first->id));
+
+        // Beberapa order menunggu: QR Mulai Picking langsung membuat picking gabungan
+        $this->order('SP-7', 'CONFIRMED');
+        $this->order('SP-8', 'CONFIRMED');
+        $batchPicker = $this->userWithRole('STAFF_GUDANG');
+        $response = $this->actingAs($batchPicker)->postJson(route('gudang.command'), ['code' => 'CMD-PICKING'])->assertOk();
+        $batch = \App\Models\PickingBatch::where('user_id', $batchPicker->id)->firstOrFail();
+        $this->assertSame(2, $batch->sessions()->count());
+        $this->assertSame(route('gudang.picking-batch.show', $batch), $response->json('redirect'));
 
         $this->postJson(route('gudang.command'), ['code' => 'CMD-RETUR'])->assertJsonPath('redirect', route('gudang.retur.create'));
         $this->postJson(route('gudang.command'), ['code' => 'CMD-TUTUP'])->assertJsonPath('redirect', route('gudang.closing'));
