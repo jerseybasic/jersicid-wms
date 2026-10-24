@@ -10,6 +10,7 @@ use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Services\ShipDeadline;
 use App\Services\OrderCancellation;
+use App\Services\OrderReprocess;
 use App\Services\StockAvailability;
 use App\Services\WaitingStock;
 use Carbon\Carbon;
@@ -444,6 +445,33 @@ class OutboundController extends Controller
         return redirect()->route('gudang.outbound.show', $order->id)->with('success', $toReturn
             ? "Order {$order->order_number} dibatalkan. Kembalikan {$toReturn} pcs barangnya ke rak lewat menu Kembalikan ke Rak."
             : "Order {$order->order_number} dibatalkan.");
+    }
+
+    /**
+     * Proses ulang order Dikirim/Selesai dengan resi yang sama: kembali ke Siap Kirim jika paketnya
+     * belum pernah diserahkan ke kurir, atau ke antrean picking jika barangnya sudah diretur ke rak.
+     */
+    public function reprocess(Request $request, $id)
+    {
+        abort_unless(in_array(auth()->user()->role, OrderReprocess::ROLES, true), 403, 'Hanya Owner, Supervisor, atau Admin Gudang yang bisa memproses ulang order.');
+
+        try {
+            [$order, $status] = DB::transaction(function () use ($id, $request) {
+                $order = Order::lockForUpdate()->findOrFail($id);
+
+                return [$order, OrderReprocess::reprocess($order, auth()->id(), $request->ip())];
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $message = match ($status) {
+            'READY_TO_SHIP' => "Order {$order->order_number} kembali ke Siap Kirim. Scan resinya di Serah Terima Kurir saat kurir datang.",
+            'CONFIRMED' => "Order {$order->order_number} kembali ke antrean picking dengan resi yang sama.",
+            default => "Order {$order->order_number} diproses ulang, tapi stoknya kurang sehingga menunggu stok.",
+        };
+
+        return redirect()->route('gudang.outbound.show', $order->id)->with('success', $message);
     }
 
     /** Ubah status satu order sesuai alur yang diizinkan. Mengembalikan pesan error, atau null jika berhasil. */

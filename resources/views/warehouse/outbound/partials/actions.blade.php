@@ -46,3 +46,16 @@
         <button class="px-3 py-1.5 bg-red-600/80 hover:bg-red-500 text-white text-xs rounded font-medium">Batal</button>
     </form>
 @endif
+@if(in_array($order->status, ['SHIPPED', 'COMPLETED']) && in_array(auth()->user()->role, \App\Services\OrderReprocess::ROLES))
+    @php [$reprocessTo, $reprocessError] = \App\Services\OrderReprocess::target($order); @endphp
+    @if ($reprocessTo)
+        {{-- Kirim ulang dengan resi yang sama, tanpa membuat order baru --}}
+        <form method="POST" action="{{ route('gudang.outbound.reprocess', $order->id) }}"
+            onsubmit="return confirm(@js($reprocessTo === 'READY_TO_SHIP'
+                ? 'Kembalikan order ' . $order->order_number . ' ke Siap Kirim? Resinya tetap sama dan bisa di-scan lagi di Serah Terima.'
+                : 'Proses ulang order ' . $order->order_number . '? Barangnya sudah kembali lewat retur, jadi order masuk antrean picking lagi dengan resi yang sama.'))">
+            @csrf
+            <button class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded font-medium">Proses ulang</button>
+        </form>
+    @endif
+@endif

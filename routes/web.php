@@ -129,6 +129,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/massal', [OutboundController::class, 'bulkStatus'])->name('outbound.bulk-status');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
     Route::post('/{id}/batalkan', [OutboundController::class, 'cancel'])->name('outbound.cancel');
+    Route::post('/{id}/proses-ulang', [OutboundController::class, 'reprocess'])->name('outbound.reprocess');
     Route::get('/{id}/edit', [OutboundController::class, 'edit'])->name('outbound.edit');
     Route::put('/{id}', [OutboundController::class, 'update'])->name('outbound.update');
     Route::get('/{id}', [OutboundController::class, 'show'])->name('outbound.show');
@@ -140,6 +141,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::get('/create', [ReturnController::class, 'create'])->name('retur.create');
     Route::post('/', [ReturnController::class, 'store'])->name('retur.store');
     Route::get('/{id}', [ReturnController::class, 'show'])->name('retur.show');
+    Route::put('/{id}', [ReturnController::class, 'update'])->name('retur.update');
+    Route::delete('/{id}', [ReturnController::class, 'destroy'])->name('retur.destroy');
 });
 
 // ==================== PICKING (GUDANG) ====================

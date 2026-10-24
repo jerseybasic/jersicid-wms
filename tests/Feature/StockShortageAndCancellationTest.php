@@ -243,4 +243,70 @@ class StockShortageAndCancellationTest extends TestCase
         $this->assertSame(2, $this->stockQty('JSC-A-L', 'A-01-01'));
         $this->assertSame('PICKING', $other->fresh()->status);
     }
+
+    public function test_order_marked_done_without_handover_goes_back_to_ready_to_ship(): void
+    {
+        $admin = $this->userWithRole('ADMIN_GUDANG');
+        $this->makeSku('JSC-A-L');
+        $order = $this->order('ORD-TANPA-SCAN', 'JSC-A-L', 1, 'COMPLETED');
+        $order->update(['shipped_at' => now()]);
+
+        $this->actingAs($this->userWithRole('STAFF_GUDANG'))->post(route('gudang.outbound.reprocess', $order->id))->assertForbidden();
+        $this->actingAs($admin)->get(route('gudang.outbound.show', $order->id))->assertSee('Proses ulang');
+        $this->post(route('gudang.outbound.reprocess', $order->id))->assertSessionHas('success', fn ($m) => str_contains($m, 'kembali ke Siap Kirim'));
+        $order->refresh();
+        $this->assertSame('READY_TO_SHIP', $order->status);
+        $this->assertNull($order->shipped_at);
+
+        // Resi yang sama bisa langsung di-scan di serah terima
+        $this->postJson(route('gudang.handover.scan-any'), ['code' => 'RESI-ORD-TANPA-SCAN'])->assertOk();
+
+        // Paket yang sudah diserahkan ke kurir hanya bisa diproses ulang lewat retur
+        $handover = CourierHandover::where('status', 'OPEN')->firstOrFail();
+        $this->post(route('gudang.handover.finish', $handover), ['driver_name' => 'Andi']);
+        $this->post(route('gudang.outbound.reprocess', $order->id))->assertSessionHas('error', fn ($m) => str_contains($m, 'buat retur dulu'));
+    }
+
+    public function test_returned_order_is_reprocessed_with_the_same_resi_and_wrong_returns_can_be_fixed(): void
+    {
+        $admin = $this->userWithRole('ADMIN_GUDANG');
+        $this->makeSku('JSC-A-L');
+        $this->putStock('JSC-A-L', 'A-01-01', 5);
+        $this->actingAs($admin);
+        [$order, , $packing] = $this->packingOrder('ORD-ULANG', 'JSC-A-L', 2);
+        $this->postJson(route('gudang.packing.tap', [$packing->id, $packing->items->first()->id]), ['delta' => 1]);
+        $this->postJson(route('gudang.packing.tap', [$packing->id, $packing->items->first()->id]), ['delta' => 1]);
+        $order->update(['status' => 'COMPLETED', 'shipped_at' => now()->subMinute()]);
+        $this->assertSame(3, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $item = $order->items()->first();
+
+        // Retur salah jumlah: dihapus dan stoknya dikoreksi, lalu dibuat ulang
+        $this->post(route('gudang.retur.store'), ['order_id' => $order->id, 'reason' => 'LAINNYA', 'items' => [$item->id => ['qty_good' => 1, 'bin_code' => 'A-01-01']]]);
+        $wrong = \App\Models\OrderReturn::firstOrFail();
+        $this->assertSame(4, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->post(route('gudang.outbound.reprocess', $order->id))->assertSessionHas('error', fn ($m) => str_contains($m, 'belum mencakup semua barangnya'));
+        $this->put(route('gudang.retur.update', $wrong->id), ['reason' => 'SALAH_KIRIM', 'notes' => 'Salah klik'])->assertSessionHas('success');
+        $this->assertSame('SALAH_KIRIM', $wrong->fresh()->reason);
+        $this->delete(route('gudang.retur.destroy', $wrong->id))->assertSessionHas('success');
+        $this->assertSame(3, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame(0, \App\Models\OrderReturn::count());
+
+        $this->post(route('gudang.retur.store'), ['order_id' => $order->id, 'reason' => 'LAINNYA', 'items' => [$item->id => ['qty_good' => 2, 'bin_code' => 'A-01-01']]]);
+        $this->assertSame(5, $this->stockQty('JSC-A-L', 'A-01-01'));
+
+        // Semua barang sudah kembali: order masuk antrean picking lagi dengan resi yang sama
+        $this->post(route('gudang.outbound.reprocess', $order->id))->assertSessionHas('success', fn ($m) => str_contains($m, 'antrean picking'));
+        $order->refresh();
+        $this->assertSame(['CONFIRMED', 'RESI-ORD-ULANG'], [$order->status, $order->tracking_number]);
+        $this->assertNull($order->pickingSession);
+        $this->assertSame(0, $item->fresh()->qty_picked);
+
+        // Retur lama tidak bisa dihapus lagi karena barangnya akan dipakai untuk order ini
+        $this->delete(route('gudang.retur.destroy', \App\Models\OrderReturn::firstOrFail()->id))->assertSessionHas('error');
+        $this->assertSame(5, $this->stockQty('JSC-A-L', 'A-01-01'));
+
+        // Picking baru bisa dibuat untuk order yang sama
+        $this->post(route('gudang.picking.store'), ['order_id' => $order->id])->assertSessionHas('success');
+        $this->assertSame('PICKING', $order->fresh()->status);
+    }
 }
