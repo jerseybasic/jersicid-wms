@@ -203,4 +203,34 @@ class CourierHandoverTest extends TestCase
         $this->assertSame('REGULER', CourierHandover::brand($order->courier));
         $this->assertSame(0, \App\Models\CourierAlias::count());
     }
+
+    public function test_every_packed_parcel_is_matched_against_the_handover(): void
+    {
+        $staff = $this->userWithRole('STAFF_GUDANG');
+        $this->makeSku('JSC-A-L');
+        $packed = function (Order $order) use ($staff) {
+            \App\Models\PackingSession::create(['order_id' => $order->id, 'user_id' => $staff->id, 'status' => 'COMPLETED', 'started_at' => now(), 'completed_at' => now()]);
+
+            return $order;
+        };
+        $handed = $packed($this->readyOrder('ORD-1', 'SPX Standard', 'SPX001'));
+        $packed($this->readyOrder('ORD-2', 'SPX Standard', 'SPX002'));
+        $packed($this->readyOrder('ORD-3', 'J&T Express', 'JT003', 'SHIPPED'));   // dikirim tanpa scan
+        $packed($this->readyOrder('ORD-4', 'JNE', 'JNE004', 'CANCELLED'));
+        $this->readyOrder('ORD-LAMA', 'JNE', 'JNE005');                             // dikemas tanpa sesi packing hari ini
+
+        $this->actingAs($staff)->postJson(route('gudang.handover.scan-any'), ['code' => 'SPX001'])->assertOk();
+        $handover = CourierHandover::where('courier', 'SPX')->firstOrFail();
+        $this->post(route('gudang.handover.finish', $handover), ['driver_name' => 'Andi']);
+        $this->assertSame('SHIPPED', $handed->fresh()->status);
+
+        $response = $this->get(route('gudang.handover'))->assertOk()
+            ->assertSee('4 paket')
+            ->assertSee('2 perlu dicek')
+            ->assertSee('Berstatus Dikirim tanpa scan serah terima')
+            ->assertSee('Order dibatalkan setelah dikemas');
+        $summary = $response->viewData('packed');
+        $this->assertSame([4, 1, 1], [$summary['total'], $summary['handed'], $summary['waiting']]);
+        $this->assertSame(['ORD-3', 'ORD-4'], $summary['check']->pluck('order_number')->sort()->values()->all());
+    }
 }

@@ -10,6 +10,7 @@ use App\Models\AuditTrail;
 use App\Models\Warehouse;
 use App\Models\WarehouseRack;
 use App\Models\PurchaseOrder;
+use App\Services\WaitingStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -222,9 +223,12 @@ class InboundController extends Controller
                 return $firstMovementId;
             });
 
+            // Order yang menunggu stok langsung kembali ke antrean jika barangnya sekarang cukup
+            $released = WaitingStock::release(auth()->id(), $request->ip());
+
             // Langsung ke detail penerimaan supaya label SKU bisa dicetak
             return redirect()->route('gudang.inbound.show', $firstMovementId)
-                ->with('success', 'Barang berhasil diterima! Stok telah diperbarui. Cetak label SKU di bawah ini.');
+                ->with('success', 'Barang berhasil diterima! Stok telah diperbarui. Cetak label SKU di bawah ini.' . WaitingStock::releasedMessage($released));
         } catch (\Exception $e) {
             return back()
                 ->withInput()

@@ -56,7 +56,7 @@ class OrderBulkActionTest extends TestCase
             ->assertRedirect(route('gudang.outbound'))
             ->assertSessionHas('success', '1 order dikonfirmasi.')
             ->assertSessionHas('error', fn ($message) => str_starts_with($message, '2 order dilewati:')
-                && str_contains($message, 'BULK-LATER belum bisa dikonfirmasi, stok kurang')
+                && str_contains($message, 'BULK-LATER menunggu stok')
                 && str_contains($message, 'BULK-SHIPPED tidak bisa diubah'));
 
         $this->assertSame('CONFIRMED', $urgent->fresh()->status);

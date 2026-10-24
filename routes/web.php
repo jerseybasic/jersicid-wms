@@ -28,6 +28,7 @@ use App\Http\Controllers\Warehouse\TaskController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Warehouse\ScanCommandController;
 use App\Http\Controllers\Warehouse\ShipmentClosingController;
+use App\Http\Controllers\Warehouse\RestockController;
 use App\Http\Controllers\Warehouse\ReturnController;
 use App\Http\Controllers\Auth\LoginController;
 
@@ -127,6 +128,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
     Route::post('/massal', [OutboundController::class, 'bulkStatus'])->name('outbound.bulk-status');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
+    Route::post('/{id}/batalkan', [OutboundController::class, 'cancel'])->name('outbound.cancel');
+    Route::post('/{id}/proses-ulang', [OutboundController::class, 'reprocess'])->name('outbound.reprocess');
     Route::get('/{id}/edit', [OutboundController::class, 'edit'])->name('outbound.edit');
     Route::put('/{id}', [OutboundController::class, 'update'])->name('outbound.update');
     Route::get('/{id}', [OutboundController::class, 'show'])->name('outbound.show');
@@ -138,6 +141,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::get('/create', [ReturnController::class, 'create'])->name('retur.create');
     Route::post('/', [ReturnController::class, 'store'])->name('retur.store');
     Route::get('/{id}', [ReturnController::class, 'show'])->name('retur.show');
+    Route::put('/{id}', [ReturnController::class, 'update'])->name('retur.update');
+    Route::delete('/{id}', [ReturnController::class, 'destroy'])->name('retur.destroy');
 });
 
 // ==================== PICKING (GUDANG) ====================
@@ -153,6 +158,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{sessionId}/items/{itemId}/pick', [PickingController::class, 'pickItem'])->name('picking.pick');
         Route::post('/{id}/scan', [PickingController::class, 'scan'])->name('picking.scan');
         Route::post('/{sessionId}/items/{itemId}/ketuk', [PickingController::class, 'tap'])->name('picking.tap');
+        Route::post('/{sessionId}/items/{itemId}/tidak-ada', [PickingController::class, 'missing'])->name('picking.missing');
         Route::delete('/{id}', [PickingController::class, 'destroy'])->name('picking.destroy');
     });
 
@@ -167,7 +173,18 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::get('/{batch}', [PickingBatchController::class, 'show'])->name('show');
         Route::post('/{batch}/scan', [PickingBatchController::class, 'scan'])->name('scan');
         Route::post('/{batch}/kurangi', [PickingBatchController::class, 'undo'])->name('undo');
+        Route::post('/{batch}/tidak-ada', [PickingBatchController::class, 'missing'])->name('missing');
         Route::delete('/{batch}', [PickingBatchController::class, 'destroy'])->name('destroy');
+    });
+
+// ==================== KEMBALIKAN KE RAK (ORDER BATAL) ====================
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
+    ->prefix('gudang/kembalikan-ke-rak')
+    ->name('gudang.restock')
+    ->group(function () {
+        Route::get('/', [RestockController::class, 'index']);
+        Route::post('/scan', [RestockController::class, 'scan'])->name('.scan');
+        Route::post('/{item}/ketuk', [RestockController::class, 'tap'])->name('.tap');
     });
 
 // ==================== SERAH TERIMA KURIR (GUDANG) ====================
@@ -201,6 +218,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{sessionId}/items/{itemId}/pack', [PackingController::class, 'packItem'])->name('packing.pack');
         Route::post('/{id}/scan', [PackingController::class, 'scan'])->name('packing.scan');
         Route::post('/{sessionId}/items/{itemId}/ketuk', [PackingController::class, 'tap'])->name('packing.tap');
+        Route::post('/{sessionId}/items/{itemId}/masalah', [PackingController::class, 'problem'])->name('packing.problem');
         Route::delete('/{id}', [PackingController::class, 'destroy'])->name('packing.destroy');
     });
 

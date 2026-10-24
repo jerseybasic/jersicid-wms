@@ -66,9 +66,27 @@ class WorkQueue
             'key' => 'order_confirm',
             'label' => 'Order baru perlu dikonfirmasi',
             'hint' => 'Cek lalu konfirmasi',
-            'count' => Order::where('status', 'PENDING')->count(),
+            'count' => Order::where('status', 'PENDING')->whereNull('waiting_stock_at')->count(),
             'url' => route('gudang.outbound', ['status' => 'PENDING']),
             'color' => 'blue',
+        ];
+
+        $items[] = [
+            'key' => 'waiting_stock',
+            'label' => 'Order menunggu stok',
+            'hint' => $isManager ? 'Buat PO untuk kekurangannya' : 'Masuk antrean otomatis saat barang diterima',
+            'count' => Order::waitingStock()->count(),
+            'url' => route('gudang.outbound', ['status' => 'WAITING_STOCK']),
+            'color' => 'amber',
+        ];
+
+        $items[] = [
+            'key' => 'to_restock',
+            'label' => 'Barang order batal belum kembali ke rak',
+            'hint' => 'Scan barang ke raknya',
+            'count' => (int) OrderCancellation::pendingItems()->sum('qty_picked'),
+            'url' => route('gudang.restock'),
+            'color' => 'red',
         ];
 
         $items[] = [

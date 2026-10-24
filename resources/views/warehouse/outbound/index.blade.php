@@ -20,7 +20,7 @@
         @endif
 
         <!-- Stats -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
                 <p class="text-xs text-slate-400">Total Order</p>
                 <p class="text-xl font-bold text-white">{{ $stats['total'] }}</p>
@@ -29,6 +29,10 @@
                 <p class="text-xs text-amber-400">Pending</p>
                 <p class="text-xl font-bold text-white">{{ $stats['pending'] }}</p>
             </div>
+            <a href="{{ route('gudang.outbound', ['status' => 'WAITING_STOCK']) }}" class="bg-slate-900 border {{ $stats['waiting'] ? 'border-orange-500/50' : 'border-slate-800' }} rounded-lg p-4 hover:bg-slate-800/60">
+                <p class="text-xs text-orange-400">Menunggu stok</p>
+                <p class="text-xl font-bold text-white">{{ $stats['waiting'] }}</p>
+            </a>
             <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
                 <p class="text-xs text-purple-400">Picking</p>
                 <p class="text-xl font-bold text-white">{{ $stats['picking'] }}</p>
@@ -39,6 +43,39 @@
             </div>
         </div>
 
+        @if ($needs->isNotEmpty())
+            {{-- Kekurangan barang untuk order yang menunggu stok --}}
+            <div class="bg-slate-900 border border-orange-500/40 rounded-lg p-4 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-semibold text-orange-300">Barang yang kurang untuk order menunggu stok</p>
+                        <p class="text-xs text-slate-400">Order masuk antrean picking otomatis begitu barangnya diterima di Inbound.</p>
+                    </div>
+                    @if (in_array(auth()->user()->role, ['OWNER', 'SUPERVISOR'], true) && $needs->sum('short') > 0)
+                        <a href="{{ route('po.create', ['dari' => 'kebutuhan-order']) }}" class="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-slate-900 text-sm font-bold rounded-lg">Buat PO untuk kekurangan</a>
+                    @endif
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="text-xs text-slate-400 text-left">
+                            <tr><th class="py-1 pr-2">SKU</th><th class="py-1 px-1.5 text-right" title="Jumlah yang dipesan order menunggu stok">Butuh</th><th class="py-1 px-1.5 text-right" title="Stok yang belum dijatah ke order lain">Ada</th><th class="py-1 px-1.5 text-right" title="Sudah dipesan di PO yang belum diterima">Di PO</th><th class="py-1 pl-1.5 text-right">Kurang</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            @foreach ($needs as $need)
+                                <tr>
+                                    <td class="py-1.5 pr-2"><span class="font-mono text-white break-all">{{ $need['sku'] }}</span><span class="block text-xs text-slate-500">{{ $need['orders'] }} order</span></td>
+                                    <td class="py-1.5 px-1.5 text-right text-slate-300">{{ $need['need'] }}</td>
+                                    <td class="py-1.5 px-1.5 text-right text-slate-300">{{ $need['available'] }}</td>
+                                    <td class="py-1.5 px-1.5 text-right text-slate-300">{{ $need['incoming'] }}</td>
+                                    <td class="py-1.5 pl-1.5 text-right font-bold {{ $need['short'] ? 'text-orange-300' : 'text-emerald-400' }}">{{ $need['short'] ?: 'cukup' }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
+
         <!-- Filter & Table -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden" x-data="bulkOrders(@js($orders->pluck('status', 'id')))">
             <div class="p-4 border-b border-slate-800 flex flex-wrap gap-3">
@@ -47,6 +84,7 @@
                     <select name="status" class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none">
                         <option value="">Semua Status</option>
                         <option value="PENDING" {{ request('status') == 'PENDING' ? 'selected' : '' }}>Pending</option>
+                        <option value="WAITING_STOCK" {{ request('status') == 'WAITING_STOCK' ? 'selected' : '' }}>Menunggu stok</option>
                         <option value="CONFIRMED" {{ request('status') == 'CONFIRMED' ? 'selected' : '' }}>Confirmed</option>
                         <option value="PICKING" {{ request('status') == 'PICKING' ? 'selected' : '' }}>Picking</option>
                         <option value="PACKING" {{ request('status') == 'PACKING' ? 'selected' : '' }}>Packing</option>
@@ -129,7 +167,7 @@
                                         'CANCELLED' => 'bg-red-500/20 text-red-400',
                                     ];
                                 @endphp
-                                <span class="text-xs px-2 py-1 rounded-full {{ $statusColors[$order->status] ?? 'bg-slate-500/20 text-slate-400' }}">
+                                <span class="text-xs px-2 py-1 rounded-full {{ $order->isWaitingStock() ? 'bg-orange-500/20 text-orange-300' : ($statusColors[$order->status] ?? 'bg-slate-500/20 text-slate-400') }}">
                                     {{ $order->status_label }}
                                 </span>
                             </td>

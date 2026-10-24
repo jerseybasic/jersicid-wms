@@ -36,8 +36,10 @@ class CourierHandoverController extends Controller
             ->orderBy('packed_at')
             ->get();
 
+        // Hanya yang benar-benar lewat scan serah terima; sisanya muncul di "perlu dicek" (lihat packedOn)
         $shipped = Order::whereIn('status', ['SHIPPED', 'COMPLETED'])
             ->whereBetween('shipped_at', [$date, $date->copy()->endOfDay()])
+            ->whereHas('handoverItem')
             ->with('handoverItem.handover:id,handover_number,driver_name,completed_at')
             ->withSum('items', 'qty_ordered')
             ->orderBy('shipped_at')
@@ -72,9 +74,51 @@ class CourierHandoverController extends Controller
         $history = CourierHandover::with('user:id,name')->withCount('items')
             ->where('status', 'COMPLETED')->latest('completed_at')->limit(20)->get();
 
+        $packed = self::packedOn($date);
+
         $canMap = in_array(auth()->user()->role, SkuAlias::MANAGER_ROLES, true);
 
-        return view('warehouse.handover.index', compact('groups', 'noResi', 'history', 'date', 'canMap'));
+        return view('warehouse.handover.index', compact('groups', 'noResi', 'history', 'date', 'canMap', 'packed'));
+    }
+
+    /**
+     * Cocokkan hasil packing dengan serah terima: semua paket yang selesai dikemas pada tanggal ini
+     * dan posisinya sekarang. Paket yang tidak lewat scan serah terima (dikirim tanpa scan, dibatalkan,
+     * kembali ke picking, dsb.) dikumpulkan di "check" supaya tidak ada paket yang hilang dari pantauan.
+     *
+     * @return array{total: int, handed: int, waiting: int, check: \Illuminate\Support\Collection}
+     */
+    public static function packedOn(Carbon $date): array
+    {
+        $orders = Order::whereHas('packingSession', fn ($q) => $q->where('status', 'COMPLETED')
+            ->whereBetween('completed_at', [$date, $date->copy()->endOfDay()]))
+            ->with('handoverItem.handover:id,handover_number,status', 'packingSession:id,order_id,completed_at')
+            ->get();
+
+        $state = fn (Order $order) => match (true) {
+            $order->handoverItem?->handover?->status === 'COMPLETED' => 'handed',
+            $order->status === 'READY_TO_SHIP' => 'waiting',
+            default => 'check',
+        };
+        $byState = $orders->groupBy($state);
+
+        return [
+            'total' => $orders->count(),
+            'handed' => $byState->get('handed', collect())->count(),
+            'waiting' => $byState->get('waiting', collect())->count(),
+            'check' => $byState->get('check', collect())->sortBy(fn ($order) => $order->packingSession?->completed_at)->values(),
+        ];
+    }
+
+    /** Alasan paket hasil packing tidak lewat serah terima, untuk daftar "perlu dicek" */
+    public static function checkReason(Order $order): string
+    {
+        return match ($order->status) {
+            'SHIPPED', 'COMPLETED' => 'Berstatus ' . $order->status_label . ' tanpa scan serah terima' . ($order->shipped_at ? ' (' . $order->shipped_at->format('d/m H:i') . ')' : ''),
+            'CANCELLED' => 'Order dibatalkan setelah dikemas',
+            'PICKING', 'PACKING' => 'Kembali ke ' . strtolower($order->status_label) . ' setelah dikemas',
+            default => 'Status sekarang: ' . $order->status_label,
+        };
     }
 
     /** Kunci HTML untuk angka per ekspedisi yang diperbarui setelah scan */

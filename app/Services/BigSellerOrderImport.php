@@ -135,7 +135,7 @@ class BigSellerOrderImport
             $order['warnings'] = [];
 
             if (isset($existing[$order['order_number']])) {
-                $order['problems'][] = 'Sudah pernah diimpor';
+                $order['problems'][] = 'Sudah pernah diimpor. Untuk mengirim ulang, buka order-nya lalu pakai Proses ulang';
             }
             if ($order['cancelled']) {
                 $order['problems'][] = 'Pesanan dibatalkan';

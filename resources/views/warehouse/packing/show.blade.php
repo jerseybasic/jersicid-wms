@@ -17,6 +17,12 @@
         $running = $session->status === 'IN_PROGRESS';
         $order = $session->order;
         $canManual = in_array(auth()->user()->role, ['OWNER', 'SUPERVISOR', 'ADMIN_GUDANG'], true);
+        // Setelah lapor masalah, order kembali ke picking sampai barang penggantinya diambil
+        $waitingReplacement = $running && $order?->status === 'PICKING';
+        $replacements = $waitingReplacement
+            ? ($session->pickingSession?->items ?? collect())->filter(fn ($item) => $item->qty_picked < $item->qty_ordered)
+            : collect();
+        $problems = \App\Http\Controllers\Warehouse\PackingController::PROBLEMS;
     @endphp
 
     <div class="max-w-3xl mx-auto space-y-4">
@@ -55,6 +61,20 @@
                 @csrf
                 <button type="submit" class="w-full py-4 bg-purple-500 hover:bg-purple-400 text-white font-bold rounded-xl">Mulai packing</button>
             </form>
+        @elseif ($session->status === 'CANCELLED')
+            <div class="bg-red-900/20 border border-red-500/40 rounded-xl p-4 text-sm text-red-300">
+                Order ini dibatalkan. Jangan dikemas; kembalikan barangnya lewat
+                <a href="{{ route('gudang.restock') }}" class="font-semibold underline">Kembalikan ke Rak</a>.
+            </div>
+        @elseif ($waitingReplacement)
+            <div class="bg-amber-900/20 border border-amber-500/40 rounded-xl p-4 space-y-3 text-sm text-amber-200">
+                <p class="font-semibold">Menunggu barang pengganti</p>
+                @foreach ($replacements as $item)
+                    <p>Ambil <span class="font-bold text-white">{{ $item->qty_ordered - $item->qty_picked }} pcs {{ $item->sku }}</span> di rak <span class="font-mono font-bold text-cyan-300">{{ $item->bin_code }}</span></p>
+                @endforeach
+                <a href="{{ route('gudang.picking.show', $session->picking_session_id) }}" class="block w-full py-3 text-center bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded-xl">Ambil pengganti</a>
+                <p class="text-xs text-amber-300/80">Setelah penggantinya diambil, kembali ke halaman ini untuk melanjutkan packing.</p>
+            </div>
         @elseif ($running)
             <x-scan-box :endpoint="route('gudang.packing.scan', $session->id)" storage-key="packing-{{ $session->id }}"
                 :with-bin="false" hint="Scan setiap barang yang dimasukkan ke paket, atau ketuk +1 di barang yang belum ada barcode-nya." />
@@ -86,13 +106,25 @@
                             </p>
                         </div>
 
-                        @if ($running)
+                        @if ($running && !$waitingReplacement)
                             <div class="grid grid-cols-3 gap-2">
                                 <button type="button" onclick="scanTap(@js(route('gudang.packing.tap', [$session->id, $item->id])), { delta: -1 })"
                                     class="py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl">−1</button>
                                 <button type="button" onclick="scanTap(@js(route('gudang.packing.tap', [$session->id, $item->id])), { delta: 1 })"
                                     class="col-span-2 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl">+1 Masukkan</button>
                             </div>
+
+                            <details class="text-xs text-slate-400">
+                                <summary class="cursor-pointer select-none text-amber-400">Ada masalah dengan barang ini?</summary>
+                                <form method="POST" action="{{ route('gudang.packing.problem', [$session->id, $item->id]) }}" class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    @csrf
+                                    @foreach ($problems as $reason => $label)
+                                        <button type="submit" name="reason" value="{{ $reason }}"
+                                            onclick="return confirm(@js('Laporkan 1 pcs ' . $item->sku . ': ' . strtolower($label) . '? Barang penggantinya perlu diambil dari rak.'))"
+                                            class="py-2 px-3 bg-slate-800 hover:bg-amber-600 border border-slate-700 text-slate-200 font-semibold rounded-lg">{{ $label }}</button>
+                                    @endforeach
+                                </form>
+                            </details>
 
                             @if ($canManual && !$complete)
                                 <details class="text-xs text-slate-400">

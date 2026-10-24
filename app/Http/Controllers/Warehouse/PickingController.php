@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PickingBatch;
 use App\Models\PickingSession;
 use App\Models\PickingSessionItem;
 use App\Models\StockActive;
@@ -249,6 +250,32 @@ class PickingController extends Controller
         }
     }
 
+    /**
+     * "Barang tidak ada": picker tidak menemukan barang di rak sarannya. Picker diarahkan ke rak lain
+     * yang masih ada stoknya, atau order ditunda sebagai "Menunggu stok".
+     */
+    public function missing(Request $request, $sessionId, $itemId)
+    {
+        try {
+            [$message, $newBin, $session] = DB::transaction(function () use ($sessionId, $itemId, $request) {
+                $session = PickingSession::with('order')->lockForUpdate()->findOrFail($sessionId);
+                $item = $session->items()->lockForUpdate()->findOrFail($itemId);
+
+                return [...Picking::reportMissing($session, $item, auth()->id(), $request->ip()), $session];
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($newBin) {
+            return back()->with('success', $message);
+        }
+
+        return $session->batch_id && PickingBatch::find($session->batch_id)
+            ? redirect()->route('gudang.picking-batch.show', $session->batch_id)->with('success', $message)
+            : redirect()->route('gudang.tugas')->with('success', $message);
+    }
+
     /** Ambil 1 pcs item dari rak yang paling masuk akal, lalu jawaban untuk kotak scan */
     private function pickOne(PickingSession $session, PickingSessionItem $item, ?string $activeBin, Request $request, string $via = 'scan'): array
     {
@@ -284,8 +311,8 @@ class PickingController extends Controller
         $session = PickingSession::findOrFail($id);
         $user = auth()->user();
 
-        if ($session->status === 'COMPLETED') {
-            return back()->with('error', 'Tidak dapat menghapus session yang sudah selesai.');
+        if (in_array($session->status, ['COMPLETED', 'CANCELLED'], true)) {
+            return back()->with('error', 'Tidak dapat menghapus session yang sudah selesai atau dibatalkan.');
         }
 
         DB::transaction(fn () => Picking::cancel($session, $user->id, request()->ip()));

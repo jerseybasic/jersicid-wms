@@ -53,8 +53,9 @@ class SystemChecksTest extends TestCase
 
         $tooMuch = $this->pendingOrder('ORD-BARU', 'JSC-A-L', 3);
         $this->actingAs($staff)->patch(route('gudang.outbound.update-status', $tooMuch->id), ['status' => 'CONFIRMED'])
-            ->assertSessionHas('error', 'Order ORD-BARU belum bisa dikonfirmasi, stok kurang: JSC-A-L butuh 3, tersedia 2.');
+            ->assertSessionHas('error', 'Order ORD-BARU menunggu stok (JSC-A-L butuh 3, tersedia 2). Order otomatis masuk antrean picking saat barangnya diterima.');
         $this->assertSame('PENDING', $tooMuch->fresh()->status);
+        $this->assertTrue($tooMuch->fresh()->isWaitingStock());
 
         $fits = $this->pendingOrder('ORD-PAS', 'JSC-A-L', 2);
         $this->patch(route('gudang.outbound.update-status', $fits->id), ['status' => 'CONFIRMED'])
