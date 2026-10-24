@@ -125,6 +125,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/import/map', [OrderImportController::class, 'map'])->name('outbound.import.map');
     Route::post('/import', [OrderImportController::class, 'store'])->name('outbound.import.store');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
+    Route::post('/massal', [OutboundController::class, 'bulkStatus'])->name('outbound.bulk-status');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
     Route::get('/{id}/edit', [OutboundController::class, 'edit'])->name('outbound.edit');
     Route::put('/{id}', [OutboundController::class, 'update'])->name('outbound.update');
@@ -176,6 +177,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->group(function () {
         Route::get('/', [CourierHandoverController::class, 'index']);
         Route::post('/', [CourierHandoverController::class, 'store'])->name('.store');
+        Route::post('/scan', [CourierHandoverController::class, 'scanAny'])->name('.scan-any');
+        Route::get('/ekspedisi', [CourierHandoverController::class, 'couriers'])->name('.couriers');
+        Route::post('/ekspedisi', [CourierHandoverController::class, 'saveCouriers'])->name('.couriers.save');
         Route::get('/{handover}', [CourierHandoverController::class, 'show'])->name('.show');
         Route::post('/{handover}/scan', [CourierHandoverController::class, 'scan'])->name('.scan');
         Route::delete('/{handover}/paket/{order}', [CourierHandoverController::class, 'removeItem'])->name('.remove');

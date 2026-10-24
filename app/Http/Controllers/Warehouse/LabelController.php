@@ -216,18 +216,24 @@ class LabelController extends Controller
     }
 
     /**
-     * Semua label kirim order yang siap dikirim (READY_TO_SHIP) dalam satu kali cetak.
+     * Label kirim beberapa order dalam satu kali cetak: order yang dipilih di daftar Outbound,
+     * atau semua order yang siap dikirim (READY_TO_SHIP) jika tidak ada yang dipilih.
      */
-    public function shippingBulk()
+    public function shippingBulk(Request $request)
     {
+        $ids = array_filter((array) $request->input('ids', []), 'is_string');
         $orders = Order::with('items.masterSku')
-            ->where('status', 'READY_TO_SHIP')
+            ->when($ids,
+                fn ($query) => $query->whereIn('id', $ids)->whereIn('status', ['READY_TO_SHIP', 'SHIPPED', 'COMPLETED']),
+                fn ($query) => $query->where('status', 'READY_TO_SHIP'))
             ->orderBy('packed_at')
             ->orderBy('created_at')
             ->get();
 
         if ($orders->isEmpty()) {
-            return redirect()->route('gudang.outbound')->with('error', 'Belum ada order yang siap dikirim.');
+            return redirect()->route('gudang.outbound')->with('error', $ids
+                ? 'Label hanya bisa dicetak untuk order yang sudah selesai dikemas (Siap Kirim, Dikirim, atau Selesai).'
+                : 'Belum ada order yang siap dikirim.');
         }
 
         return $this->shippingLabels($orders);

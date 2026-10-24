@@ -32,6 +32,13 @@ class CourierHandoverTest extends TestCase
         return $order;
     }
 
+    /** Jumlah paket "belum di-scan" per ekspedisi di halaman Serah Terima */
+    private function waiting($response): array
+    {
+        return $response->viewData('groups')->filter(fn ($g) => $g['counts']['waiting'])
+            ->mapWithKeys(fn ($g) => [$g['courier'] => $g['counts']['waiting']])->sortKeys()->all();
+    }
+
     public function test_scan_parcels_and_hand_them_over(): void
     {
         $this->makeSku('JSC-A-L');
@@ -46,7 +53,8 @@ class CourierHandoverTest extends TestCase
 
         $this->actingAs($staff)->get(route('gudang.tugas'))->assertSee('Serahkan ke kurir (scan resi)');
         $index = $this->get(route('gudang.handover'))->assertOk();
-        $this->assertSame(['JNE' => 1, 'SPX' => 4], $index->viewData('couriers')->all());
+        $this->assertSame(['JNE' => 1, 'SPX' => 3], $this->waiting($index));
+        $this->assertSame(['SP-4'], $index->viewData('noResi')->pluck('order_number')->all());
 
         $this->post(route('gudang.handover.store'), ['courier' => 'SPX']);
         $handover = CourierHandover::firstOrFail();
@@ -67,7 +75,7 @@ class CourierHandoverTest extends TestCase
         foreach ([
             'SPXID001' => 'SP-1 sudah ada di daftar.',
             'JNE001' => 'TK-1 untuk kurir JNE, bukan SPX. Pisahkan paket ini.',
-            'SP-4' => 'SP-4 belum punya nomor resi. Isi resinya dulu di Outbound.',
+            'SP-4' => 'SP-4 belum punya nomor resi. Cek di BigSeller lalu isi resinya di detail order.',
             'SPXID005' => 'SP-5 belum siap kirim (status: Siap/Sedang Packing). Jangan diserahkan.',
             'XXX' => 'Resi atau nomor order XXX tidak ditemukan.',
         ] as $code => $message) {
@@ -106,7 +114,7 @@ class CourierHandoverTest extends TestCase
         $order = $this->readyOrder('SP-1', 'SPX', 'SPXID001');
         $this->readyOrder('X-1', null, 'R-1');
 
-        $this->assertSame(['SPX' => 1, 'TANPA KURIR' => 1], $this->get(route('gudang.handover'))->viewData('couriers')->all());
+        $this->assertSame(['SPX' => 1, 'TANPA KURIR' => 1], $this->waiting($this->get(route('gudang.handover'))));
 
         $this->post(route('gudang.handover.store'), ['courier' => 'TANPA KURIR']);
         $this->assertSame('TANPA KURIR', CourierHandover::firstOrFail()->courier);
@@ -121,5 +129,78 @@ class CourierHandoverTest extends TestCase
         $this->assertSame('READY_TO_SHIP', $order->fresh()->status);
         $this->assertNull($order->fresh()->handoverItem);
         $this->assertSame(1, CourierHandover::count());
+    }
+
+    public function test_marketplace_courier_names_group_into_one_expedition(): void
+    {
+        foreach ([
+            'SPX Standard' => 'SPX', 'Shopee Xpress Instant' => 'SPX', 'spx  hemat' => 'SPX',
+            'J&T Express' => 'J&T', 'JNT' => 'J&T', 'J&T Cargo' => 'J&T CARGO',
+            'ID Express' => 'ID EXPRESS', 'JNE REG' => 'JNE', 'Pos Indonesia' => 'POS',
+            'Reguler' => 'REGULER', '' => 'TANPA KURIR', null => 'TANPA KURIR',
+        ] as $name => $brand) {
+            $this->assertSame($brand, CourierHandover::brand($name), "Nama: {$name}");
+        }
+    }
+
+    public function test_scanning_any_resi_groups_it_by_expedition_and_tracks_what_was_handed_over(): void
+    {
+        $this->makeSku('JSC-A-L');
+        $this->actingAs($this->userWithRole('STAFF_GUDANG'));
+        $spx = $this->readyOrder('SP-1', 'SPX Standard', 'SPXID001');
+        $this->readyOrder('SP-2', 'Shopee Xpress', 'SPXID002');
+        $jnt = $this->readyOrder('TT-1', 'J&T Express', 'JT001');
+        $this->readyOrder('TT-2', 'JNT', 'JT002');
+
+        $this->assertSame(['J&T' => 2, 'SPX' => 2], $this->waiting($this->get(route('gudang.handover'))));
+
+        // Tanpa memilih kurir: tiap resi masuk ke serah terima ekspedisinya
+        $this->postJson(route('gudang.handover.scan-any'), ['code' => 'spxid001'])->assertOk()
+            ->assertJson(['ok' => true, 'items' => [['id' => 'scanned-spx', 'qty' => 1], ['id' => 'waiting-spx', 'qty' => 1], ['id' => 'pkg-' . $spx->id, 'qty' => 'Di-scan', 'class' => 'font-semibold text-cyan-400']]]);
+        $this->postJson(route('gudang.handover.scan-any'), ['code' => 'JT001'])->assertOk()
+            ->assertJsonPath('message', '✓ J&T · TT-1 · JT001. J&T: 1 paket di-scan, 1 belum.');
+        $this->postJson(route('gudang.handover.scan-any'), ['code' => 'JT001'])->assertStatus(422)->assertJson(['message' => 'TT-1 sudah ada di daftar.']);
+        $this->assertSame(['J&T', 'SPX'], CourierHandover::where('status', 'OPEN')->orderBy('courier')->pluck('courier')->all());
+
+        $jntHandover = CourierHandover::where('courier', 'J&T')->firstOrFail();
+        $this->post(route('gudang.handover.store'), ['courier' => 'J&T'])->assertRedirect(route('gudang.handover.show', $jntHandover));
+        $this->post(route('gudang.handover.finish', $jntHandover));
+
+        $groups = $this->get(route('gudang.handover'))->assertOk()->assertSee('JT001')->viewData('groups')->keyBy('courier');
+        $this->assertSame(['waiting' => 1, 'scanned' => 0, 'shipped' => 1], $groups['J&T']['counts']);
+        $this->assertSame(['waiting' => 1, 'scanned' => 1, 'shipped' => 0], $groups['SPX']['counts']);
+        $this->assertSame('shipped', $groups['J&T']['orders']->firstWhere('order.id', $jnt->id)['state']);
+
+        // Tanggal lain: paket yang diserahkan hari ini tidak dihitung
+        $yesterday = $this->get(route('gudang.handover', ['tanggal' => today()->subDay()->toDateString()]))->viewData('groups')->keyBy('courier');
+        $this->assertSame(0, $yesterday['J&T']['counts']['shipped']);
+    }
+
+    public function test_managers_map_courier_names_to_an_expedition(): void
+    {
+        $this->makeSku('JSC-A-L');
+        $order = $this->readyOrder('SP-1', 'Reguler', 'R001');
+        $this->readyOrder('SP-2', 'SPX Standard', 'SPXID002');
+
+        $this->actingAs($this->userWithRole('STAFF_GUDANG'))->get(route('gudang.handover.couriers'))->assertForbidden();
+
+        $this->actingAs($this->userWithRole('ADMIN_GUDANG'));
+        $this->get(route('gudang.handover'))->assertSee('Atur nama ekspedisi');
+        $this->get(route('gudang.handover.couriers'))->assertOk()->assertSee('REGULER')->assertSee('SPX STANDARD');
+
+        $this->post(route('gudang.handover.couriers.save'), ['map' => [
+            ['name' => 'REGULER', 'courier' => 'spx'],
+            ['name' => 'SPX STANDARD', 'courier' => 'SPX'],
+        ]])->assertSessionHas('success', '1 nama jasa kirim dipetakan ulang.');
+
+        $this->assertSame('SPX', CourierHandover::brand('Reguler'));
+        $this->assertSame(1, \App\Models\CourierAlias::count());   // SPX Standard sudah SPX dari aturan bawaan
+        $this->assertSame(['SPX' => 2], $this->waiting($this->get(route('gudang.handover'))));
+        $this->postJson(route('gudang.handover.scan-any'), ['code' => 'R001'])->assertOk()->assertJsonPath('items.0.id', 'scanned-spx');
+
+        // Dikosongkan: kembali ke aturan bawaan
+        $this->post(route('gudang.handover.couriers.save'), ['map' => [['name' => 'REGULER', 'courier' => '']]]);
+        $this->assertSame('REGULER', CourierHandover::brand($order->courier));
+        $this->assertSame(0, \App\Models\CourierAlias::count());
     }
 }
