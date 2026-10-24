@@ -196,25 +196,87 @@ class PickingController extends Controller
                         : "SKU {$code} bukan bagian dari order ini. Jangan diambil.");
                 }
 
-                $binCode = strtoupper(trim($validated['bin_code'] ?? '')) ?: $item->bin_code;
-                Picking::apply($session, $item, $item->qty_picked + 1, $binCode, auth()->id(), $request->ip());
-
-                $item->refresh();
-                $session->refresh();
-
-                return [
-                    'ok' => true,
-                    'type' => 'sku',
-                    'message' => "{$code} dari {$binCode}: {$item->qty_picked}/{$item->qty_ordered}",
-                    'items' => [['id' => $item->id, 'qty' => $item->qty_picked, 'status' => $item->status]],
-                    'completed' => $session->status === 'COMPLETED',
-                ];
+                return $this->pickOne($session, $item, $validated['bin_code'] ?? null, $request);
             });
 
             return response()->json($result);
         } catch (\Exception $e) {
             return response()->json(['ok' => false, 'message' => safe_error_message($e)], 422);
         }
+    }
+
+    /**
+     * Ketuk barang di daftar: +1 sama dengan scan barangnya (untuk barang yang belum ada
+     * barcode-nya), -1 mengembalikan 1 pcs yang salah diambil ke raknya.
+     */
+    public function tap(Request $request, $sessionId, $itemId)
+    {
+        $validated = $request->validate([
+            'delta' => ['required', 'integer', 'in:1,-1'],
+            'bin_code' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        try {
+            $result = DB::transaction(function () use ($sessionId, $itemId, $validated, $request) {
+                $session = PickingSession::lockForUpdate()->findOrFail($sessionId);
+                $item = $session->items()->lockForUpdate()->findOrFail($itemId);
+
+                if ((int) $validated['delta'] === -1) {
+                    Picking::unpick($session, $item, auth()->id(), $request->ip());
+                    $item->refresh();
+
+                    return [
+                        'ok' => true,
+                        'type' => 'undo',
+                        'message' => "1 pcs {$item->sku} dikembalikan ke {$item->bin_code}: {$item->qty_picked}/{$item->qty_ordered}",
+                        'items' => [['id' => $item->id, 'qty' => $item->qty_picked, 'status' => $item->status]],
+                    ];
+                }
+
+                if ($session->status !== 'IN_PROGRESS') {
+                    throw new \RuntimeException('Mulai sesi picking dulu.');
+                }
+                if ($item->qty_picked >= $item->qty_ordered) {
+                    throw new \RuntimeException("{$item->sku} sudah lengkap diambil.");
+                }
+
+                return $this->pickOne($session, $item, $validated['bin_code'] ?? null, $request, 'diketuk');
+            });
+
+            return response()->json($result);
+        } catch (\Exception $e) {
+            return response()->json(['ok' => false, 'message' => safe_error_message($e)], 422);
+        }
+    }
+
+    /** Ambil 1 pcs item dari rak yang paling masuk akal, lalu jawaban untuk kotak scan */
+    private function pickOne(PickingSession $session, PickingSessionItem $item, ?string $activeBin, Request $request, string $via = 'scan'): array
+    {
+        [$binCode, $warning] = Picking::resolveBin($item, $activeBin);
+        Picking::apply($session, $item, $item->qty_picked + 1, $binCode, auth()->id(), $request->ip());
+
+        if ($via !== 'scan') {
+            AuditTrail::create([
+                'user_id' => auth()->id(),
+                'action' => 'MANUAL_PICK',
+                'module' => 'PICKING',
+                'new_values' => json_encode(['session_number' => $session->session_number, 'sku' => $item->sku, 'bin' => $binCode]),
+                'ip_address' => $request->ip(),
+            ]);
+        }
+
+        $item->refresh();
+        $session->refresh();
+
+        return [
+            'ok' => true,
+            'type' => 'sku',
+            'warning' => $warning,
+            'active_bin' => $binCode,
+            'message' => trim("{$item->sku} dari {$binCode}: {$item->qty_picked}/{$item->qty_ordered}. " . ($warning ?? '')),
+            'items' => [['id' => $item->id, 'qty' => $item->qty_picked, 'status' => $item->status]],
+            'completed' => $session->status === 'COMPLETED',
+        ];
     }
 
     public function destroy($id)

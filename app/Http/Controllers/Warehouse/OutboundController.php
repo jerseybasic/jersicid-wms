@@ -333,26 +333,27 @@ class OutboundController extends Controller
     }
 
     /**
-     * Aksi manual di daftar order: konfirmasi, batalkan, kirim (input resi), selesai.
-     * Status PICKING, PACKING, dan READY_TO_SHIP diatur otomatis oleh sesi picking & packing.
+     * Aksi manual di daftar order: konfirmasi, batalkan, selesai.
+     * Status PICKING, PACKING, dan READY_TO_SHIP diatur otomatis oleh sesi picking & packing,
+     * SHIPPED oleh serah terima kurir.
      */
     public function updateStatus(Request $request, $id)
     {
         $validated = $request->validate([
             'status' => ['required', 'in:CONFIRMED,CANCELLED,SHIPPED,COMPLETED'],
-            'tracking_number' => ['nullable', 'required_if:status,SHIPPED', 'string', 'max:255'],
-            'courier' => ['nullable', 'string', 'max:50'],
-        ], [
-            'tracking_number.required_if' => 'Nomor resi wajib diisi saat mengirim order.',
         ]);
 
         $order = Order::findOrFail($id);
         $newStatus = $validated['status'];
 
+        // Satu jalan kirim: paket Dikirim hanya lewat serah terima, supaya tercatat di manifest kurir
+        if ($newStatus === 'SHIPPED') {
+            return back()->with('error', "Order {$order->order_number} dikirim lewat Serah Terima Kurir: scan resinya saat kurir datang.");
+        }
+
         $allowedTransitions = [
             'PENDING' => ['CONFIRMED', 'CANCELLED'],
             'CONFIRMED' => ['CANCELLED'],
-            'READY_TO_SHIP' => ['SHIPPED'],
             'SHIPPED' => ['COMPLETED'],
         ];
 
@@ -366,12 +367,6 @@ class OutboundController extends Controller
         }
 
         $updateData = ['status' => $newStatus];
-
-        if ($newStatus === 'SHIPPED') {
-            $updateData['tracking_number'] = $validated['tracking_number'];
-            $updateData['courier'] = $validated['courier'] ?? $order->courier;
-            $updateData['shipped_at'] = now();
-        }
 
         DB::transaction(function () use ($order, $updateData, $request) {
             $oldStatus = $order->status;

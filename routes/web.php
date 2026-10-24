@@ -150,6 +150,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{id}/start', [PickingController::class, 'start'])->name('picking.start');
         Route::post('/{sessionId}/items/{itemId}/pick', [PickingController::class, 'pickItem'])->name('picking.pick');
         Route::post('/{id}/scan', [PickingController::class, 'scan'])->name('picking.scan');
+        Route::post('/{sessionId}/items/{itemId}/ketuk', [PickingController::class, 'tap'])->name('picking.tap');
         Route::delete('/{id}', [PickingController::class, 'destroy'])->name('picking.destroy');
     });
 
@@ -160,8 +161,10 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->group(function () {
         Route::get('/create', [PickingBatchController::class, 'create'])->name('create');
         Route::post('/', [PickingBatchController::class, 'store'])->name('store');
+        Route::post('/otomatis', [PickingBatchController::class, 'auto'])->name('auto');
         Route::get('/{batch}', [PickingBatchController::class, 'show'])->name('show');
         Route::post('/{batch}/scan', [PickingBatchController::class, 'scan'])->name('scan');
+        Route::post('/{batch}/kurangi', [PickingBatchController::class, 'undo'])->name('undo');
         Route::delete('/{batch}', [PickingBatchController::class, 'destroy'])->name('destroy');
     });
 
@@ -192,7 +195,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{id}/start', [PackingController::class, 'start'])->name('packing.start');
         Route::post('/{sessionId}/items/{itemId}/pack', [PackingController::class, 'packItem'])->name('packing.pack');
         Route::post('/{id}/scan', [PackingController::class, 'scan'])->name('packing.scan');
-        Route::post('/{id}/complete', [PackingController::class, 'complete'])->name('packing.complete');
+        Route::post('/{sessionId}/items/{itemId}/ketuk', [PackingController::class, 'tap'])->name('packing.tap');
         Route::delete('/{id}', [PackingController::class, 'destroy'])->name('packing.destroy');
     });
 

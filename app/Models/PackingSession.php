@@ -63,6 +63,18 @@ class PackingSession extends Model
         return $this->hasMany(PackingSessionItem::class, 'packing_session_id');
     }
 
+    public const STATUS_LABELS = [
+        'PENDING' => 'Belum mulai',
+        'IN_PROGRESS' => 'Sedang dikerjakan',
+        'COMPLETED' => 'Selesai',
+        'CANCELLED' => 'Dibatalkan',
+    ];
+
+    public function getStatusLabelAttribute(): string
+    {
+        return self::STATUS_LABELS[$this->status] ?? $this->status;
+    }
+
     public function getStatusColorAttribute()
     {
         return match ($this->status) {

@@ -12,13 +12,11 @@
 @elseif($order->status === 'PACKING')
     <a href="{{ route('gudang.packing') }}" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Ke Packing</a>
 @elseif($order->status === 'READY_TO_SHIP')
-    <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}" class="flex items-center gap-1">
-        @csrf @method('PATCH')
-        <input type="hidden" name="status" value="SHIPPED">
-        <input type="text" name="tracking_number" required placeholder="No. resi"
-               class="w-32 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-white text-xs font-mono focus:border-cyan-400 focus:outline-none">
-        <button class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-medium">Kirim</button>
-    </form>
+    {{-- Dikirim hanya lewat serah terima kurir; di sini cukup lengkapi resinya --}}
+    @if(blank($order->tracking_number))
+        <a href="{{ route('gudang.outbound.edit', $order->id) }}" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded font-medium">Isi resi</a>
+    @endif
+    <a href="{{ route('gudang.handover') }}" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-medium">Serah terima</a>
 @elseif($order->status === 'SHIPPED')
     <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}">
         @csrf @method('PATCH')

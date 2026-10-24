@@ -23,7 +23,7 @@
 
         {{-- QR perintah yang ditempel di meja: Mulai Picking, Mulai Packing, Cek Retur, Tutup Kiriman --}}
         <x-scan-box :endpoint="route('gudang.command')" storage-key="tugas" :with-bin="false"
-            hint="Scan QR perintah (Mulai Picking, Mulai Packing, Cek Retur, Tutup Kiriman) atau no. order/resi untuk membuka ordernya." />
+            hint="Scan QR perintah (Mulai Picking, Mulai Packing, Cek Retur, Tutup Kiriman), atau scan no. order/resi di keranjang untuk langsung mulai packing." />
 
         {{-- Ringkasan --}}
         <div class="grid grid-cols-3 gap-3">
@@ -67,7 +67,7 @@
         {{-- Sedang berjalan --}}
         @if ($activePicking->isNotEmpty() || $activeBatches->isNotEmpty() || $activePacking->isNotEmpty())
             <section class="space-y-3">
-                <h3 class="text-lg font-semibold text-white">Sedang berjalan</h3>
+                <h3 class="text-lg font-semibold text-white">Pekerjaan saya</h3>
                 @foreach ($activeBatches as $batch)
                     @php $batchItems = $batch->sessions->flatMap->items; @endphp
                     <div class="{{ $card }} border-cyan-500/40">
@@ -122,15 +122,34 @@
             </section>
         @endif
 
+        @if ($othersWork->isNotEmpty())
+            <section class="space-y-2">
+                <h3 class="text-sm font-semibold text-slate-400">Sedang dikerjakan staf lain</h3>
+                <div class="bg-slate-900 border border-slate-800 rounded-2xl divide-y divide-slate-800">
+                    @foreach ($othersWork as $work)
+                        <a href="{{ $work['url'] }}" class="flex items-center justify-between gap-3 px-4 py-3 text-sm hover:bg-slate-800/40">
+                            <span class="text-slate-300"><span class="text-xs font-bold text-slate-500 uppercase">{{ $work['type'] }}</span> {{ $work['title'] }}</span>
+                            <span class="text-slate-400 shrink-0">{{ $work['user'] ?? '-' }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            </section>
+        @endif
+
         {{-- Perlu diambil --}}
         <section id="ambil" class="space-y-3">
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                 Perlu diambil (picking) <span class="{{ $pill }} bg-amber-500/20 text-amber-400">{{ $toPick->count() }}</span>
             </h3>
             @if ($toPick->count() >= 2)
-                <a href="{{ route('gudang.picking-batch.create') }}" class="{{ $bigButton }} block bg-slate-800 border border-cyan-500/50 text-cyan-300">
-                    Ambil beberapa order sekaligus
-                </a>
+                {{-- Gabung otomatis: order dengan batas kirim terdekat, tanpa centang satu per satu --}}
+                <form method="POST" action="{{ route('gudang.picking-batch.auto') }}">
+                    @csrf
+                    <button type="submit" class="{{ $bigButton }} bg-cyan-500 text-slate-900">
+                        Ambil {{ min($toPick->count(), \App\Models\PickingBatch::AUTO_ORDERS) }} order sekaligus
+                    </button>
+                </form>
+                <a href="{{ route('gudang.picking-batch.create') }}" class="block text-center text-sm text-cyan-400 hover:text-cyan-300">Pilih sendiri order yang digabung</a>
             @endif
             @forelse ($toPick as $order)
                 <div class="{{ $card }}">
@@ -145,7 +164,7 @@
                         @csrf
                         <input type="hidden" name="order_id" value="{{ $order->id }}">
                         <input type="hidden" name="start_now" value="1">
-                        <button type="submit" class="{{ $bigButton }} bg-cyan-500 text-slate-900">Ambil & mulai picking</button>
+                        <button type="submit" class="{{ $bigButton }} bg-slate-800 border border-cyan-500/50 text-cyan-300">Ambil order ini saja</button>
                     </form>
                 </div>
             @empty
@@ -202,10 +221,11 @@
                         </div>
                         <p class="text-right text-sm font-bold text-white">{{ (int) $order->items_sum_qty_ordered }} pcs</p>
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <a href="{{ route('gudang.label.shipping', $order->id) }}" target="_blank" class="{{ $bigButton }} bg-emerald-500 text-slate-900">Cetak label kirim</a>
-                        <a href="{{ route('gudang.outbound', ['search' => $order->order_number]) }}" class="{{ $bigButton }} bg-slate-700 text-white">Isi resi & kirim</a>
-                    </div>
+                    @if ($order->tracking_number)
+                        <p class="text-sm text-slate-400">Resi <span class="font-mono text-white">{{ $order->tracking_number }}</span></p>
+                    @else
+                        <p class="text-sm text-amber-400">Belum ada resi. Cek di BigSeller lalu <a href="{{ route('gudang.outbound.edit', $order->id) }}" class="underline font-semibold">isi resinya</a>.</p>
+                    @endif
                 </div>
             @empty
                 <p class="text-sm text-slate-500">Belum ada paket yang siap dikirim.</p>

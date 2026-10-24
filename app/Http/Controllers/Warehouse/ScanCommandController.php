@@ -31,7 +31,7 @@ class ScanCommandController extends Controller
             'CMD-RETUR' => $this->open('Membuka cek retur...', route('gudang.retur.create')),
             'CMD-TUTUP' => $this->open('Membuka tutup kiriman hari ini...', route('gudang.closing')),
             default => ($order = Order::findByCode($validated['code']))
-                ? $this->open("Membuka order {$order->order_number}...", route('gudang.outbound.show', $order->id))
+                ? $this->openOrder($order, $request)
                 : response()->json([
                     'ok' => false,
                     'message' => 'Ini bukan QR perintah atau nomor order. Scan barang di layar picking, packing, atau cek barang.',
@@ -45,7 +45,33 @@ class ScanCommandController extends Controller
     }
 
     /**
-     * Picking yang sedang dikerjakan user ini dulu; bila tidak ada, ambil order CONFIRMED dengan batas kirim paling dekat.
+     * No. order atau resi yang di-scan. Paket yang selesai picking langsung dibuka untuk dikemas,
+     * jadi packer cukup scan label di keranjang yang dipegangnya. Status lain membuka detail order.
+     */
+    private function openOrder(Order $order, Request $request): JsonResponse
+    {
+        if ($order->status !== 'PACKING') {
+            return $this->open("Membuka order {$order->order_number}...", route('gudang.outbound.show', $order->id));
+        }
+
+        $session = DB::transaction(function () use ($order, $request) {
+            $order = Order::lockForUpdate()->findOrFail($order->id);
+            $session = $order->packingSession;
+            if (!$session) {
+                $session = Packing::createForOrder($order, auth()->id());
+                $this->audit('CREATE', 'PACKING', ['session_number' => $session->session_number, 'order_id' => $order->id, 'via' => 'scan order'], $request);
+            }
+            $this->startSession($session, 'PACKING', $request);
+
+            return $session;
+        });
+
+        return $this->open("Mulai packing {$order->order_number}...", route('gudang.packing.show', $session->id));
+    }
+
+    /**
+     * Picking yang sedang dikerjakan user ini dulu; bila tidak ada, gabungkan order CONFIRMED
+     * dengan batas kirim paling dekat (atau picking biasa bila hanya ada satu order).
      */
     private function startPicking(Request $request): JsonResponse
     {
@@ -56,7 +82,7 @@ class ScanCommandController extends Controller
             return $this->open("Melanjutkan picking gabungan {$batch->batch_number}...", route('gudang.picking-batch.show', $batch));
         }
 
-        $session = DB::transaction(function () use ($userId, $request) {
+        $started = DB::transaction(function () use ($userId, $request) {
             $session = PickingSession::where('user_id', $userId)
                 ->whereNull('batch_id')
                 ->whereIn('status', ['PENDING', 'IN_PROGRESS'])
@@ -65,18 +91,17 @@ class ScanCommandController extends Controller
                 ->first();
 
             if (!$session) {
-                $order = Order::where('status', 'CONFIRMED')
-                    ->whereDoesntHave('pickingSession')
-                    ->orderBy('ship_by')
-                    ->orderBy('created_at')
-                    ->lockForUpdate()
-                    ->first();
-                if (!$order) {
+                $orders = PickingBatchController::waitingOrders()->with('items')
+                    ->limit(PickingBatch::AUTO_ORDERS)->lockForUpdate()->get();
+                if ($orders->isEmpty()) {
                     return null;
                 }
+                if ($orders->count() > 1) {
+                    return PickingBatchController::createBatch($orders, $userId, $request->ip());
+                }
 
-                $session = Picking::createForOrder($order->load('items'), $userId);
-                $this->audit('CREATE', 'PICKING', ['session_number' => $session->session_number, 'order_id' => $order->id, 'via' => 'QR perintah'], $request);
+                $session = Picking::createForOrder($orders->first(), $userId);
+                $this->audit('CREATE', 'PICKING', ['session_number' => $session->session_number, 'order_id' => $session->order_id, 'via' => 'QR perintah'], $request);
             }
 
             $this->startSession($session, 'PICKING', $request);
@@ -84,11 +109,14 @@ class ScanCommandController extends Controller
             return $session;
         });
 
-        if (!$session) {
+        if (!$started) {
             return response()->json(['ok' => false, 'message' => 'Tidak ada order yang menunggu picking.'], 404);
         }
+        if ($started instanceof PickingBatch) {
+            return $this->open("Picking gabungan {$started->sessions()->count()} order. Siapkan keranjang bernomor...", route('gudang.picking-batch.show', $started));
+        }
 
-        return $this->open('Mulai picking ' . ($session->order?->order_number ?? $session->session_number) . '...', route('gudang.picking.show', $session->id));
+        return $this->open('Mulai picking ' . ($started->order?->order_number ?? $started->session_number) . '...', route('gudang.picking.show', $started->id));
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\CourierHandover;
 use App\Models\Order;
 use App\Models\PackingSession;
 use App\Models\PickingSession;
@@ -74,21 +75,26 @@ class OrderFulfillmentFlowTest extends TestCase
         $this->post(route('gudang.packing.store'), ['order_id' => $order->id, 'courier' => 'JNE'])
             ->assertSessionHas('success');
         $packing = PackingSession::with('items')->where('order_id', $order->id)->firstOrFail();
-        $this->post(route('gudang.packing.start', $packing->id))->assertSessionHas('success');
+        $this->assertSame('IN_PROGRESS', $packing->status);   // langsung berjalan, tanpa tombol Mulai
         $this->get(route('gudang.packing.show', $packing->id))->assertOk();
 
         $this->post(route('gudang.packing.pack', [$packing->id, $packing->items->first()->id]), ['qty_packed' => 3])
             ->assertSessionHas('success');
         $this->assertSame('COMPLETED', $packing->fresh()->status);
         $this->assertSame('READY_TO_SHIP', $order->fresh()->status);
+        $this->get(route('gudang.packing.show', $packing->id))->assertSee('Tempel label BigSeller', false)->assertDontSee('Cetak label kirim');
 
-        // Kirim wajib isi resi
-        $this->patch(route('gudang.outbound.update-status', $order->id), ['status' => 'SHIPPED'])
-            ->assertSessionHasErrors('tracking_number');
-        $this->assertSame('READY_TO_SHIP', $order->fresh()->status);
-
+        // Kirim hanya lewat serah terima kurir, tidak dari tombol status
         $this->patch(route('gudang.outbound.update-status', $order->id), ['status' => 'SHIPPED', 'tracking_number' => 'JNE123'])
-            ->assertSessionHas('success');
+            ->assertSessionHas('error');
+        $this->assertSame('READY_TO_SHIP', $order->fresh()->status);
+        $this->get(route('gudang.outbound'))->assertSee('Isi resi')->assertSee('Serah terima');
+
+        $order->update(['tracking_number' => 'JNE123']);
+        $this->post(route('gudang.handover.store'), ['courier' => 'JNE']);
+        $handover = CourierHandover::firstOrFail();
+        $this->postJson(route('gudang.handover.scan', $handover), ['code' => 'jne123'])->assertOk();
+        $this->post(route('gudang.handover.finish', $handover))->assertRedirect(route('gudang.handover.print', $handover));
         $order->refresh();
         $this->assertSame('SHIPPED', $order->status);
         $this->assertSame('JNE123', $order->tracking_number);
