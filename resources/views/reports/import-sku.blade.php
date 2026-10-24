@@ -9,7 +9,7 @@
             </a>
             <div>
                 <h2 class="font-semibold text-xl text-white leading-tight">Import Master Data SKU</h2>
-                <p class="text-sm text-slate-400 mt-1">Upload file Excel untuk menambah SKU secara massal</p>
+                <p class="text-sm text-slate-400 mt-1">Upload file Excel untuk menambah SKU dan memperbarui stok. Perubahannya ditampilkan dulu sebelum disimpan.</p>
             </div>
         </div>
     </x-slot>
@@ -78,7 +78,7 @@
                     <button type="button" onclick="document.getElementById('fileInput').click()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">
                         Pilih File
                     </button>
-                    <p class="text-xs text-slate-500 mt-3">Format: .xlsx, .xls, .csv (Max 5MB)</p>
+                    <p class="text-xs text-slate-500 mt-3">Format: .xlsx, .xls, .csv (Max 10MB)</p>
                     <p id="fileName" class="text-sm text-cyan-400 mt-2 font-medium"></p>
                 </div>
 
@@ -94,7 +94,7 @@
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                         </svg>
-                        Import Master SKU
+                        Cek perubahan
                     </button>
                 </div>
             </form>
@@ -174,6 +174,12 @@
                             <td class="py-2 px-3 text-slate-300">AKTIF/NONAKTIF</td>
                             <td class="py-2 px-3 text-slate-400">Status SKU (default: AKTIF)</td>
                         </tr>
+                        <tr class="hover:bg-slate-800/30">
+                            <td class="py-2 px-3 font-mono text-cyan-400">CURRENT_STOCK</td>
+                            <td class="py-2 px-3 text-slate-500">-</td>
+                            <td class="py-2 px-3 text-slate-300">Angka</td>
+                            <td class="py-2 px-3 text-slate-400">Total stok terbaru. Stok di sistem disamakan dengan angka ini; sel kosong berarti stok tidak diubah</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -181,10 +187,12 @@
             <div class="mt-4 p-4 bg-amber-900/20 border border-amber-500/30 rounded-lg">
                 <p class="text-sm text-amber-400 font-semibold mb-2">⚠️ Catatan Penting:</p>
                 <ul class="text-xs text-amber-300/80 space-y-1 list-disc list-inside">
-                    <li>SKU yang sudah ada di database akan diupdate otomatis (UPSERT)</li>
-                    <li>File maksimal 5MB dengan maksimal 1000 baris per upload</li>
-                    <li>Gunakan template yang disediakan untuk memastikan format benar</li>
-                    <li>Proses import menggunakan transaksi ACID - jika ada error, semua rollback</li>
+                    <li>Setelah upload muncul pratinjau: SKU baru, stok bertambah, stok berkurang, dan data produk yang berubah. Belum ada yang disimpan sebelum Anda menekan Simpan</li>
+                    <li>Judul kolom bahasa Indonesia juga dikenali: Artikel, Nama Produk, Versi, Kategori Size, Harga (Rp), Min. Stok, Total Stok Saat Ini</li>
+                    <li>Sel berisi rumus (misalnya dari Google Sheets) dibaca dari hasil terakhirnya</li>
+                    <li>Harga 0 atau sel kosong tidak menghapus data yang sudah tersimpan</li>
+                    <li>Selisih stok tercatat di Laporan Pergerakan Stok sebagai ADJUSTMENT</li>
+                    <li>File maksimal 10MB; jika ada error saat menyimpan, semua dibatalkan</li>
                 </ul>
             </div>
         </div>

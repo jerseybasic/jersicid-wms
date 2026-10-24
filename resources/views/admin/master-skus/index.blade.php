@@ -382,10 +382,11 @@
                 </button>
             </div>
             <div class="mb-4 p-3 bg-emerald-900/20 border border-emerald-500/30 rounded-lg">
-                <p class="text-xs text-emerald-400 font-semibold mb-1">✓ Incremental Import</p>
+                <p class="text-xs text-emerald-400 font-semibold mb-1">✓ Dicek dulu sebelum disimpan</p>
                 <ul class="text-xs text-slate-300 space-y-1">
-                    <li>• SKU baru → akan ditambahkan</li>
-                    <li>• SKU sudah ada → akan diupdate</li>
+                    <li>• Muncul pratinjau: SKU baru, stok bertambah, stok berkurang, dan data yang berubah</li>
+                    <li>• Stok disamakan dengan kolom CURRENT_STOCK / Total Stok Saat Ini, selisihnya tercatat di Pergerakan Stok</li>
+                    <li>• Bisa pakai file Export di atas atau sheet sendiri dengan judul kolom bahasa Indonesia</li>
                     <li>• Data lama tidak dihapus</li>
                 </ul>
             </div>
@@ -401,7 +402,7 @@
                     <button type="button" onclick="document.getElementById('importModal').classList.add('hidden')"
                         class="flex-1 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700 transition-all">Batal</button>
                     <button type="submit"
-                        class="flex-1 px-4 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">Import</button>
+                        class="flex-1 px-4 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">Cek perubahan</button>
                 </div>
             </form>
         </div>

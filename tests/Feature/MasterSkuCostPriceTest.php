@@ -44,6 +44,13 @@ class MasterSkuCostPriceTest extends TestCase
         $this->get(route('master-skus.edit', $sku->id))->assertSee('Harga Modal / HPP');
     }
 
+    /** Import sekarang dua langkah: upload → pratinjau → simpan */
+    private function import(string $route, string $content): void
+    {
+        $token = $this->post(route($route), ['file' => $this->csv($content)])->assertOk()->viewData('token');
+        $this->post(route('master-skus.import.store'), ['token' => $token])->assertRedirect(route('master-skus.index'));
+    }
+
     public function test_import_reads_cost_column_and_keeps_it_when_column_is_missing(): void
     {
         $this->actingAs($this->userWithRole('OWNER'));
@@ -52,19 +59,20 @@ class MasterSkuCostPriceTest extends TestCase
         $header = "sku,article,product_name,version,size_category,size,price,standard_weight_gram,min_stock,status";
 
         // File lama tanpa kolom HPP: HPP yang tersimpan tidak terhapus
-        $this->post(route('reports.import-sku'), ['file' => $this->csv("{$header}\nJSC-A-L,A,CLUB TEST,1.0,DEWASA,L,110000,250,0,AKTIF\n")]);
+        $this->import('reports.import-sku', "{$header}\nJSC-A-L,A,CLUB TEST,1.0,DEWASA,L,110000,250,0,AKTIF\n");
         $this->assertSame(110000, MasterSku::where('sku', 'JSC-A-L')->value('price'));
         $this->assertSame(55000, MasterSku::where('sku', 'JSC-A-L')->value('cost_price'));
 
         // Kolom HARGA_MODAL ikut dibaca, termasuk SKU baru
-        $this->post(route('reports.import-sku'), ['file' => $this->csv("{$header},harga_modal\nJSC-A-L,A,CLUB TEST,1.0,DEWASA,L,110000,250,0,AKTIF,60000\nJSC-B-L,B,CLUB B,1.0,DEWASA,L,90000,250,0,AKTIF,\"Rp 45.000\"\n")]);
+        $this->import('reports.import-sku', "{$header},harga_modal\nJSC-A-L,A,CLUB TEST,1.0,DEWASA,L,110000,250,0,AKTIF,60000\nJSC-B-L,B,CLUB B,1.0,DEWASA,L,90000,250,0,AKTIF,\"Rp 45.000\"\n");
         $this->assertSame(60000, MasterSku::where('sku', 'JSC-A-L')->value('cost_price'));
         $this->assertSame(45000, MasterSku::where('sku', 'JSC-B-L')->value('cost_price'));
 
         // Import dari halaman Master SKU memakai kolom COST_PRICE
-        $this->post(route('master-skus.import'), ['file' => $this->csv("{$header},cost_price\nJSC-A-L,A,CLUB TEST,1.0,DEWASA,L,110000,250,0,AKTIF,62000\n")]);
+        $this->import('master-skus.import', "{$header},cost_price\nJSC-A-L,A,CLUB TEST,1.0,DEWASA,L,110000,250,0,AKTIF,62000\n");
         $this->assertSame(62000, MasterSku::where('sku', 'JSC-A-L')->value('cost_price'));
-        $this->post(route('master-skus.import'), ['file' => $this->csv("{$header}\nJSC-A-L,A,CLUB TEST,1.0,DEWASA,L,110000,250,0,AKTIF\n")]);
+        $this->post(route('master-skus.import'), ['file' => $this->csv("{$header}\nJSC-A-L,A,CLUB TEST,1.0,DEWASA,L,110000,250,0,AKTIF\n")])
+            ->assertOk()->assertViewHas('hasWork', false);
         $this->assertSame(62000, MasterSku::where('sku', 'JSC-A-L')->value('cost_price'));
     }
 
