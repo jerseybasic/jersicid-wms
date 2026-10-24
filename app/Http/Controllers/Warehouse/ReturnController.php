@@ -9,6 +9,7 @@ use App\Models\OrderReturn;
 use App\Models\OrderReturnItem;
 use App\Models\StockActive;
 use App\Models\StockMovement;
+use App\Services\WaitingStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -173,8 +174,10 @@ class ReturnController extends Controller
             return $return;
         });
 
+        $released = WaitingStock::release(auth()->id(), $request->ip());
+
         return redirect()->route('gudang.retur.show', $return->id)
-            ->with('success', "Retur {$return->return_number} tersimpan. Barang bagus sudah masuk lagi ke stok.");
+            ->with('success', "Retur {$return->return_number} tersimpan. Barang bagus sudah masuk lagi ke stok." . WaitingStock::releasedMessage($released));
     }
 
     public function show($id)

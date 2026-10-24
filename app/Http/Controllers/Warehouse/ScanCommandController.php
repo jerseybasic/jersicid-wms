@@ -50,6 +50,13 @@ class ScanCommandController extends Controller
      */
     private function openOrder(Order $order, Request $request): JsonResponse
     {
+        if ($order->status === 'CANCELLED') {
+            return response()->json(['ok' => false, 'message' => "Order {$order->order_number} dibatalkan. Jangan dikemas; kembalikan barangnya lewat Kembalikan ke Rak."], 422);
+        }
+        // Packing yang menunggu barang pengganti (lapor masalah) tetap dibuka di layar packing-nya
+        if ($order->status === 'PICKING' && ($packing = $order->packingSession)) {
+            return $this->open("Membuka packing {$order->order_number}...", route('gudang.packing.show', $packing->id));
+        }
         if ($order->status !== 'PACKING') {
             return $this->open("Membuka order {$order->order_number}...", route('gudang.outbound.show', $order->id));
         }

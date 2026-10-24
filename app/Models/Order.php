@@ -21,6 +21,9 @@ class Order extends Model
      * Alur status order:
      * PENDING → CONFIRMED → PICKING → PACKING → READY_TO_SHIP → SHIPPED → COMPLETED
      * PENDING/CONFIRMED → CANCELLED
+     * PICKING/PACKING/READY_TO_SHIP → CANCELLED (barang yang sudah diambil dikembalikan ke rak)
+     *
+     * Order PENDING dengan waiting_stock_at terisi tampil sebagai "Menunggu Stok".
      */
     public const STATUS_LABELS = [
         'PENDING' => 'Menunggu Konfirmasi',
@@ -32,6 +35,11 @@ class Order extends Model
         'COMPLETED' => 'Selesai',
         'CANCELLED' => 'Dibatalkan',
     ];
+
+    public const WAITING_STOCK_LABEL = 'Menunggu Stok';
+
+    /** Status yang bisa dibatalkan walau barangnya sudah mulai diambil dari rak */
+    public const IN_PROCESS_STATUSES = ['PICKING', 'PACKING', 'READY_TO_SHIP'];
 
     protected $fillable = [
         'id',
@@ -49,6 +57,7 @@ class Order extends Model
         'packed_at',
         'shipped_at',
         'ship_by',
+        'waiting_stock_at',
         'notes',
     ];
 
@@ -57,6 +66,7 @@ class Order extends Model
         'packed_at' => 'datetime',
         'shipped_at' => 'datetime',
         'ship_by' => 'datetime',
+        'waiting_stock_at' => 'datetime',
     ];
 
     protected static function boot()
@@ -113,7 +123,22 @@ class Order extends Model
 
     public function getStatusLabelAttribute(): string
     {
+        if ($this->isWaitingStock()) {
+            return self::WAITING_STOCK_LABEL;
+        }
+
         return self::STATUS_LABELS[$this->status] ?? $this->status;
+    }
+
+    /** Order Pending yang ditunda karena stoknya kurang */
+    public function isWaitingStock(): bool
+    {
+        return $this->status === 'PENDING' && $this->waiting_stock_at !== null;
+    }
+
+    public function scopeWaitingStock($query)
+    {
+        return $query->where('status', 'PENDING')->whereNotNull('waiting_stock_at');
     }
 
     /** Data order masih boleh diubah (belum selesai atau dibatalkan) */

@@ -136,7 +136,7 @@ class PickingBatchController extends Controller
         $batch->load(['user:id,name', 'sessions.order:id,order_number,customer_name,courier', 'sessions.items.masterSku:sku,product_name,size']);
 
         // Daftar ambil: satu baris per SKU, diurutkan per bin supaya rutenya tidak bolak-balik
-        $pickList = $batch->sessions->flatMap(fn ($session) => $session->items->map(fn ($item) => [$session, $item]))
+        $pickList = $batch->sessions->where('status', '!=', 'CANCELLED')->flatMap(fn ($session) => $session->items->map(fn ($item) => [$session, $item]))
             ->groupBy(fn ($pair) => $pair[1]->sku)
             ->map(function ($pairs, $sku) {
                 $items = $pairs->pluck(1);
@@ -256,6 +256,7 @@ class PickingBatchController extends Controller
                 $chosen = PickingSessionItem::query()
                     ->join('picking_sessions as ps', 'ps.id', '=', 'picking_session_items.picking_session_id')
                     ->where('ps.batch_id', $batch->id)
+                    ->where('ps.status', '!=', 'CANCELLED')
                     ->where('picking_session_items.sku', $sku)
                     ->where('picking_session_items.qty_picked', '>', 0)
                     ->orderByDesc('ps.basket_no')
@@ -286,10 +287,51 @@ class PickingBatchController extends Controller
         }
     }
 
+    /**
+     * "Barang tidak ada" di daftar ambil: SKU ini tidak ditemukan di raknya. Keranjang yang masih
+     * butuh SKU ini diarahkan ke rak lain yang ada stoknya, atau order-nya ditunda (Menunggu stok)
+     * sementara keranjang lain tetap lanjut.
+     */
+    public function missing(Request $request, PickingBatch $batch)
+    {
+        $validated = $request->validate(['sku' => ['required', 'string', 'max:100']]);
+        $sku = strtoupper(trim($validated['sku']));
+
+        try {
+            $messages = DB::transaction(function () use ($batch, $sku, $request) {
+                PickingBatch::lockForUpdate()->findOrFail($batch->id);
+                $items = PickingSessionItem::query()
+                    ->join('picking_sessions as ps', 'ps.id', '=', 'picking_session_items.picking_session_id')
+                    ->where('ps.batch_id', $batch->id)
+                    ->where('ps.status', 'IN_PROGRESS')
+                    ->where('picking_session_items.sku', $sku)
+                    ->whereColumn('picking_session_items.qty_picked', '<', 'picking_session_items.qty_ordered')
+                    ->orderBy('ps.basket_no')
+                    ->pluck('picking_session_items.id');
+                if ($items->isEmpty()) {
+                    throw new \RuntimeException("{$sku} sudah lengkap untuk semua keranjang.");
+                }
+
+                return $items->map(function ($id) use ($request) {
+                    $item = PickingSessionItem::lockForUpdate()->findOrFail($id);
+                    $session = PickingSession::with('order')->lockForUpdate()->findOrFail($item->picking_session_id);
+
+                    return Picking::reportMissing($session, $item, auth()->id(), $request->ip())[0];
+                })->unique()->implode(' ');
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return PickingBatch::find($batch->id)
+            ? redirect()->route('gudang.picking-batch.show', $batch)->with('success', $messages)
+            : redirect()->route('gudang.tugas')->with('success', $messages);
+    }
+
     /** Angka di layar yang berubah setelah scan: per SKU, per keranjang, dan total */
     private function counters(PickingBatch $batch, PickingSession $session, string $sku): array
     {
-        $batchItems = PickingSessionItem::whereIn('picking_session_id', PickingSession::where('batch_id', $batch->id)->select('id'));
+        $batchItems = PickingSessionItem::whereIn('picking_session_id', PickingSession::where('batch_id', $batch->id)->where('status', '!=', 'CANCELLED')->select('id'));
 
         return [
             ['id' => 'sku-' . $sku, 'qty' => (int) (clone $batchItems)->where('sku', $sku)->sum('qty_picked')],
@@ -305,7 +347,7 @@ class PickingBatchController extends Controller
     public function destroy(Request $request, PickingBatch $batch)
     {
         $cancelled = DB::transaction(function () use ($batch, $request) {
-            $sessions = $batch->sessions()->where('status', '!=', 'COMPLETED')->lockForUpdate()->get();
+            $sessions = $batch->sessions()->whereNotIn('status', ['COMPLETED', 'CANCELLED'])->lockForUpdate()->get();
             foreach ($sessions as $session) {
                 Picking::cancel($session, auth()->id(), $request->ip());
             }

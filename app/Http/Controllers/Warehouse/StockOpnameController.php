@@ -11,6 +11,7 @@ use App\Models\AuditTrail;
 use App\Models\Warehouse;
 use App\Models\WarehouseRack;
 use Illuminate\Http\Request;
+use App\Services\WaitingStock;
 use Illuminate\Support\Facades\DB;
 
 class StockOpnameController extends Controller
@@ -298,7 +299,9 @@ class StockOpnameController extends Controller
                 ]);
             });
 
-            return back()->with('success', 'Stock Opname Selesai! Stok sistem telah disesuaikan otomatis.');
+            $released = WaitingStock::release($user->id, request()->ip());
+
+            return back()->with('success', 'Stock Opname Selesai! Stok sistem telah disesuaikan otomatis.' . WaitingStock::releasedMessage($released));
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal menyelesaikan opname: ' . safe_error_message($e));
         }

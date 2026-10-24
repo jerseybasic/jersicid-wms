@@ -139,7 +139,7 @@ class WorkQueueAndSettingsTest extends TestCase
 
         $rows = $response->viewData('prefillRows');
         $this->assertCount(1, $rows);
-        $this->assertSame(['sku' => 'JSC-LOW-L', 'qty' => 17, 'price' => 80000, 'stock' => 3, 'limit' => 10], $rows[0]);
+        $this->assertSame(['sku' => 'JSC-LOW-L', 'qty' => 17, 'price' => 80000, 'note' => 'Stok sekarang 3 pcs, batas 10 pcs'], $rows[0]);
 
         // Staf tidak boleh membuat PO
         $this->actingAs($this->userWithRole('ADMIN_GUDANG'))

@@ -9,7 +9,9 @@ use App\Models\OrderItem;
 use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Services\ShipDeadline;
+use App\Services\OrderCancellation;
 use App\Services\StockAvailability;
+use App\Services\WaitingStock;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,8 +23,12 @@ class OutboundController extends Controller
     {
         $query = Order::with('items.masterSku')->orderBy('created_at', 'desc');
 
-        // Filter Status
-        if ($request->filled('status')) {
+        // Filter Status; "Menunggu stok" adalah order Pending yang ditunda karena stoknya kurang
+        if ($request->status === 'WAITING_STOCK') {
+            $query->waitingStock();
+        } elseif ($request->status === 'PENDING') {
+            $query->where('status', 'PENDING')->whereNull('waiting_stock_at');
+        } elseif ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
@@ -48,16 +54,20 @@ class OutboundController extends Controller
         $perPage = in_array((int) $request->per_page, [15, 50, 100], true) ? (int) $request->per_page : 15;
         $orders = $query->paginate($perPage)->withQueryString();
 
+        // Kekurangan barang untuk order yang menunggu stok, untuk tombol "Buat PO"
+        $needs = $request->status === 'WAITING_STOCK' ? WaitingStock::needs() : collect();
+
         // Stats
         $stats = [
             'total' => Order::count(),
-            'pending' => Order::where('status', 'PENDING')->count(),
+            'pending' => Order::where('status', 'PENDING')->whereNull('waiting_stock_at')->count(),
+            'waiting' => Order::waitingStock()->count(),
             'picking' => Order::whereIn('status', ['CONFIRMED', 'PICKING'])->count(),
             'packing' => Order::whereIn('status', ['PACKING', 'READY_TO_SHIP'])->count(),
             'ready' => Order::where('status', 'READY_TO_SHIP')->count(),
         ];
 
-        return view('warehouse.outbound.index', compact('orders', 'stats'));
+        return view('warehouse.outbound.index', compact('orders', 'stats', 'needs'));
     }
 
     /**
@@ -98,13 +108,18 @@ class OutboundController extends Controller
         // Perubahan status manual (konfirmasi, batal, kirim, selesai) dari audit trail
         $labels = ['CONFIRMED' => ['Dikonfirmasi', 'blue'], 'CANCELLED' => ['Dibatalkan', 'red'], 'SHIPPED' => ['Dikirim', 'emerald'], 'COMPLETED' => ['Selesai', 'slate']];
         AuditTrail::with('user:id,name')
-            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE'])
+            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE', 'WAITING_STOCK'])
             ->where('new_values', 'like', '%' . $order->order_number . '%')
             ->orderBy('created_at')
             ->get()
             ->each(function ($trail) use ($order, $labels, $steps) {
                 $values = is_string($trail->new_values) ? json_decode($trail->new_values, true) : $trail->new_values;
                 if (($values['order_number'] ?? null) !== $order->order_number) {
+                    return;
+                }
+                if ($trail->action === 'WAITING_STOCK') {
+                    $steps->push(['at' => $trail->created_at, 'title' => 'Menunggu stok', 'detail' => $values['reason'] ?? null, 'user' => $trail->user?->name, 'color' => 'orange']);
+
                     return;
                 }
                 if ($trail->action === 'UPDATE') {
@@ -127,7 +142,12 @@ class OutboundController extends Controller
                 $steps->push([
                     'at' => $trail->created_at,
                     'title' => $title,
-                    'detail' => !empty($values['tracking_number']) ? 'Resi ' . $values['tracking_number'] . (!empty($values['courier']) ? " · {$values['courier']}" : '') : null,
+                    'detail' => match (true) {
+                        !empty($values['tracking_number']) => 'Resi ' . $values['tracking_number'] . (!empty($values['courier']) ? " · {$values['courier']}" : ''),
+                        !empty($values['auto']) => 'Otomatis: ' . $values['auto'],
+                        !empty($values['reason']) => $values['reason'],
+                        default => null,
+                    },
                     'user' => $trail->user?->name,
                     'color' => $color,
                 ]);
@@ -162,7 +182,7 @@ class OutboundController extends Controller
         }
 
         // Urut waktu; langkah di detik yang sama mengikuti urutan alur order
-        $rank = array_flip(['Order masuk', 'Dikonfirmasi', 'Dibatalkan', 'Mulai diambil (picking)', 'Selesai diambil', 'Mulai dikemas (packing)',
+        $rank = array_flip(['Order masuk', 'Menunggu stok', 'Dikonfirmasi', 'Dibatalkan', 'Mulai diambil (picking)', 'Selesai diambil', 'Mulai dikemas (packing)',
             'Selesai dikemas', 'Discan untuk serah terima kurir', 'Dikirim', 'Selesai', 'Retur diterima', 'Data order diubah']);
 
         return $steps->filter(fn ($step) => $step['at'])
@@ -399,6 +419,33 @@ class OutboundController extends Controller
         return $redirect;
     }
 
+    /**
+     * Batalkan order yang sudah mulai diproses (picking, packing, atau siap kirim), misalnya karena
+     * dibatalkan pembeli di marketplace. Barang yang sudah diambil masuk daftar "Kembalikan ke rak".
+     */
+    public function cancel(Request $request, $id)
+    {
+        abort_unless(in_array(auth()->user()->role, OrderCancellation::ROLES, true), 403, 'Hanya Owner, Supervisor, atau Admin Gudang yang bisa membatalkan order yang sedang diproses.');
+        $validated = $request->validate(['reason' => ['nullable', 'string', 'max:255']]);
+
+        try {
+            $order = DB::transaction(function () use ($id, $validated, $request) {
+                $order = Order::lockForUpdate()->findOrFail($id);
+                OrderCancellation::cancel($order, $validated['reason'] ?? null, auth()->id(), $request->ip());
+
+                return $order;
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $toReturn = (int) $order->items()->sum('qty_picked');
+
+        return redirect()->route('gudang.outbound.show', $order->id)->with('success', $toReturn
+            ? "Order {$order->order_number} dibatalkan. Kembalikan {$toReturn} pcs barangnya ke rak lewat menu Kembalikan ke Rak."
+            : "Order {$order->order_number} dibatalkan.");
+    }
+
     /** Ubah status satu order sesuai alur yang diizinkan. Mengembalikan pesan error, atau null jika berhasil. */
     private function changeStatus(Order $order, string $newStatus, Request $request): ?string
     {
@@ -413,11 +460,17 @@ class OutboundController extends Controller
         }
 
         // Konfirmasi hanya jika stok cukup, supaya picker tidak berangkat mengambil barang yang tidak ada
+        // Stok kurang: order ditunda sebagai "Menunggu stok" dan dikonfirmasi otomatis saat barangnya masuk
         if ($newStatus === 'CONFIRMED' && $shortages = StockAvailability::shortages($order)) {
-            return "Order {$order->order_number} belum bisa dikonfirmasi, stok kurang: " . StockAvailability::describe($shortages) . '.';
+            WaitingStock::mark($order, auth()->id(), $request->ip(), StockAvailability::describe($shortages));
+
+            return "Order {$order->order_number} menunggu stok (" . StockAvailability::describe($shortages) . '). Order otomatis masuk antrean picking saat barangnya diterima.';
         }
 
         $updateData = ['status' => $newStatus];
+        if ($order->waiting_stock_at) {
+            $order->waiting_stock_at = null;
+        }
 
         DB::transaction(function () use ($order, $updateData, $request) {
             $oldStatus = $order->status;

@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\PackingSession;
 use App\Models\PickingBatch;
 use App\Models\PickingSession;
+use App\Services\OrderCancellation;
 use App\Services\ShipDeadline;
 
 /**
@@ -62,6 +63,8 @@ class TaskController extends Controller
             ->countBy(fn ($order) => $order->shipStatus());
 
         $toRefill = ReplenishmentController::pendingCount();
+        $toRestock = (int) OrderCancellation::pendingItems()->sum('qty_picked');
+        $waitingStock = Order::waitingStock()->count();
 
         // Tiap staf punya akun sendiri: pekerjaan orang lain hanya ditampilkan sebagai info
         $mine = fn ($work) => (string) $work->user_id === (string) auth()->id();
@@ -73,6 +76,6 @@ class TaskController extends Controller
         $activePicking = $activePicking->filter($mine)->values();
         $activePacking = $activePacking->filter($mine)->values();
 
-        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'othersWork', 'toPick', 'toPack', 'toShip', 'toRefill', 'deadlines'));
+        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'othersWork', 'toPick', 'toPack', 'toShip', 'toRefill', 'toRestock', 'waitingStock', 'deadlines'));
     }
 }

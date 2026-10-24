@@ -44,7 +44,7 @@
         {{-- Status & aksi --}}
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-2">
-                <span class="text-sm px-3 py-1 rounded-full font-semibold {{ $statusColors[$order->status] ?? 'bg-slate-500/20 text-slate-400' }}">{{ $order->status_label }}</span>
+                <span class="text-sm px-3 py-1 rounded-full font-semibold {{ $order->isWaitingStock() ? 'bg-orange-500/20 text-orange-300' : ($statusColors[$order->status] ?? 'bg-slate-500/20 text-slate-400') }}">{{ $order->status_label }}</span>
                 <x-ship-badge :order="$order" class="!text-xs !px-3 !py-1" />
                 @if ($order->ship_by)
                     <span class="text-xs text-slate-400">Batas kirim {{ $order->ship_by->translatedFormat('d M Y H:i') }}</span>
@@ -60,6 +60,18 @@
                 @include('warehouse.outbound.partials.actions')
             </div>
         </div>
+
+        @php $toReturn = $order->status === 'CANCELLED' ? (int) $order->items->sum('qty_picked') : 0; @endphp
+        @if ($toReturn)
+            <a href="{{ route('gudang.restock') }}" class="flex items-center justify-between gap-3 p-4 bg-red-900/20 border border-red-500/40 rounded-xl text-sm text-red-300">
+                <span>{{ $toReturn }} pcs barang order ini sudah keluar dari rak dan belum dikembalikan.</span>
+                <span class="font-bold shrink-0">Kembalikan ke rak</span>
+            </a>
+        @elseif ($order->isWaitingStock())
+            <div class="p-4 bg-orange-900/20 border border-orange-500/40 rounded-xl text-sm text-orange-200">
+                Order ini menunggu stok sejak {{ $order->waiting_stock_at->translatedFormat('d M H:i') }}. Order otomatis masuk antrean picking saat barangnya diterima di Inbound.
+            </div>
+        @endif
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div class="lg:col-span-2 space-y-4">

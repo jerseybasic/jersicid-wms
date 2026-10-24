@@ -65,7 +65,11 @@
                         <div class="shrink-0 w-20">
                             <p class="text-[11px] text-slate-500 uppercase">Rak</p>
                             @foreach ($row['bins'] as $bin)
-                                <p class="font-mono text-sm font-bold text-cyan-400 break-all">{{ $bin }}</p>
+                                @if ($bin === 'UNKNOWN')
+                                    <p class="text-xs font-semibold text-amber-400">Belum ada di rak</p>
+                                @else
+                                    <p class="font-mono text-sm font-bold text-cyan-400 break-all">{{ $bin }}</p>
+                                @endif
                             @endforeach
                         </div>
                         <div class="flex-1 min-w-0">
@@ -91,6 +95,14 @@
                             <button type="button" onclick="scanTap(@js(route('gudang.picking-batch.scan', $batch)), { code: @js($row['sku']) })"
                                 class="col-span-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl">+1 Ambil</button>
                         </div>
+                        @unless ($complete)
+                            <form method="POST" action="{{ route('gudang.picking-batch.missing', $batch) }}"
+                                onsubmit="return confirm(@js('Barang ' . $row['sku'] . ' benar-benar tidak ada di rak? Stok rak itu akan dinolkan, lalu sistem mencari rak lain atau menunda order-nya (Menunggu stok).'))">
+                                @csrf
+                                <input type="hidden" name="sku" value="{{ $row['sku'] }}">
+                                <button type="submit" class="text-xs text-amber-400 hover:text-amber-300 underline">Barang tidak ada di rak</button>
+                            </form>
+                        @endunless
                     @endunless
                     </div>
                 @endforeach
@@ -102,6 +114,16 @@
             <h3 class="px-4 py-3 border-b border-slate-800 text-base font-semibold text-white">Keranjang</h3>
             <div class="divide-y divide-slate-800">
                 @foreach ($batch->sessions as $session)
+                    @if ($session->status === 'CANCELLED')
+                        <div class="p-4 flex items-center gap-3 bg-red-900/10">
+                            <span class="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black bg-red-500/20 text-red-300 border border-red-500/40">{{ $session->basket_no }}</span>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-bold text-white truncate">{{ $session->order?->order_number }}</p>
+                                <p class="text-xs text-red-300">Order dibatalkan. Jangan dikemas; kembalikan isinya lewat <a href="{{ route('gudang.restock') }}" class="underline">Kembalikan ke Rak</a>.</p>
+                            </div>
+                        </div>
+                        @continue
+                    @endif
                     <div class="p-4 flex items-center gap-3">
                         <span class="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black {{ $session->status === 'COMPLETED' ? 'bg-emerald-500 text-slate-900' : 'bg-slate-800 text-white border border-slate-700' }}">{{ $session->basket_no }}</span>
                         <div class="flex-1 min-w-0">
