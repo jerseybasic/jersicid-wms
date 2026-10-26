@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Exports\ArrayExport;
 use App\Http\Controllers\Controller;
+use App\Models\AuditTrail;
+use App\Models\CourierHandover;
+use App\Models\CourierHandoverItem;
 use App\Models\Order;
 use App\Models\PackingSession;
 use App\Models\PickingSession;
@@ -11,6 +14,7 @@ use App\Models\StockActive;
 use App\Models\StockMovement;
 use App\Models\StockOpname;
 use App\Models\StockOpnameItem;
+use App\Models\User;
 use App\Services\ShipDeadline;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -32,6 +36,8 @@ class InsightReportController extends Controller
         [$start, $end] = $this->period($request);
         $picking = $this->sessionStats(PickingSession::class, 'picking_session_items', 'picking_session_id', 'qty_picked', $start, $end);
         $packing = $this->sessionStats(PackingSession::class, 'packing_session_items', 'packing_session_id', 'qty_packed', $start, $end);
+        $notes = $this->staffNotes($start, $end);
+        $daily = $this->dailyOutput($start, $end);
 
         if ($request->query('export') === 'excel') {
             $rows = [];
@@ -40,11 +46,21 @@ class InsightReportController extends Controller
                     $rows[] = [$type, $row['name'], $row['orders'], $row['pcs'], $row['avg_minutes']];
                 }
             }
+            $rows[] = [];
+            $rows[] = ['Catatan per staf', 'Nama', 'Paket diserahkan', 'Ketuk/input manual', 'Koreksi -1', 'Barang tidak ada', 'Masalah packing'];
+            foreach ($notes as $row) {
+                $rows[] = ['', $row['name'], $row['handed'], $row['manual'], $row['undo'], $row['missing'], $row['problem']];
+            }
+            $rows[] = [];
+            $rows[] = ['Per hari', 'Tanggal', 'Order dipicking', 'Pcs dipicking', 'Order dikemas', 'Pcs dikemas', 'Paket diserahkan'];
+            foreach ($daily as $row) {
+                $rows[] = ['', $row['date']->format('Y-m-d'), $row['picked_orders'], $row['picked_pcs'], $row['packed_orders'], $row['packed_pcs'], $row['handed']];
+            }
 
             return $this->excel('Kinerja_Picker_Packer', ['Jenis', 'Nama', 'Order', 'Pcs', 'Rata-rata menit/order'], $rows, $start, $end);
         }
 
-        return view('reports.performance', compact('start', 'end', 'picking', 'packing'));
+        return view('reports.performance', compact('start', 'end', 'picking', 'packing', 'notes', 'daily'));
     }
 
     /**
@@ -275,6 +291,67 @@ class InsightReportController extends Controller
         $end = $request->filled('end_date') ? Carbon::parse($request->end_date)->endOfDay() : now()->endOfDay();
 
         return [$start, $end];
+    }
+
+    /**
+     * Catatan per staf dalam periode: paket yang diserahkan ke kurir, barang yang diketuk/diisi manual
+     * (tanpa scan), koreksi -1 saat picking, laporan barang tidak ada di rak, dan masalah saat packing.
+     */
+    private function staffNotes(Carbon $start, Carbon $end)
+    {
+        $audits = fn (array $actions) => AuditTrail::whereIn('action', $actions)->whereBetween('created_at', [$start, $end])
+            ->groupBy('user_id')->selectRaw('user_id, COUNT(*) as total')->pluck('total', 'user_id');
+
+        $counts = [
+            'handed' => CourierHandoverItem::join('courier_handovers', 'courier_handovers.id', '=', 'courier_handover_items.courier_handover_id')
+                ->where('courier_handovers.status', 'COMPLETED')
+                ->whereBetween('courier_handovers.completed_at', [$start, $end])
+                ->groupBy('courier_handovers.user_id')
+                ->selectRaw('courier_handovers.user_id, COUNT(*) as total')
+                ->pluck('total', 'user_id'),
+            'manual' => $audits(['MANUAL_PICK', 'MANUAL_PACK', 'MANUAL_QTY']),
+            'undo' => StockMovement::where('reference_type', 'PICKING_CANCEL')->where('notes', 'like', 'Koreksi picking%')
+                ->whereBetween('created_at', [$start, $end])
+                ->groupBy('user_id')->selectRaw('user_id, COUNT(*) as total')->pluck('total', 'user_id'),
+            'missing' => $audits(['REPORT_MISSING']),
+            'problem' => $audits(['PACK_PROBLEM']),
+        ];
+
+        $userIds = collect($counts)->flatMap(fn ($values) => $values->keys())->filter()->unique();
+        $names = User::whereIn('id', $userIds)->pluck('name', 'id');
+
+        return $userIds->map(fn ($id) => ['name' => $names[$id] ?? '-'] + collect($counts)->map(fn ($values) => (int) ($values[$id] ?? 0))->all())
+            ->sortBy('name')->values();
+    }
+
+    /** Hasil kerja gudang per hari: order dan pcs yang selesai dipicking/dikemas, dan paket yang diserahkan */
+    private function dailyOutput(Carbon $start, Carbon $end)
+    {
+        $perDay = function (string $model, string $itemTable, string $foreignKey, string $qtyColumn) use ($start, $end) {
+            $sessions = $model::where('status', 'COMPLETED')->whereBetween('completed_at', [$start, $end])->get(['id', 'completed_at']);
+            $pcs = DB::table($itemTable)->whereIn($foreignKey, $sessions->pluck('id'))
+                ->groupBy($foreignKey)->selectRaw("{$foreignKey} as session_id, SUM({$qtyColumn}) as pcs")
+                ->pluck('pcs', 'session_id');
+
+            return $sessions->groupBy(fn ($s) => $s->completed_at->toDateString())
+                ->map(fn ($rows) => ['orders' => $rows->count(), 'pcs' => (int) $rows->sum(fn ($s) => $pcs[$s->id] ?? 0)]);
+        };
+
+        $picked = $perDay(PickingSession::class, 'picking_session_items', 'picking_session_id', 'qty_picked');
+        $packed = $perDay(PackingSession::class, 'packing_session_items', 'packing_session_id', 'qty_packed');
+        $handed = CourierHandover::where('status', 'COMPLETED')->whereBetween('completed_at', [$start, $end])->withCount('items')->get(['id', 'completed_at'])
+            ->groupBy(fn ($h) => $h->completed_at->toDateString())
+            ->map(fn ($rows) => (int) $rows->sum('items_count'));
+
+        return collect($picked->keys())->merge($packed->keys())->merge($handed->keys())->unique()->sortDesc()->values()
+            ->map(fn ($date) => [
+                'date' => Carbon::parse($date),
+                'picked_orders' => $picked[$date]['orders'] ?? 0,
+                'picked_pcs' => $picked[$date]['pcs'] ?? 0,
+                'packed_orders' => $packed[$date]['orders'] ?? 0,
+                'packed_pcs' => $packed[$date]['pcs'] ?? 0,
+                'handed' => $handed[$date] ?? 0,
+            ]);
     }
 
     /**
