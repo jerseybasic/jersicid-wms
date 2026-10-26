@@ -29,9 +29,10 @@
         @endif
 
         <form method="GET" action="{{ route('gudang.retur.create') }}" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row gap-3">
-            <input type="text" name="order" value="{{ $order?->order_number ?? old('order') }}" required autofocus
+            <input type="text" id="returnOrderCode" name="order" value="{{ $order?->order_number ?? old('order') }}" required autofocus
                 placeholder="Scan label kirim, atau ketik no. order / no. resi"
                 class="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono uppercase placeholder-slate-500 focus:border-cyan-400 focus:outline-none">
+            <x-camera-button for="returnOrderCode" />
             <button type="submit" class="px-5 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl">Cari order</button>
         </form>
 

@@ -17,7 +17,8 @@ class SecurityHeaders
         // Header lama ini sudah usang dan bisa memicu bug di browser modern
         $response->headers->set('X-XSS-Protection', '0');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        // Kamera hanya untuk situs ini sendiri (scan barcode pakai kamera HP)
+        $response->headers->set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()');
 
         $response->headers->remove('X-Powered-By');
 

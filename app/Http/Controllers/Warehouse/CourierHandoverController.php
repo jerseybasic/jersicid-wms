@@ -251,7 +251,7 @@ class CourierHandoverController extends Controller
             throw new \RuntimeException("{$order->order_number} belum siap kirim (status: {$order->status_label}). Jangan diserahkan.");
         }
         if (blank($order->tracking_number)) {
-            throw new \RuntimeException("{$order->order_number} belum punya nomor resi. Cek di BigSeller lalu isi resinya di detail order.");
+            throw new \RuntimeException("{$order->order_number} belum punya nomor resi. Scan resinya di layar packing order ini, atau isi di detail order.");
         }
 
         return $order;

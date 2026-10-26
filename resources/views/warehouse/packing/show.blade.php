@@ -23,6 +23,7 @@
             ? ($session->pickingSession?->items ?? collect())->filter(fn ($item) => $item->qty_picked < $item->qty_ordered)
             : collect();
         $problems = \App\Http\Controllers\Warehouse\PackingController::PROBLEMS;
+        $canEditResi = $order && !in_array($order->status, ['SHIPPED', 'COMPLETED', 'CANCELLED'], true) && $session->status !== 'CANCELLED';
     @endphp
 
     <div class="max-w-3xl mx-auto space-y-4" x-data="{ done: false }" @scan-completed.window="done = true">
@@ -43,13 +44,38 @@
                     <span class="font-semibold text-white">{{ $order->courier ?: 'Ekspedisi belum diisi' }}</span>
                     <x-ship-badge :order="$order" />
                 </div>
-                <p class="text-slate-400">{{ $order->customer_name }} · Resi:
-                    @if ($order->tracking_number)
-                        <span class="font-mono text-white">{{ $order->tracking_number }}</span>
-                    @else
-                        <span class="text-amber-400 font-semibold">belum ada, cek di BigSeller</span>
+                <div x-data="{ editResi: false }" class="space-y-2">
+                    <p class="text-slate-400">{{ $order->customer_name }} · Resi:
+                        @if ($order->tracking_number)
+                            <span class="font-mono text-white">{{ $order->tracking_number }}</span>
+                            @if ($canEditResi && $canManual)
+                                <button type="button" @click="editResi = !editResi" class="ml-1 text-xs text-cyan-400 hover:text-cyan-300 underline">ganti</button>
+                            @endif
+                        @else
+                            <span class="text-amber-400 font-semibold">belum ada</span>
+                        @endif
+                    </p>
+                    {{-- Resi belum masuk dari BigSeller: scan barcode resi di label yang ditempel --}}
+                    @if ($canEditResi && (!$order->tracking_number || $canManual))
+                        <form method="POST" action="{{ route('gudang.packing.resi', $session->id) }}"
+                            @if ($order->tracking_number) x-show="editResi" x-cloak @endif
+                            class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/40 space-y-2">
+                            @csrf
+                            <label for="resiInput" class="block text-xs font-semibold text-amber-200">
+                                {{ $order->tracking_number ? 'Ganti nomor resi' : 'Scan barcode resi di label BigSeller, atau ketik nomor resinya' }}
+                            </label>
+                            <div class="flex flex-col sm:flex-row gap-2">
+                                <input type="text" id="resiInput" name="tracking_number" required autocomplete="off"
+                                    placeholder="Nomor resi"
+                                    class="min-w-0 flex-1 px-3 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white font-mono uppercase placeholder-slate-500 focus:border-cyan-400 focus:outline-none">
+                                <div class="grid grid-cols-2 sm:flex gap-2">
+                                    <x-camera-button for="resiInput" title="Scan resi pakai kamera" class="!py-2.5" />
+                                    <button type="submit" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded-xl">Simpan</button>
+                                </div>
+                            </div>
+                        </form>
                     @endif
-                </p>
+                </div>
                 @if ($order->notes)
                     <p class="p-2 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-200 whitespace-pre-line">{{ $order->notes }}</p>
                 @endif
@@ -80,6 +106,9 @@
             <div x-show="done" x-cloak class="bg-emerald-900/30 border-2 border-emerald-500 rounded-xl p-4 space-y-1">
                 <p class="text-lg font-bold text-emerald-300">Paket selesai dikemas</p>
                 <p class="text-sm text-emerald-200">Tempel label BigSeller{{ $order?->tracking_number ? ' (resi ' . $order->tracking_number . ')' : '' }}, taruh di rak Siap Kirim, lalu scan no. order atau resi keranjang berikutnya.</p>
+                @if ($order && !$order->tracking_number)
+                    <p class="text-sm font-semibold text-amber-300">Resi order ini belum ada. Scan barcode resi di label lewat kotak kuning di atas supaya paket bisa diserahkan ke kurir.</p>
+                @endif
             </div>
             <x-scan-box :endpoint="route('gudang.packing.scan', $session->id)" storage-key="packing-{{ $session->id }}"
                 :with-bin="false" hint="Scan setiap barang yang dimasukkan ke paket, atau ketuk +1 di barang yang belum ada barcode-nya."

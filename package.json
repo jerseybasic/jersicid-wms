@@ -31,5 +31,9 @@
         "last 2 Safari versions",
         "last 2 Edge versions",
         "not dead"
-    ]
+    ],
+    "dependencies": {
+        "@zxing/browser": "^0.2.1",
+        "@zxing/library": "^0.23.0"
+    }
 }
