@@ -136,8 +136,10 @@ class PickingBatchTest extends TestCase
 
         $scan = route('gudang.picking-batch.scan', $batch);
         $this->postJson($scan, ['code' => 'JSC-A-L'])->assertJson(['basket' => 1]);
-        $this->postJson($scan, ['code' => 'JSC-A-L'])->assertJson(['basket' => 2, 'completed' => true]);
+        // Ketuk +1 di daftar sama dengan scan, tapi tercatat sebagai ambil tanpa scan
+        $this->postJson($scan, ['code' => 'JSC-A-L', 'via' => 'ketuk'])->assertJson(['basket' => 2, 'completed' => true]);
         $this->assertSame('COMPLETED', $batch->fresh()->status);
+        $this->assertSame(1, \App\Models\AuditTrail::where('action', 'MANUAL_PICK')->count());
 
         $this->postJson(route('gudang.picking-batch.undo', $batch), ['sku' => 'JSC-A-L'])
             ->assertOk()->assertJson(['type' => 'undo', 'basket' => 2])

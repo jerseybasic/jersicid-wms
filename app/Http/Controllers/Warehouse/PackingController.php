@@ -274,6 +274,14 @@ class PackingController extends Controller
                     $this->applyPack($session, $item, $item->qty_packed - 1);
                     $item->refresh();
 
+                    AuditTrail::create([
+                        'user_id' => auth()->id(),
+                        'action' => 'PACK_UNDO',
+                        'module' => 'PACKING',
+                        'new_values' => json_encode(['session_number' => $session->session_number, 'sku' => $item->sku]),
+                        'ip_address' => $request->ip(),
+                    ]);
+
                     return [
                         'ok' => true,
                         'type' => 'undo',

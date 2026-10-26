@@ -93,6 +93,7 @@ class InsightReportTest extends TestCase
             AuditTrail::create(['user_id' => $andi->id, 'action' => $action, 'module' => 'PICKING']);
         }
         AuditTrail::create(['user_id' => $sari->id, 'action' => 'PACK_PROBLEM', 'module' => 'PACKING']);
+        AuditTrail::create(['user_id' => $sari->id, 'action' => 'PACK_UNDO', 'module' => 'PACKING']);   // -1 saat packing
         AuditTrail::create(['user_id' => $sari->id, 'action' => 'MANUAL_PACK', 'module' => 'PACKING'])
             ->forceFill(['created_at' => now()->subDays(60)])->save();   // di luar periode
         StockMovement::create([
@@ -111,7 +112,7 @@ class InsightReportTest extends TestCase
 
         $notes = $response->viewData('notes')->keyBy('name');
         $this->assertSame(['name' => 'Andi Picker', 'handed' => 0, 'manual' => 2, 'undo' => 1, 'missing' => 1, 'problem' => 0], $notes['Andi Picker']);
-        $this->assertSame(['name' => 'Sari Packer', 'handed' => 2, 'manual' => 0, 'undo' => 0, 'missing' => 0, 'problem' => 1], $notes['Sari Packer']);
+        $this->assertSame(['name' => 'Sari Packer', 'handed' => 2, 'manual' => 0, 'undo' => 1, 'missing' => 0, 'problem' => 1], $notes['Sari Packer']);
 
         $daily = $response->viewData('daily');
         $this->assertSame(today()->toDateString(), $daily[0]['date']->toDateString());

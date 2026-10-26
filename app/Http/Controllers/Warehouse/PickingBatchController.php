@@ -167,12 +167,14 @@ class PickingBatchController extends Controller
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:100'],
             'bin_code' => ['nullable', 'string', 'max:50'],
+            'via' => ['nullable', 'in:ketuk'],
         ]);
         $code = strtoupper(trim($validated['code']));
+        $tapped = ($validated['via'] ?? null) === 'ketuk';
         $bin = strtoupper(trim($validated['bin_code'] ?? ''));
 
         try {
-            $result = DB::transaction(function () use ($batch, $code, $bin, $request) {
+            $result = DB::transaction(function () use ($batch, $code, $bin, $tapped, $request) {
                 $batch = PickingBatch::lockForUpdate()->findOrFail($batch->id);
                 if ($batch->status !== 'IN_PROGRESS') {
                     throw new \RuntimeException('Picking gabungan ini sudah selesai.');
@@ -212,6 +214,17 @@ class PickingBatchController extends Controller
                 [$binCode, $warning] = Picking::resolveBin($item, $bin ?: null);
 
                 Picking::apply($session, $item, $item->qty_picked + 1, $binCode, auth()->id(), $request->ip());
+
+                // Ketuk +1 di daftar = diambil tanpa scan, dicatat seperti picking satu order
+                if ($tapped) {
+                    AuditTrail::create([
+                        'user_id' => auth()->id(),
+                        'action' => 'MANUAL_PICK',
+                        'module' => 'PICKING',
+                        'new_values' => json_encode(['session_number' => $session->session_number, 'sku' => $item->sku, 'bin' => $binCode]),
+                        'ip_address' => $request->ip(),
+                    ]);
+                }
 
                 $item->refresh();
                 $session->refresh();

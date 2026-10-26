@@ -295,12 +295,14 @@ class InsightReportController extends Controller
 
     /**
      * Catatan per staf dalam periode: paket yang diserahkan ke kurir, barang yang diketuk/diisi manual
-     * (tanpa scan), koreksi -1 saat picking, laporan barang tidak ada di rak, dan masalah saat packing.
+     * (tanpa scan), koreksi -1 saat picking dan packing, laporan barang tidak ada di rak, dan masalah saat packing.
      */
     private function staffNotes(Carbon $start, Carbon $end)
     {
         $audits = fn (array $actions) => AuditTrail::whereIn('action', $actions)->whereBetween('created_at', [$start, $end])
             ->groupBy('user_id')->selectRaw('user_id, COUNT(*) as total')->pluck('total', 'user_id');
+        $sum = fn ($a, $b) => $a->keys()->merge($b->keys())->unique()
+            ->mapWithKeys(fn ($id) => [$id => (int) ($a[$id] ?? 0) + (int) ($b[$id] ?? 0)]);
 
         $counts = [
             'handed' => CourierHandoverItem::join('courier_handovers', 'courier_handovers.id', '=', 'courier_handover_items.courier_handover_id')
@@ -310,9 +312,13 @@ class InsightReportController extends Controller
                 ->selectRaw('courier_handovers.user_id, COUNT(*) as total')
                 ->pluck('total', 'user_id'),
             'manual' => $audits(['MANUAL_PICK', 'MANUAL_PACK', 'MANUAL_QTY']),
-            'undo' => StockMovement::where('reference_type', 'PICKING_CANCEL')->where('notes', 'like', 'Koreksi picking%')
-                ->whereBetween('created_at', [$start, $end])
-                ->groupBy('user_id')->selectRaw('user_id, COUNT(*) as total')->pluck('total', 'user_id'),
+            // Koreksi -1 saat picking (stok kembali ke rak) ditambah -1 saat packing
+            'undo' => $sum(
+                StockMovement::where('reference_type', 'PICKING_CANCEL')->where('notes', 'like', 'Koreksi picking%')
+                    ->whereBetween('created_at', [$start, $end])
+                    ->groupBy('user_id')->selectRaw('user_id, COUNT(*) as total')->pluck('total', 'user_id'),
+                $audits(['PACK_UNDO'])
+            ),
             'missing' => $audits(['REPORT_MISSING']),
             'problem' => $audits(['PACK_PROBLEM']),
         ];

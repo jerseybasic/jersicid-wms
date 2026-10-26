@@ -44,7 +44,7 @@
         <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
             <div class="p-4 border-b border-slate-800">
                 <h3 class="text-base font-semibold text-white">Catatan per staf</h3>
-                <p class="text-xs text-slate-400 mt-1">Ketuk/input manual = barang dihitung tanpa scan barcode. Angka yang tinggi bisa berarti barcode rusak atau belum ditempel.</p>
+                <p class="text-xs text-slate-400 mt-1">Ketuk/input manual = barang dihitung tanpa scan barcode. Angka yang tinggi bisa berarti barcode rusak atau belum ditempel. Koreksi −1 = barang yang dikeluarkan lagi dari keranjang saat picking atau dari paket saat packing.</p>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left [&_td]:whitespace-nowrap">
