@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditTrail;
+use App\Models\CourierHandover;
+use App\Models\CourierHandoverItem;
 use App\Models\Order;
 use App\Models\PackingSession;
 use App\Models\PackingSessionItem;
@@ -74,6 +77,48 @@ class InsightReportTest extends TestCase
         // Periode diperluas: sesi lama ikut terhitung
         $picking = $this->get(route('reports.performance', ['start_date' => now()->subDays(90)->toDateString()]))->viewData('picking');
         $this->assertSame(17, $picking[0]['pcs']);
+    }
+
+    public function test_performance_report_shows_notes_per_staff_and_output_per_day(): void
+    {
+        $owner = $this->userWithRole('OWNER');
+        $andi = User::factory()->role('STAFF_GUDANG')->create(['name' => 'Andi Picker']);
+        $sari = User::factory()->role('STAFF_GUDANG')->create(['name' => 'Sari Packer']);
+        $this->makeSku('JSC-A-L');
+        $this->finishedPicking($andi, 3, 10);
+        $this->finishedPicking($andi, 2, 10, now()->subDay());
+
+        // Ketuk manual dua kali, satu koreksi -1, satu barang tidak ada; Sari melaporkan masalah packing
+        foreach (['MANUAL_PICK', 'MANUAL_QTY', 'REPORT_MISSING'] as $action) {
+            AuditTrail::create(['user_id' => $andi->id, 'action' => $action, 'module' => 'PICKING']);
+        }
+        AuditTrail::create(['user_id' => $sari->id, 'action' => 'PACK_PROBLEM', 'module' => 'PACKING']);
+        AuditTrail::create(['user_id' => $sari->id, 'action' => 'MANUAL_PACK', 'module' => 'PACKING'])
+            ->forceFill(['created_at' => now()->subDays(60)])->save();   // di luar periode
+        StockMovement::create([
+            'user_id' => $andi->id, 'sku' => 'JSC-A-L', 'bin_code' => 'A-01-01', 'type' => 'RETURN', 'qty' => 1, 'qty_before' => 0, 'qty_after' => 1,
+            'reference_type' => 'PICKING_CANCEL', 'notes' => 'Koreksi picking: 1 pcs dikembalikan ke rak',
+        ]);
+
+        // Sari menyerahkan 2 paket ke kurir hari ini
+        $handover = CourierHandover::create(['courier' => 'SPX', 'user_id' => $sari->id, 'status' => 'COMPLETED', 'completed_at' => now()]);
+        foreach (['ORD-H1', 'ORD-H2'] as $number) {
+            CourierHandoverItem::create(['courier_handover_id' => $handover->id, 'order_id' => $this->order($number)->id]);
+        }
+
+        $response = $this->actingAs($owner)->get(route('reports.performance'))->assertOk()
+            ->assertSee('Catatan per staf')->assertSee('Per hari');
+
+        $notes = $response->viewData('notes')->keyBy('name');
+        $this->assertSame(['name' => 'Andi Picker', 'handed' => 0, 'manual' => 2, 'undo' => 1, 'missing' => 1, 'problem' => 0], $notes['Andi Picker']);
+        $this->assertSame(['name' => 'Sari Packer', 'handed' => 2, 'manual' => 0, 'undo' => 0, 'missing' => 0, 'problem' => 1], $notes['Sari Packer']);
+
+        $daily = $response->viewData('daily');
+        $this->assertSame(today()->toDateString(), $daily[0]['date']->toDateString());
+        $this->assertSame([1, 3, 2], [$daily[0]['picked_orders'], $daily[0]['picked_pcs'], $daily[0]['handed']]);
+        $this->assertSame([1, 2, 0], [$daily[1]['picked_orders'], $daily[1]['picked_pcs'], $daily[1]['handed']]);
+
+        $this->get(route('reports.performance', ['export' => 'excel']))->assertOk();
     }
 
     public function test_slow_moving_lists_stock_that_has_not_gone_out(): void
