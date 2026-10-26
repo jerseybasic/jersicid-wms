@@ -31,9 +31,9 @@
                 @isset($prefillRows)
                     <div class="p-4 rounded-xl border {{ count($prefillRows) ? 'bg-amber-900/20 border-amber-500/40 text-amber-300' : 'bg-emerald-900/20 border-emerald-500/40 text-emerald-300' }} text-sm">
                         @if (count($prefillRows))
-                            {{ count($prefillRows) }} SKU stok menipis sudah dimasukkan. Jumlah pesan disarankan sampai dua kali batas stok; ubah atau hapus baris yang tidak perlu.
+                            {{ count($prefillRows) }} {{ $prefillLabel }}
                         @else
-                            Tidak ada SKU yang stoknya menipis saat ini.
+                            {{ $prefillEmpty }}
                         @endif
                     </div>
                 @endisset
@@ -86,7 +86,7 @@
                 <div>
                     <label class="block text-sm font-medium text-slate-300 mb-2">Catatan</label>
                     <textarea name="notes" rows="2" placeholder="Catatan tambahan (opsional)"
-                              class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all">{{ old('notes', $po->notes ?? (!empty($prefillRows) ? 'Isi ulang stok menipis' : '')) }}</textarea>
+                              class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all">{{ old('notes', $po->notes ?? (!empty($prefillRows) ? $prefillNotes : '')) }}</textarea>
                 </div>
 
                 <!-- Items Section -->
@@ -126,8 +126,8 @@
                                         </option>
                                     @endforeach
                                 </select>
-                                @isset($row['stock'])
-                                    <p class="text-xs text-red-400 mt-1">Stok sekarang {{ $row['stock'] }} pcs, batas {{ $row['limit'] }} pcs</p>
+                                @isset($row['note'])
+                                    <p class="text-xs text-red-400 mt-1">{{ $row['note'] }}</p>
                                 @endisset
                             </div>
                             <div class="col-span-6 md:col-span-2">

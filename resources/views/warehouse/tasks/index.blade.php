@@ -57,6 +57,20 @@
             </div>
         @endif
 
+        @if ($toRestock > 0)
+            <a href="{{ route('gudang.restock') }}" class="flex items-center justify-between gap-3 bg-slate-900 border border-red-500/40 rounded-2xl p-4">
+                <span class="text-sm text-slate-300"><span class="text-lg font-bold text-red-400">{{ $toRestock }}</span> pcs dari order batal belum dikembalikan ke rak</span>
+                <span class="text-sm font-bold text-red-400 shrink-0">Kembalikan</span>
+            </a>
+        @endif
+
+        @if ($waitingStock > 0)
+            <a href="{{ route('gudang.outbound', ['status' => 'WAITING_STOCK']) }}" class="flex items-center justify-between gap-3 bg-slate-900 border border-amber-500/40 rounded-2xl p-4">
+                <span class="text-sm text-slate-300"><span class="text-lg font-bold text-amber-400">{{ $waitingStock }}</span> order menunggu stok, otomatis masuk antrean saat barangnya diterima</span>
+                <span class="text-sm font-bold text-amber-400 shrink-0">Lihat</span>
+            </a>
+        @endif
+
         @if ($toRefill > 0)
             <a href="{{ route('gudang.replenishment') }}" class="flex items-center justify-between gap-3 bg-slate-900 border border-cyan-500/40 rounded-2xl p-4">
                 <span class="text-sm text-slate-300"><span class="text-lg font-bold text-cyan-400">{{ $toRefill }}</span> SKU di rak hampir habis, cadangannya ada di bin lain</span>

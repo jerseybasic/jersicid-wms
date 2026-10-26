@@ -51,6 +51,11 @@
         @elseif ($running)
             <x-scan-box :endpoint="route('gudang.picking.scan', $session->id)" storage-key="picking-bin-{{ $session->id }}"
                 hint="Scan rak lalu scan barang, atau ketuk tombol +1 di barang yang belum ada barcode-nya." />
+        @elseif ($session->status === 'CANCELLED')
+            <div class="bg-red-900/20 border border-red-500/40 rounded-xl p-4 text-sm text-red-300">
+                Order ini dibatalkan. Jangan diambil atau dikemas; kembalikan barang yang sudah diambil lewat
+                <a href="{{ route('gudang.restock') }}" class="font-semibold underline">Kembalikan ke Rak</a>.
+            </div>
         @elseif ($session->status === 'COMPLETED')
             <div class="bg-emerald-900/20 border border-emerald-500/40 rounded-xl p-4 space-y-3">
                 <p class="text-sm text-emerald-300">Semua barang sudah diambil. Bawa ke meja packing.</p>
@@ -71,7 +76,11 @@
                         <div class="flex gap-3">
                             <div class="shrink-0 w-20">
                                 <p class="text-[11px] text-slate-500 uppercase">Rak</p>
-                                <p class="font-mono text-sm font-bold text-cyan-400 break-all">{{ $item->bin_code }}</p>
+                                @if ($item->bin_code === 'UNKNOWN')
+                                    <p class="text-xs font-semibold text-amber-400">Belum ada di rak</p>
+                                @else
+                                    <p class="font-mono text-sm font-bold text-cyan-400 break-all">{{ $item->bin_code }}</p>
+                                @endif
                             </div>
                             <div class="flex-1 min-w-0">
                                 <p class="font-mono text-sm font-bold text-white break-all">{{ $item->sku }}</p>
@@ -92,6 +101,14 @@
                                 <button type="button" onclick="scanTap(@js(route('gudang.picking.tap', [$session->id, $item->id])), { delta: 1 })"
                                     class="col-span-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl">+1 Ambil</button>
                             </div>
+
+                            @unless ($complete)
+                                <form method="POST" action="{{ route('gudang.picking.missing', [$session->id, $item->id]) }}"
+                                    onsubmit="return confirm(@js('Barang ' . $item->sku . ' benar-benar tidak ada di rak ' . $item->bin_code . '? Stok rak itu akan dinolkan, lalu sistem mencari rak lain atau menunda order ini (Menunggu stok).'))">
+                                    @csrf
+                                    <button type="submit" class="text-xs text-amber-400 hover:text-amber-300 underline">Barang tidak ada di rak</button>
+                                </form>
+                            @endunless
 
                             @if ($canManual && !$complete)
                                 <details class="text-xs text-slate-400">

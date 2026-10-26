@@ -33,6 +33,33 @@
             @endunless
         </form>
 
+        {{-- Cocokkan dengan packing: setiap paket yang dikemas harus diserahkan atau masih menunggu kurir --}}
+        @if ($packed['total'])
+            <section class="bg-slate-900 border {{ $packed['check']->isNotEmpty() ? 'border-red-500/50' : 'border-slate-800' }} rounded-2xl p-4 space-y-3">
+                <p class="text-sm text-slate-300">
+                    Dikemas {{ $isToday ? 'hari ini' : $date->translatedFormat('d M') }}: <span class="font-bold text-white">{{ $packed['total'] }} paket</span>
+                    · <span class="text-emerald-400">{{ $packed['handed'] }} sudah diserahkan</span>
+                    · <span class="text-amber-400">{{ $packed['waiting'] }} menunggu kurir</span>
+                    @if ($packed['check']->isNotEmpty())
+                        · <span class="font-semibold text-red-400">{{ $packed['check']->count() }} perlu dicek</span>
+                    @endif
+                </p>
+                @if ($packed['check']->isNotEmpty())
+                    <div class="divide-y divide-slate-800">
+                        @foreach ($packed['check'] as $order)
+                            <a href="{{ route('gudang.outbound.show', $order->id) }}" class="py-2 flex items-center justify-between gap-3 text-sm hover:bg-slate-800/40">
+                                <span class="min-w-0">
+                                    <span class="block text-white truncate">{{ $order->order_number }} <span class="text-slate-400">· {{ $order->courier ?: 'ekspedisi kosong' }}{{ $order->tracking_number ? ' · ' . $order->tracking_number : '' }}</span></span>
+                                    <span class="block text-xs text-red-300">{{ \App\Http\Controllers\Warehouse\CourierHandoverController::checkReason($order) }}</span>
+                                </span>
+                                <span class="shrink-0 text-xs font-semibold text-cyan-400">Riwayat order</span>
+                            </a>
+                        @endforeach
+                    </div>
+                @endif
+            </section>
+        @endif
+
         @if ($noResi->isNotEmpty())
             <section class="bg-slate-900 border border-amber-500/40 rounded-2xl p-4 space-y-2">
                 <p class="text-sm font-semibold text-amber-300">{{ $noResi->count() }} paket siap kirim belum punya resi, jadi belum bisa di-scan</p>

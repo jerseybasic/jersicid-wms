@@ -9,11 +9,19 @@ use App\Models\PackingSessionItem;
 use App\Models\PickingSession;
 use App\Models\AuditTrail;
 use App\Services\Packing;
+use App\Services\Picking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class PackingController extends Controller
 {
+    /** Jenis masalah yang bisa dilaporkan saat packing */
+    public const PROBLEMS = [
+        'RUSAK' => 'Rusak / cacat',
+        'SALAH' => 'Salah barang / ukuran',
+        'KURANG' => 'Tidak ada di keranjang',
+    ];
+
     public function index(Request $request)
     {
         $query = PackingSession::with(['order', 'user:id,name'])
@@ -91,7 +99,7 @@ class PackingController extends Controller
 
     public function show($id)
     {
-        $session = PackingSession::with(['order', 'items.masterSku', 'user:id,name', 'pickingSession'])
+        $session = PackingSession::with(['order', 'items.masterSku', 'user:id,name', 'pickingSession.items'])
             ->findOrFail($id);
 
         return view('warehouse.packing.show', compact('session'));
@@ -159,7 +167,7 @@ class PackingController extends Controller
                 $session = PackingSession::lockForUpdate()->findOrFail($id);
 
                 if ($session->status !== 'IN_PROGRESS') {
-                    throw new \RuntimeException('Mulai sesi packing dulu sebelum scan.');
+                    throw new \RuntimeException($session->status === 'CANCELLED' ? Picking::CANCELLED_MESSAGE : 'Mulai sesi packing dulu sebelum scan.');
                 }
 
                 $item = $session->items()
@@ -194,7 +202,11 @@ class PackingController extends Controller
     private function applyPack(PackingSession $session, PackingSessionItem $item, int $qtyPacked): void
     {
         if ($session->status !== 'IN_PROGRESS') {
-            throw new \RuntimeException('Mulai sesi packing dulu sebelum mengemas barang.');
+            throw new \RuntimeException($session->status === 'CANCELLED' ? Picking::CANCELLED_MESSAGE : 'Mulai sesi packing dulu sebelum mengemas barang.');
+        }
+        // Setelah lapor masalah, order kembali ke picking sampai barang penggantinya diambil
+        if ($qtyPacked > $item->qty_packed && $session->order?->status === 'PICKING') {
+            throw new \RuntimeException('Tunggu barang pengganti diambil dulu, lalu lanjutkan packing.');
         }
 
         $qtyPacked = min($qtyPacked, $item->qty_ordered);
@@ -238,7 +250,7 @@ class PackingController extends Controller
                 $item = $session->items()->lockForUpdate()->findOrFail($itemId);
 
                 if ($session->status !== 'IN_PROGRESS') {
-                    throw new \RuntimeException('Packing ini sudah selesai.');
+                    throw new \RuntimeException($session->status === 'CANCELLED' ? Picking::CANCELLED_MESSAGE : 'Packing ini sudah selesai.');
                 }
 
                 if ((int) $validated['delta'] === -1) {
@@ -294,13 +306,65 @@ class PackingController extends Controller
         ];
     }
 
+    /**
+     * "Ada masalah" pada satu barang saat packing: rusak, salah barang/ukuran, atau kurang di keranjang.
+     * 1 pcs dikeluarkan, order kembali ke picking untuk mengambil penggantinya, dan packing
+     * dilanjutkan setelah pengganti diambil.
+     */
+    public function problem(Request $request, $sessionId, $itemId)
+    {
+        $validated = $request->validate(['reason' => ['required', 'in:' . implode(',', array_keys(self::PROBLEMS))]]);
+
+        try {
+            [$session, $pickItem] = DB::transaction(function () use ($sessionId, $itemId, $validated, $request) {
+                $session = PackingSession::with('order')->lockForUpdate()->findOrFail($sessionId);
+                $item = $session->items()->lockForUpdate()->findOrFail($itemId);
+
+                if ($session->status !== 'IN_PROGRESS') {
+                    throw new \RuntimeException($session->status === 'CANCELLED' ? Picking::CANCELLED_MESSAGE : 'Packing ini sudah selesai.');
+                }
+                if ($session->order?->status !== 'PACKING') {
+                    throw new \RuntimeException('Order ini sedang menunggu barang pengganti diambil.');
+                }
+
+                $picking = PickingSession::with('order', 'batch')->lockForUpdate()->findOrFail($session->picking_session_id);
+                $pickItem = $picking->items()->where('order_item_id', $item->order_item_id)->lockForUpdate()->firstOrFail();
+
+                Picking::replaceOne($picking, $pickItem, $validated['reason'], auth()->id(), $request->ip());
+
+                // Barang yang dikeluarkan tidak lagi dihitung sebagai sudah dikemas
+                $pickItem->refresh();
+                if ($item->qty_packed > $pickItem->qty_picked) {
+                    $item->update(['qty_packed' => $pickItem->qty_picked, 'status' => $pickItem->qty_picked > 0 ? 'PARTIAL' : 'PENDING']);
+                }
+
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'PACK_PROBLEM',
+                    'module' => 'PACKING',
+                    'new_values' => json_encode(['session_number' => $session->session_number, 'sku' => $item->sku, 'reason' => $validated['reason']]),
+                    'ip_address' => $request->ip(),
+                ]);
+
+                return [$session, $pickItem];
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $aside = ['RUSAK' => 'Sisihkan barang yang rusak. ', 'SALAH' => 'Kembalikan barang yang salah ke raknya. ', 'KURANG' => ''][$validated['reason']];
+
+        return redirect()->route('gudang.packing.show', $session->id)
+            ->with('success', "{$aside}Ambil 1 pcs {$pickItem->sku} pengganti di rak {$pickItem->bin_code}, lalu lanjutkan packing.");
+    }
+
     public function destroy($id)
     {
         $session = PackingSession::findOrFail($id);
         $user = auth()->user();
 
-        if ($session->status === 'COMPLETED') {
-            return back()->with('error', 'Tidak dapat menghapus session yang sudah selesai.');
+        if (in_array($session->status, ['COMPLETED', 'CANCELLED'], true)) {
+            return back()->with('error', 'Tidak dapat menghapus session yang sudah selesai atau dibatalkan.');
         }
 
         DB::transaction(function () use ($session, $user) {

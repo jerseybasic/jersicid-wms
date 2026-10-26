@@ -9,6 +9,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
 use App\Services\LowStock;
+use App\Services\WaitingStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -72,9 +73,27 @@ class PurchaseOrderController extends Controller
                 'sku' => $sku->sku,
                 'qty' => LowStock::suggestedQty((int) $sku->current_stock, (int) $sku->limit_qty),
                 'price' => (int) ($sku->cost_price ?: $sku->price),
-                'stock' => (int) $sku->current_stock,
-                'limit' => (int) $sku->limit_qty,
+                'note' => "Stok sekarang {$sku->current_stock} pcs, batas {$sku->limit_qty} pcs",
             ])->all();
+            $data['prefillLabel'] = 'SKU stok menipis sudah dimasukkan. Jumlah pesan disarankan sampai dua kali batas stok; ubah atau hapus baris yang tidak perlu.';
+            $data['prefillEmpty'] = 'Tidak ada SKU yang stoknya menipis saat ini.';
+            $data['prefillNotes'] = 'Isi ulang stok menipis';
+        }
+
+        // "Buat PO untuk kekurangan": barang yang kurang untuk order yang menunggu stok
+        if ($request->query('dari') === 'kebutuhan-order') {
+            $needs = WaitingStock::needs()->where('short', '>', 0)->values();
+            $prices = MasterSku::whereIn('sku', $needs->pluck('sku'))->get(['sku', 'price', 'cost_price'])->keyBy('sku');
+
+            $data['prefillRows'] = $needs->map(fn ($need) => [
+                'sku' => $need['sku'],
+                'qty' => $need['short'],
+                'price' => (int) ($prices[$need['sku']]->cost_price ?? 0 ?: $prices[$need['sku']]->price ?? 0),
+                'note' => "Dibutuhkan {$need['orders']} order: {$need['need']} pcs, stok bebas {$need['available']}" . ($need['incoming'] ? ", sudah di PO lain {$need['incoming']}" : ''),
+            ])->all();
+            $data['prefillLabel'] = 'SKU yang kurang untuk order Menunggu stok sudah dimasukkan, sejumlah kekurangannya. Order masuk antrean picking otomatis saat barangnya diterima.';
+            $data['prefillEmpty'] = 'Tidak ada kekurangan: stok dan PO yang sudah ada cukup untuk semua order yang menunggu stok.';
+            $data['prefillNotes'] = 'Kekurangan untuk order yang menunggu stok';
         }
 
         return view('warehouse.po.create', $data);
