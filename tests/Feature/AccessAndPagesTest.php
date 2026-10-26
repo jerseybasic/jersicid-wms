@@ -74,6 +74,15 @@ class AccessAndPagesTest extends TestCase
             ->assertRedirect(route('gudang.tugas'));
     }
 
+    public function test_add_supplier_button_does_not_submit_the_filter_form(): void
+    {
+        $this->actingAs($this->userWithRole('OWNER'));
+
+        // Tombol di dalam form filter harus type="button", kalau tidak modal langsung tertutup karena halaman dimuat ulang
+        $this->get(route('suppliers.index'))->assertOk()
+            ->assertSeeInOrder(['<button type="button"', 'onclick="openAddModal()"'], false);
+    }
+
     public function test_inactive_user_cannot_login(): void
     {
         $user = $this->userWithRole('STAFF_GUDANG');

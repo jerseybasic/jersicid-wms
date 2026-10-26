@@ -114,18 +114,21 @@
                         <div class="col-span-1"></div>
                     </div>
 
+                    <datalist id="sku-options">
+                        @foreach($skus as $sku)
+                            <option value="{{ $sku->sku }}" data-price="{{ $sku->cost_price ?: $sku->price }}">{{ $sku->product_name }} ({{ $sku->size }})</option>
+                        @endforeach
+                    </datalist>
+
                     <div id="items-container" class="space-y-3">
                         @foreach ($rows as $index => $row)
                         <div class="grid grid-cols-12 gap-3 item-row bg-slate-800/30 p-3 rounded-xl border border-slate-700/50">
                             <div class="col-span-12 md:col-span-6">
-                                <select name="items[{{ $index }}][sku]" required class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all">
-                                    <option value="">-- Pilih SKU --</option>
-                                    @foreach($skus as $sku)
-                                        <option value="{{ $sku->sku }}" data-price="{{ $sku->cost_price ?: $sku->price }}" {{ ($row['sku'] ?? '') == $sku->sku ? 'selected' : '' }}>
-                                            {{ $sku->sku }} - {{ $sku->product_name }} ({{ $sku->size }})
-                                        </option>
-                                    @endforeach
-                                </select>
+                                {{-- Bisa diketik: cari kode SKU, nama produk, atau ukuran --}}
+                                <input type="text" name="items[{{ $index }}][sku]" required list="sku-options" autocomplete="off"
+                                       value="{{ $row['sku'] ?? '' }}" placeholder="Ketik SKU atau nama produk..."
+                                       class="sku-input w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono uppercase focus:border-cyan-400 focus:outline-none transition-all"/>
+                                <p class="sku-label text-xs text-slate-400 mt-1 truncate"></p>
                                 @isset($row['note'])
                                     <p class="text-xs text-red-400 mt-1">{{ $row['note'] }}</p>
                                 @endisset
@@ -176,11 +179,13 @@
             const firstRow = container.querySelector('.item-row').cloneNode(true);
             
             // Reset values
-            firstRow.querySelectorAll('select, input').forEach(el => {
-                if (el.tagName === 'SELECT') el.selectedIndex = 0;
+            firstRow.querySelectorAll('input').forEach(el => {
+                if (el.name.includes('[sku]')) el.value = '';
                 else if (el.name.includes('qty')) el.value = '1';
                 else if (el.name.includes('price')) el.value = '0';
             });
+            firstRow.querySelector('.sku-label').textContent = '';
+            firstRow.querySelectorAll('.text-red-400').forEach(el => el.remove());
             
             // Update name index
             firstRow.querySelectorAll('[name]').forEach(el => {
@@ -203,19 +208,31 @@
             }
         });
 
-        // Auto-fill harga saat pilih SKU
+        // Data SKU untuk kolom yang bisa diketik: nama produk dan harga modal per kode SKU
+        const skuData = @js($skus->mapWithKeys(fn ($sku) => [$sku->sku => ['name' => $sku->product_name . ' (' . $sku->size . ')', 'price' => $sku->cost_price ?: $sku->price]]));
+
+        // Saat SKU dipilih/diketik: tampilkan nama produk, isi harga, dan tolak kode yang tidak ada
+        function checkSku(input, fillPrice) {
+            const code = input.value.trim().toUpperCase();
+            input.value = code;
+            const sku = skuData[code];
+            const row = input.closest('.item-row');
+            row.querySelector('.sku-label').textContent = sku ? sku.name : (code ? 'SKU tidak ditemukan, pilih dari daftar' : '');
+            row.querySelector('.sku-label').classList.toggle('text-amber-400', !sku && code !== '');
+            input.setCustomValidity(sku || !code ? '' : 'SKU tidak ditemukan. Pilih dari daftar.');
+            const priceInput = row.querySelector('[name*="[price]"]');
+            if (sku && fillPrice && priceInput && sku.price > 0) {
+                priceInput.value = sku.price;
+                updateTotal();
+            }
+        }
+
         document.addEventListener('change', function(e) {
-            if (e.target.tagName === 'SELECT' && e.target.name.includes('sku')) {
-                const selectedOption = e.target.options[e.target.selectedIndex];
-                const price = selectedOption.dataset.price || 0;
-                const row = e.target.closest('.item-row');
-                const priceInput = row.querySelector('[name*="[price]"]');
-                if (priceInput && price > 0) {
-                    priceInput.value = price;
-                    updateTotal();
-                }
+            if (e.target.classList.contains('sku-input')) {
+                checkSku(e.target, true);
             }
         });
+        document.querySelectorAll('.sku-input').forEach(input => checkSku(input, false));
 
         // Update qty/price untuk hitung total
         document.addEventListener('input', function(e) {

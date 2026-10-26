@@ -82,7 +82,9 @@ class MasterSkuCostPriceTest extends TestCase
         $this->makeSku('JSC-A-L', 100000)->update(['cost_price' => 60000, 'min_stock' => 5]);
         $this->makeSku('JSC-B-L', 90000)->update(['min_stock' => 5]);   // HPP kosong: tetap pakai harga jual
 
-        $this->get(route('po.create'))->assertSee('data-price="60000"', false)->assertSee('data-price="90000"', false);
+        // Kolom SKU bisa diketik (daftar pilihan dari datalist)
+        $this->get(route('po.create'))->assertSee('data-price="60000"', false)->assertSee('data-price="90000"', false)
+            ->assertSee('list="sku-options"', false)->assertSee('<option value="JSC-A-L"', false);
 
         $rows = collect($this->get(route('po.create', ['dari' => 'stok-menipis']))->viewData('prefillRows'))->keyBy('sku');
         $this->assertSame(60000, $rows['JSC-A-L']['price']);

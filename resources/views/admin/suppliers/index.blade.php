@@ -63,7 +63,7 @@
                     Reset
                 </a>
 
-                <button 
+                <button type="button"
                     onclick="openAddModal()" 
                     class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-semibold rounded-lg shadow-lg shadow-cyan-500/25 transition-all text-sm flex items-center gap-2"
                 >
