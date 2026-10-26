@@ -69,6 +69,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
         Route::get('/export', [MasterSkuController::class, 'export'])->name('export');
         Route::post('/import', [MasterSkuController::class, 'import'])->name('import');
         Route::post('/import/simpan', [MasterSkuController::class, 'storeImport'])->name('import.store');
+        Route::get('/import/{audit}/batalkan', [MasterSkuController::class, 'undoImportPreview'])->name('import.undo');
+        Route::post('/import/{audit}/batalkan', [MasterSkuController::class, 'undoImport'])->name('import.undo.store');
+        Route::post('/hapus', [MasterSkuController::class, 'bulkDestroy'])->name('bulk-destroy');
         // Reset menghapus seluruh Master SKU + stok, jadi hanya OWNER
     });
 
@@ -202,6 +205,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::delete('/{handover}/paket/{order}', [CourierHandoverController::class, 'removeItem'])->name('.remove');
         Route::post('/{handover}/serahkan', [CourierHandoverController::class, 'finish'])->name('.finish');
         Route::get('/{handover}/manifest', [CourierHandoverController::class, 'print'])->name('.print');
+        Route::get('/{handover}/bukti/{type}', [CourierHandoverController::class, 'proof'])->whereIn('type', ['tanda-tangan', 'foto'])->name('.proof');
         Route::delete('/{handover}', [CourierHandoverController::class, 'destroy'])->name('.destroy');
     });
 

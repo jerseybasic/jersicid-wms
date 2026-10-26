@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditTrail;
 use App\Models\MasterSku;
 use App\Models\StockActive;
+use App\Services\MasterSkuRemoval;
 use App\Services\MasterSkuSync;
+use App\Services\WaitingStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -161,7 +164,9 @@ class MasterSkuController extends Controller
             ->limit(20)
             ->get();
 
-        return view('admin.master-skus.index', compact('articles', 'stats', 'topProducts', 'lowStockProducts'));
+        $recentImports = MasterSkuRemoval::recentImports();
+
+        return view('admin.master-skus.index', compact('articles', 'stats', 'topProducts', 'lowStockProducts', 'recentImports'));
     }
 
     /**
@@ -260,17 +265,112 @@ class MasterSkuController extends Controller
         }
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $sku = MasterSku::findOrFail($id);
+
+        return $this->removeSkus($request, [$sku->sku]);
+    }
+
+    /**
+     * Hapus beberapa SKU sekaligus (dari daftar size satu produk). SKU yang sudah dipakai
+     * di order, PO, retur, atau pergerakan stok tidak dihapus.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        $validated = $request->validate([
+            'skus' => ['required', 'array', 'min:1', 'max:500'],
+            'skus.*' => ['required', 'string', 'max:50'],
+        ]);
+
+        return $this->removeSkus($request, $validated['skus']);
+    }
+
+    private function removeSkus(Request $request, array $skus)
+    {
         try {
-            DB::transaction(function () use ($sku) {
-                $sku->delete();
-            });
-            return back()->with('success', 'SKU berhasil dihapus!');
-        } catch (\Exception $e) {
-            return back()->withErrors(['error' => 'Gagal menghapus SKU: ' . safe_error_message($e)]);
+            $result = DB::transaction(fn () => MasterSkuRemoval::remove(
+                $skus,
+                auth()->id(),
+                $request->ip(),
+                'HAPUS-SKU-' . now()->format('YmdHis'),
+                'SKU dihapus dari Master SKU'
+            ));
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Gagal menghapus SKU: ' . safe_error_message($e));
         }
+
+        if ($result['removed']) {
+            AuditTrail::create([
+                'user_id' => auth()->id(),
+                'action' => 'DELETE',
+                'module' => 'MASTER_SKU',
+                'new_values' => ['removed' => $result['removed'], 'kept' => $result['kept']],
+                'ip_address' => $request->ip(),
+            ]);
+        }
+
+        $message = $result['removed'] ? count($result['removed']) . ' SKU dihapus (' . $this->skuList($result['removed']) . ').' : '';
+        if ($result['kept']) {
+            $kept = collect($result['kept'])->map(fn ($reason, $sku) => "{$sku} {$reason}")->take(5)->implode('; ');
+            $note = ' Tidak dihapus karena sudah dipakai: ' . $kept . (count($result['kept']) > 5 ? '; dan lainnya' : '')
+                . '. Ubah statusnya jadi NONAKTIF kalau tidak dipakai lagi.';
+
+            return back()->with($result['removed'] ? 'success' : 'error', trim($message . $note));
+        }
+
+        return $result['removed']
+            ? back()->with('success', $message)
+            : back()->with('error', 'SKU tidak ditemukan.');
+    }
+
+    private function skuList(array $skus): string
+    {
+        return implode(', ', array_slice($skus, 0, 5)) . (count($skus) > 5 ? ', dan lainnya' : '');
+    }
+
+    /** Pratinjau pembatalan satu import Master SKU */
+    public function undoImportPreview(AuditTrail $audit)
+    {
+        abort_unless($audit->module === 'MASTER_SKU' && $audit->action === 'IMPORT', 404);
+
+        $plan = MasterSkuRemoval::plan($audit);
+        $undone = in_array($plan['reference'], MasterSkuRemoval::undoneReferences(), true);
+
+        return view('admin.master-skus.import-undo', [
+            'import' => $audit->load('user'),
+            'plan' => $plan,
+            'undone' => $undone,
+            'hasWork' => !$undone && MasterSkuRemoval::hasWork($plan),
+        ]);
+    }
+
+    /** Batalkan satu import Master SKU */
+    public function undoImport(Request $request, AuditTrail $audit)
+    {
+        abort_unless($audit->module === 'MASTER_SKU' && $audit->action === 'IMPORT', 404);
+
+        try {
+            $done = DB::transaction(fn () => MasterSkuRemoval::undoImport($audit, auth()->id(), $request->ip()));
+        } catch (\RuntimeException $e) {
+            return redirect()->route('master-skus.import.undo', $audit)->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::error('Batal import Master SKU gagal', ['error' => $e->getMessage()]);
+            return redirect()->route('master-skus.import.undo', $audit)->with('error', 'Gagal membatalkan import: ' . safe_error_message($e));
+        }
+
+        $parts = array_filter([
+            $done['removed'] ? "{$done['removed']} SKU dihapus" : null,
+            $done['stock'] ? "stok {$done['stock']} SKU dikembalikan" : null,
+            $done['fields'] ? "data produk {$done['fields']} SKU dikembalikan" : null,
+        ]);
+        $message = "Import {$done['reference']} dibatalkan" . ($parts ? ': ' . implode(', ', $parts) : '') . '.';
+        if ($done['kept']) {
+            $message .= ' ' . count($done['kept']) . ' SKU baru tidak dihapus karena sudah dipakai (' . $this->skuList(array_keys($done['kept'])) . ').';
+        }
+        $released = WaitingStock::release(auth()->id(), $request->ip());
+
+        return redirect()->route('master-skus.index')->with('success', $message . WaitingStock::releasedMessage($released));
     }
 
     public function export()

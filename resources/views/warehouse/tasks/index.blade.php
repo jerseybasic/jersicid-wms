@@ -21,25 +21,40 @@
             <div class="p-4 bg-red-900/30 border border-red-500/50 text-red-400 rounded-xl">{{ session('error') }}</div>
         @endif
 
+        {{-- Tiga stasiun kerja: satu ketukan langsung ke pekerjaan berikutnya --}}
+        @php $nextPack = $toPack->first(); @endphp
+        <div class="grid grid-cols-3 gap-3">
+            <form method="POST" action="{{ route('gudang.picking-batch.auto') }}">
+                @csrf
+                <button type="submit" @disabled($toPick->isEmpty())
+                    class="w-full h-full rounded-2xl p-4 text-center bg-amber-500 text-slate-900 disabled:bg-slate-800 disabled:text-slate-500 active:scale-[0.98] transition-all">
+                    <span class="block text-3xl font-black">{{ $toPick->count() }}</span>
+                    <span class="block text-sm font-bold mt-1">Picking</span>
+                    <span class="block text-[11px] opacity-80">{{ $toPick->isEmpty() ? 'tidak ada order' : 'ambil berikutnya' }}</span>
+                </button>
+            </form>
+            <form method="POST" action="{{ route('gudang.packing.store') }}">
+                @csrf
+                <input type="hidden" name="order_id" value="{{ $nextPack?->id }}">
+                <input type="hidden" name="courier" value="{{ $nextPack?->courier }}">
+                <button type="submit" @disabled(!$nextPack)
+                    class="w-full h-full rounded-2xl p-4 text-center bg-purple-500 text-white disabled:bg-slate-800 disabled:text-slate-500 active:scale-[0.98] transition-all">
+                    <span class="block text-3xl font-black">{{ $toPack->count() }}</span>
+                    <span class="block text-sm font-bold mt-1">Packing</span>
+                    <span class="block text-[11px] opacity-80">{{ $nextPack ? 'kemas berikutnya' : 'tidak ada keranjang' }}</span>
+                </button>
+            </form>
+            <a href="{{ route('gudang.handover') }}"
+                class="rounded-2xl p-4 text-center bg-emerald-500 text-slate-900 active:scale-[0.98] transition-all {{ $toShip->isEmpty() ? '!bg-slate-800 !text-slate-500' : '' }}">
+                <span class="block text-3xl font-black">{{ $toShip->count() }}</span>
+                <span class="block text-sm font-bold mt-1">Serah Terima</span>
+                <span class="block text-[11px] opacity-80">scan resi ke kurir</span>
+            </a>
+        </div>
+
         {{-- QR perintah yang ditempel di meja: Mulai Picking, Mulai Packing, Cek Retur, Tutup Kiriman --}}
         <x-scan-box :endpoint="route('gudang.command')" storage-key="tugas" :with-bin="false"
             hint="Scan QR perintah (Mulai Picking, Mulai Packing, Cek Retur, Tutup Kiriman), atau scan no. order/resi di keranjang untuk langsung mulai packing." />
-
-        {{-- Ringkasan --}}
-        <div class="grid grid-cols-3 gap-3">
-            <a href="#ambil" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
-                <p class="text-3xl font-bold text-amber-400">{{ $toPick->count() }}</p>
-                <p class="text-xs text-slate-400 mt-1">Perlu diambil</p>
-            </a>
-            <a href="#kemas" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
-                <p class="text-3xl font-bold text-purple-400">{{ $toPack->count() }}</p>
-                <p class="text-xs text-slate-400 mt-1">Perlu dikemas</p>
-            </a>
-            <a href="#kirim" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
-                <p class="text-3xl font-bold text-emerald-400">{{ $toShip->count() }}</p>
-                <p class="text-xs text-slate-400 mt-1">Siap kirim</p>
-            </a>
-        </div>
 
         @php
             $late = $deadlines[\App\Services\ShipDeadline::LATE] ?? 0;

@@ -66,6 +66,12 @@ class AccessAndPagesTest extends TestCase
 
         $this->post('/login', ['email' => $admin->email, 'password' => 'password'])
             ->assertRedirect(route('dashboard.gudang'));
+        $this->post('/logout');
+
+        // Staf gudang langsung ke Tugas
+        $staff = $this->userWithRole('STAFF_GUDANG');
+        $this->post('/login', ['email' => $staff->email, 'password' => 'password'])
+            ->assertRedirect(route('gudang.tugas'));
     }
 
     public function test_inactive_user_cannot_login(): void

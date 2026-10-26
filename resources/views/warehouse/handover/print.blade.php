@@ -25,6 +25,8 @@
         .total td { font-weight: bold; }
         .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; margin-top: 10mm; text-align: center; }
         .sign .line { margin-top: 22mm; min-height: 6mm; border-top: 0.3mm solid #000; padding-top: 1.5mm; }
+        .sign .signature { display: block; height: 18mm; margin: 4mm auto 0; }
+        .sign .line.signed { margin-top: 0; }
         @page { size: A4; margin: 10mm; }
         @media print {
             body { background: #fff; }
@@ -83,8 +85,16 @@
 
         <div class="sign">
             <div>Diserahkan oleh (gudang)<div class="line">{{ $handover->user?->name }}</div></div>
-            <div>Diterima oleh (kurir {{ $handover->courier }})<div class="line">{{ $handover->driver_name ?: ' ' }}</div></div>
+            <div>Diterima oleh (kurir {{ $handover->courier }})
+                @if ($handover->signature_path)
+                    <img src="{{ route('gudang.handover.proof', [$handover, 'tanda-tangan']) }}" alt="Tanda tangan kurir" class="signature">
+                @endif
+                <div class="line {{ $handover->signature_path ? 'signed' : '' }}">{{ $handover->driver_name ?: ' ' }}</div>
+            </div>
         </div>
+        @if ($handover->photo_path)
+            <p class="notice"><a href="{{ route('gudang.handover.proof', [$handover, 'foto']) }}" target="_blank">Lihat foto tumpukan paket</a></p>
+        @endif
     </div>
 
     @if (session('success'))

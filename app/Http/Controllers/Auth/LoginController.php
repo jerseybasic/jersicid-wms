@@ -48,6 +48,9 @@ class LoginController extends Controller
             // Redirect berdasarkan role
             if ($user->role === 'OWNER') {
                 return redirect()->intended(route('dashboard.owner'));
+            } elseif ($user->role === 'STAFF_GUDANG') {
+                // Staf gudang langsung ke Tugas: Picking, Packing, Serah Terima
+                return redirect()->intended(route('gudang.tugas'));
             } else {
                 // SUPERVISOR & STAFF_GUDANG
                 return redirect()->intended(route('dashboard.gudang'));

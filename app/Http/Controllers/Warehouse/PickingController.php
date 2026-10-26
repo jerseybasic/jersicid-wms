@@ -138,17 +138,31 @@ class PickingController extends Controller
 
     public function pickItem(Request $request, $sessionId, $itemId)
     {
+        // Jumlah manual melewati scan: hanya untuk role pengawas, dan alasannya dicatat
+        abort_unless(in_array(auth()->user()->role, Picking::MANUAL_ROLES, true), 403, 'Input jumlah manual hanya untuk Owner, Supervisor, dan Admin Gudang.');
+
         $validated = $request->validate([
             'qty_picked' => ['required', 'integer', 'min:0'],
             'bin_code' => ['required', 'string', 'max:50'],
-        ]);
+            'reason' => ['required', 'string', 'max:200'],
+        ], ['reason.required' => 'Tulis alasan input manual (tercatat di riwayat).']);
 
         try {
             DB::transaction(function () use ($sessionId, $itemId, $validated, $request) {
                 $session = PickingSession::lockForUpdate()->findOrFail($sessionId);
                 $item = $session->items()->lockForUpdate()->findOrFail($itemId);
+                $before = $item->qty_picked;
 
                 Picking::apply($session, $item, (int) $validated['qty_picked'], trim($validated['bin_code']), auth()->id(), $request->ip());
+
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'MANUAL_QTY',
+                    'module' => 'PICKING',
+                    'old_values' => json_encode(['qty_picked' => $before]),
+                    'new_values' => json_encode(['session_number' => $session->session_number, 'sku' => $item->sku, 'qty_picked' => (int) $validated['qty_picked'], 'bin' => trim($validated['bin_code']), 'reason' => $validated['reason']]),
+                    'ip_address' => $request->ip(),
+                ]);
             });
 
             return back()->with('success', 'Item berhasil dipicking!');

@@ -132,16 +132,30 @@ class PackingController extends Controller
 
     public function packItem(Request $request, $sessionId, $itemId)
     {
+        // Jumlah manual melewati scan: hanya untuk role pengawas, dan alasannya dicatat
+        abort_unless(in_array(auth()->user()->role, Picking::MANUAL_ROLES, true), 403, 'Input jumlah manual hanya untuk Owner, Supervisor, dan Admin Gudang.');
+
         $validated = $request->validate([
             'qty_packed' => ['required', 'integer', 'min:0'],
-        ]);
+            'reason' => ['required', 'string', 'max:200'],
+        ], ['reason.required' => 'Tulis alasan input manual (tercatat di riwayat).']);
 
         try {
-            DB::transaction(function () use ($sessionId, $itemId, $validated) {
-                $session = PackingSession::lockForUpdate()->findOrFail($sessionId);
+            DB::transaction(function () use ($sessionId, $itemId, $validated, $request) {
+                $session = PackingSession::with('order')->lockForUpdate()->findOrFail($sessionId);
                 $item = $session->items()->lockForUpdate()->findOrFail($itemId);
+                $before = $item->qty_packed;
 
                 $this->applyPack($session, $item, (int) $validated['qty_packed']);
+
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'MANUAL_QTY',
+                    'module' => 'PACKING',
+                    'old_values' => json_encode(['qty_packed' => $before]),
+                    'new_values' => json_encode(['session_number' => $session->session_number, 'sku' => $item->sku, 'qty_packed' => (int) $validated['qty_packed'], 'reason' => $validated['reason']]),
+                    'ip_address' => $request->ip(),
+                ]);
             });
 
             return back()->with('success', 'Item berhasil dipacking!');
