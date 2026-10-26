@@ -28,10 +28,18 @@
                 <button type="button" @click="toggleKeyboard()" class="text-xs text-slate-400 hover:text-cyan-300"
                     x-text="scannerMode ? 'Mode scanner (keyboard disembunyikan)' : 'Mode ketik'"></button>
             </div>
-            <input type="text" x-ref="input" @keydown.enter.prevent="submit()" autocomplete="off" autofocus
-                :inputmode="scannerMode ? 'none' : 'text'"
-                placeholder="Arahkan scanner ke barcode..."
-                class="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white text-lg font-mono uppercase placeholder-slate-500 focus:border-cyan-400 focus:outline-none">
+            <div class="flex gap-2">
+                <input type="text" x-ref="input" @keydown.enter.prevent="submit()" autocomplete="off" autofocus
+                    :inputmode="scannerMode ? 'none' : 'text'"
+                    placeholder="Arahkan scanner ke barcode..."
+                    class="min-w-0 flex-1 px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white text-lg font-mono uppercase placeholder-slate-500 focus:border-cyan-400 focus:outline-none">
+                {{-- Tanpa scanner: pakai kamera HP --}}
+                <button type="button" @click="openCamera()" title="Scan pakai kamera HP"
+                    class="shrink-0 flex items-center gap-2 px-4 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <span class="hidden sm:inline">Kamera</span>
+                </button>
+            </div>
         </div>
         @if ($withBin)
             <div class="md:w-56">
@@ -92,6 +100,7 @@
                 busy: false,
                 audio: null,
                 scannerMode: false,
+                camera: null,
 
                 init() {
                     try {
@@ -110,7 +119,26 @@
                 },
 
                 focus() {
+                    // Saat kamera terbuka, keyboard layar jangan ikut muncul
+                    if (this.camera) return;
                     this.$nextTick(() => this.$refs.input.focus());
+                },
+
+                /** Kamera HP: setiap kode yang terbaca diproses seperti hasil scanner */
+                async openCamera() {
+                    this.$refs.input.blur();
+                    const camera = await window.openCameraScan((code, camera) => {
+                        this.camera = camera;
+                        this.$refs.input.value = code;
+                        this.submit();
+                    }, {
+                        title: 'Scan pakai kamera',
+                        onClose: () => {
+                            this.camera = null;
+                            this.focus();
+                        },
+                    });
+                    this.camera = camera.isOpen() ? camera : null;
                 },
 
                 setBin(code) {
@@ -185,6 +213,7 @@
                     this.status = result.ok ? (result.warning ? 'warn' : 'ok') : 'error';
                     this.message = result.message;
                     this.beep(result.ok);
+                    this.camera?.setResult(result.ok, result.message);
                     this.focus();
 
                     if (result.ok && result.redirect) {
@@ -197,6 +226,7 @@
                         this.endpoint = this.nextEndpoint;
                         this.nextEndpoint = null;
                         this.message = result.message + ' Semua item selesai. ' + (this.nextHint || '');
+                        this.camera?.setResult(true, this.message);
                         window.dispatchEvent(new CustomEvent('scan-completed'));
                         return;
                     }

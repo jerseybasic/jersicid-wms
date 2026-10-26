@@ -232,6 +232,11 @@ window.layoutManager = function() {
 };
 
 // ============================================
+// SCAN PAKAI KAMERA HP (dimuat hanya saat tombol kamera ditekan)
+// ============================================
+window.openCameraScan = (onCode, options) => import('./camera-scan.js').then((m) => m.openCameraScan(onCode, options));
+
+// ============================================
 // INITIALIZE ALPINE.JS
 // ============================================
 window.Alpine = Alpine;

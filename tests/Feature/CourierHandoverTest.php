@@ -75,7 +75,7 @@ class CourierHandoverTest extends TestCase
         foreach ([
             'SPXID001' => 'SP-1 sudah ada di daftar.',
             'JNE001' => 'TK-1 untuk kurir JNE, bukan SPX. Pisahkan paket ini.',
-            'SP-4' => 'SP-4 belum punya nomor resi. Cek di BigSeller lalu isi resinya di detail order.',
+            'SP-4' => 'SP-4 belum punya nomor resi. Scan resinya di layar packing order ini, atau isi di detail order.',
             'SPXID005' => 'SP-5 belum siap kirim (status: Siap/Sedang Packing). Jangan diserahkan.',
             'XXX' => 'Resi atau nomor order XXX tidak ditemukan.',
         ] as $code => $message) {

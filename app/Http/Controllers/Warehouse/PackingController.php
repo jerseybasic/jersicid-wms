@@ -372,6 +372,63 @@ class PackingController extends Controller
             ->with('success', "{$aside}Ambil 1 pcs {$pickItem->sku} pengganti di rak {$pickItem->bin_code}, lalu lanjutkan packing.");
     }
 
+    /**
+     * Isi nomor resi dari layar packing (scan label BigSeller atau ketik).
+     * Resi kosong boleh diisi semua staf; mengganti resi yang sudah ada hanya untuk pengawas.
+     */
+    public function resi(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'tracking_number' => ['required', 'string', 'max:100'],
+        ], ['tracking_number.required' => 'Scan atau ketik nomor resinya.']);
+
+        $resi = strtoupper(preg_replace('/\s+/', '', $validated['tracking_number']));
+
+        try {
+            $order = DB::transaction(function () use ($id, $resi, $request) {
+                $session = PackingSession::lockForUpdate()->findOrFail($id);
+                $order = Order::lockForUpdate()->findOrFail($session->order_id);
+
+                if (in_array($order->status, ['SHIPPED', 'COMPLETED', 'CANCELLED'], true)) {
+                    throw new \RuntimeException("Order {$order->order_number} sudah {$order->status_label}, resinya tidak bisa diubah di sini.");
+                }
+                if (filled($order->tracking_number) && !in_array(auth()->user()->role, Picking::MANUAL_ROLES, true)) {
+                    throw new \RuntimeException('Resi sudah terisi. Minta Admin Gudang atau Supervisor kalau resinya perlu diganti.');
+                }
+                // Resi yang sama di order lain = label tertukar
+                $other = Order::where('id', '!=', $order->id)
+                    ->where('status', '!=', 'CANCELLED')
+                    ->whereRaw('UPPER(tracking_number) = ?', [$resi])
+                    ->first();
+                if ($other) {
+                    throw new \RuntimeException("Resi {$resi} sudah dipakai order {$other->order_number}. Cek lagi labelnya, mungkin tertukar.");
+                }
+                if (Order::whereRaw('UPPER(order_number) = ?', [$resi])->exists()) {
+                    throw new \RuntimeException("{$resi} adalah nomor order, bukan resi. Scan barcode resi di label kirim.");
+                }
+
+                $before = $order->tracking_number;
+                $order->update(['tracking_number' => $resi]);
+                $session->update(['tracking_number' => $resi]);
+
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => $before ? 'CHANGE_RESI' : 'SET_RESI',
+                    'module' => 'PACKING',
+                    'old_values' => $before ? json_encode(['tracking_number' => $before]) : null,
+                    'new_values' => json_encode(['order_number' => $order->order_number, 'tracking_number' => $resi]),
+                    'ip_address' => $request->ip(),
+                ]);
+
+                return $order;
+            });
+
+            return back()->with('success', "Resi {$resi} tersimpan untuk order {$order->order_number}.");
+        } catch (\Exception $e) {
+            return back()->with('error', safe_error_message($e));
+        }
+    }
+
     public function destroy($id)
     {
         $session = PackingSession::findOrFail($id);

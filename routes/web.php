@@ -223,6 +223,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{id}/scan', [PackingController::class, 'scan'])->name('packing.scan');
         Route::post('/{sessionId}/items/{itemId}/ketuk', [PackingController::class, 'tap'])->name('packing.tap');
         Route::post('/{sessionId}/items/{itemId}/masalah', [PackingController::class, 'problem'])->name('packing.problem');
+        Route::post('/{id}/resi', [PackingController::class, 'resi'])->name('packing.resi');
         Route::delete('/{id}', [PackingController::class, 'destroy'])->name('packing.destroy');
     });
 
