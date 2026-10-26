@@ -209,6 +209,13 @@
                         class="px-3 py-2 bg-red-600/80 hover:bg-red-500 text-white text-xs rounded-lg font-semibold">
                         Batalkan (<span x-text="count('PENDING', 'CONFIRMED')"></span>)
                     </button>
+                    @if (in_array(auth()->user()->role, \App\Services\OrderCancellation::ROLES))
+                        <button name="status" value="REACTIVATE" x-show="count('CANCELLED')"
+                            @click="confirm('Aktifkan lagi ' + count('CANCELLED') + ' order yang dibatalkan? Order kembali Pending seperti order baru.') || $event.preventDefault()"
+                            class="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded-lg font-semibold">
+                            Aktifkan lagi (<span x-text="count('CANCELLED')"></span>)
+                        </button>
+                    @endif
                 </form>
                 <form method="GET" action="{{ route('gudang.label.shipping-bulk') }}" target="_blank" x-show="count('READY_TO_SHIP', 'SHIPPED', 'COMPLETED')">
                     <template x-for="id in selected" :key="id"><input type="hidden" name="ids[]" :value="id"></template>

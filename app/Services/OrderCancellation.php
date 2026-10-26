@@ -61,6 +61,48 @@ class OrderCancellation
         ]);
     }
 
+    /**
+     * Aktifkan lagi order yang dibatalkan (misalnya batal karena salah klik atau uji coba).
+     * Sesi picking/packing lamanya dihapus dan order kembali Pending seperti order baru.
+     * Order sudah dikunci.
+     */
+    public static function reactivate(Order $order, string $userId, ?string $ip): void
+    {
+        if ($order->status !== 'CANCELLED') {
+            throw new \RuntimeException("Order {$order->order_number} ({$order->status_label}) tidak sedang dibatalkan.");
+        }
+        $toReturn = (int) $order->items()->sum('qty_picked');
+        if ($toReturn > 0) {
+            throw new \RuntimeException("Order {$order->order_number}: {$toReturn} pcs barangnya belum dikembalikan ke rak. Kembalikan dulu lewat Kembalikan ke Rak, lalu aktifkan lagi.");
+        }
+
+        // Sesi lama yang sudah dibatalkan dihapus supaya order bisa diambil dan dikemas dari awal
+        if ($packing = $order->packingSession) {
+            $packing->items()->delete();
+            $packing->delete();
+        }
+        if ($picking = $order->pickingSession) {
+            $batch = $picking->batch;
+            $picking->items()->delete();
+            $picking->delete();
+            if ($batch) {
+                Picking::refreshBatch($batch);
+            }
+        }
+        $order->items()->update(['qty_picked' => 0, 'qty_packed' => 0, 'bin_code' => null]);
+        // Kembali seperti order baru: Pending, lalu dikonfirmasi seperti biasa (stok dicek saat konfirmasi)
+        $order->update(['status' => 'PENDING', 'waiting_stock_at' => null, 'picked_at' => null, 'packed_at' => null, 'picked_by' => null, 'packed_by' => null, 'shipped_at' => null]);
+
+        AuditTrail::create([
+            'user_id' => $userId,
+            'action' => 'REACTIVATE',
+            'module' => 'OUTBOUND',
+            'old_values' => json_encode(['status' => 'CANCELLED']),
+            'new_values' => json_encode(['status' => 'PENDING', 'order_number' => $order->order_number]),
+            'ip_address' => $ip,
+        ]);
+    }
+
     /** Barang order batal yang belum dikembalikan ke rak */
     public static function pendingItems()
     {

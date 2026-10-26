@@ -132,6 +132,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/massal', [OutboundController::class, 'bulkStatus'])->name('outbound.bulk-status');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
     Route::post('/{id}/batalkan', [OutboundController::class, 'cancel'])->name('outbound.cancel');
+    Route::post('/{id}/aktifkan', [OutboundController::class, 'reactivate'])->name('outbound.reactivate');
     Route::post('/{id}/proses-ulang', [OutboundController::class, 'reprocess'])->name('outbound.reprocess');
     Route::get('/{id}/edit', [OutboundController::class, 'edit'])->name('outbound.edit');
     Route::put('/{id}', [OutboundController::class, 'update'])->name('outbound.update');

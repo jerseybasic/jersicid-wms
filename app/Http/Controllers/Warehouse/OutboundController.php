@@ -109,13 +109,18 @@ class OutboundController extends Controller
         // Perubahan status manual (konfirmasi, batal, kirim, selesai) dari audit trail
         $labels = ['CONFIRMED' => ['Dikonfirmasi', 'blue'], 'CANCELLED' => ['Dibatalkan', 'red'], 'SHIPPED' => ['Dikirim', 'emerald'], 'COMPLETED' => ['Selesai', 'slate']];
         AuditTrail::with('user:id,name')
-            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE', 'WAITING_STOCK'])
+            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE', 'WAITING_STOCK', 'REACTIVATE'])
             ->where('new_values', 'like', '%' . $order->order_number . '%')
             ->orderBy('created_at')
             ->get()
             ->each(function ($trail) use ($order, $labels, $steps) {
                 $values = is_string($trail->new_values) ? json_decode($trail->new_values, true) : $trail->new_values;
                 if (($values['order_number'] ?? null) !== $order->order_number) {
+                    return;
+                }
+                if ($trail->action === 'REACTIVATE') {
+                    $steps->push(['at' => $trail->created_at, 'title' => 'Diaktifkan lagi', 'detail' => 'Kembali Pending setelah dibatalkan', 'user' => $trail->user?->name, 'color' => 'cyan']);
+
                     return;
                 }
                 if ($trail->action === 'WAITING_STOCK') {
@@ -388,10 +393,11 @@ class OutboundController extends Controller
         $validated = $request->validate([
             'ids' => ['required', 'array', 'min:1', 'max:500'],
             'ids.*' => ['string'],
-            'status' => ['required', 'in:CONFIRMED,CANCELLED,COMPLETED'],
+            'status' => ['required', 'in:CONFIRMED,CANCELLED,COMPLETED,REACTIVATE'],
         ], [
             'ids.required' => 'Pilih minimal satu order.',
         ]);
+        abort_if($validated['status'] === 'REACTIVATE' && !in_array(auth()->user()->role, OrderCancellation::ROLES, true), 403);
 
         // Yang paling mendesak diproses dulu, supaya stok terbatas jatuh ke order dengan batas kirim terdekat
         $orders = Order::whereIn('id', $validated['ids'])->orderBy('ship_by')->orderBy('created_at')->get();
@@ -399,7 +405,9 @@ class OutboundController extends Controller
         $done = 0;
         $skipped = [];
         foreach ($orders as $order) {
-            $error = $this->changeStatus($order, $validated['status'], $request);
+            $error = $validated['status'] === 'REACTIVATE'
+                ? $this->reactivateOne($order->id, $request)
+                : $this->changeStatus($order, $validated['status'], $request);
             if ($error) {
                 $skipped[] = $error;
             } else {
@@ -407,7 +415,7 @@ class OutboundController extends Controller
             }
         }
 
-        $verbs = ['CONFIRMED' => 'dikonfirmasi', 'CANCELLED' => 'dibatalkan', 'COMPLETED' => 'diselesaikan'];
+        $verbs = ['CONFIRMED' => 'dikonfirmasi', 'CANCELLED' => 'dibatalkan', 'COMPLETED' => 'diselesaikan', 'REACTIVATE' => 'diaktifkan lagi (Pending)'];
         $redirect = back();
         if ($done) {
             $redirect = $redirect->with('success', "{$done} order {$verbs[$validated['status']]}.");
@@ -447,6 +455,26 @@ class OutboundController extends Controller
             : "Order {$order->order_number} dibatalkan.");
     }
 
+    /** Aktifkan lagi order yang dibatalkan: kembali Pending seperti order baru */
+    public function reactivate(Request $request, $id)
+    {
+        abort_unless(in_array(auth()->user()->role, OrderCancellation::ROLES, true), 403, 'Hanya Owner, Supervisor, atau Admin Gudang yang bisa mengaktifkan lagi order yang dibatalkan.');
+
+        try {
+            $order = DB::transaction(function () use ($id, $request) {
+                $order = Order::lockForUpdate()->findOrFail($id);
+                OrderCancellation::reactivate($order, auth()->id(), $request->ip());
+
+                return $order;
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('gudang.outbound.show', $order->id)
+            ->with('success', "Order {$order->order_number} aktif lagi sebagai Pending. Tekan Konfirmasi untuk memasukkannya ke antrean picking.");
+    }
+
     /**
      * Proses ulang order Dikirim/Selesai dengan resi yang sama: kembali ke Siap Kirim jika paketnya
      * belum pernah diserahkan ke kurir, atau ke antrean picking jika barangnya sudah diretur ke rak.
@@ -472,6 +500,20 @@ class OutboundController extends Controller
         };
 
         return redirect()->route('gudang.outbound.show', $order->id)->with('success', $message);
+    }
+
+    /** Aktifkan lagi satu order (aksi massal). Mengembalikan pesan error, atau null jika berhasil. */
+    private function reactivateOne(string $id, Request $request): ?string
+    {
+        try {
+            DB::transaction(function () use ($id, $request) {
+                OrderCancellation::reactivate(Order::lockForUpdate()->findOrFail($id), auth()->id(), $request->ip());
+            });
+        } catch (\RuntimeException $e) {
+            return $e->getMessage();
+        }
+
+        return null;
     }
 
     /** Ubah status satu order sesuai alur yang diizinkan. Mengembalikan pesan error, atau null jika berhasil. */
