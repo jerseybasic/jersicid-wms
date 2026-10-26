@@ -69,6 +69,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
         Route::get('/export', [MasterSkuController::class, 'export'])->name('export');
         Route::post('/import', [MasterSkuController::class, 'import'])->name('import');
         Route::post('/import/simpan', [MasterSkuController::class, 'storeImport'])->name('import.store');
+        Route::get('/import/{audit}/batalkan', [MasterSkuController::class, 'undoImportPreview'])->name('import.undo');
+        Route::post('/import/{audit}/batalkan', [MasterSkuController::class, 'undoImport'])->name('import.undo.store');
+        Route::post('/hapus', [MasterSkuController::class, 'bulkDestroy'])->name('bulk-destroy');
         // Reset menghapus seluruh Master SKU + stok, jadi hanya OWNER
     });
 

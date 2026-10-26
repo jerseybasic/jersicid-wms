@@ -54,7 +54,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span>{{ session('error') }}</span>
+                <span class="whitespace-pre-line">{{ session('error') }}</span>
             </div>
         @endif
 
@@ -111,6 +111,38 @@
                 <p class="text-xl font-bold text-red-400">{{ number_format($stats['low_stock']) }}</p>
             </div>
         </div>
+
+        @if ($recentImports->isNotEmpty())
+            <!-- Riwayat Import -->
+            <div class="bg-slate-900 border border-slate-800 rounded-lg">
+                <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                    <h3 class="text-sm font-semibold text-white">Import terakhir</h3>
+                    <span class="text-xs text-slate-500">Salah import? Batalkan untuk menghapus SKU baru dan mengembalikan stoknya.</span>
+                </div>
+                <div class="divide-y divide-slate-800">
+                    @foreach ($recentImports as $import)
+                        @php $v = $import->new_values ?? []; @endphp
+                        <div class="px-4 py-2.5 flex items-center gap-3 flex-wrap">
+                            <div class="min-w-0 flex-1">
+                                <p class="text-xs font-semibold text-white truncate">{{ $v['file'] ?? 'Import' }}</p>
+                                <p class="text-[11px] text-slate-500">
+                                    {{ $import->created_at->format('d M Y H:i') }} · {{ $import->user?->name ?? '-' }} · <span class="font-mono">{{ $v['reference'] ?? '' }}</span>
+                                </p>
+                                <p class="text-[11px] text-slate-400">
+                                    {{ count($v['new'] ?? []) }} SKU baru · {{ count($v['stock_up'] ?? []) }} stok naik · {{ count($v['stock_down'] ?? []) }} stok turun · {{ count($v['changed'] ?? []) }} data berubah
+                                </p>
+                            </div>
+                            @if ($import->undone)
+                                <span class="text-[11px] px-2 py-1 rounded-full bg-slate-700/60 text-slate-300">Sudah dibatalkan</span>
+                            @else
+                                <a href="{{ route('master-skus.import.undo', $import) }}"
+                                    class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 text-xs font-semibold rounded-lg">Batalkan import</a>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
 
         <!-- Filter & Search -->
         <div class="bg-slate-900 border border-slate-800 rounded-lg p-3">
@@ -220,6 +252,10 @@
                                 </div>
 
                                 <div x-show="!loading && skus.length > 0" class="p-2 space-y-1">
+                                    <div class="flex justify-end px-1">
+                                        <button type="button" @click="deleteSkus(skus.map(s => s.sku), '{{ addslashes($product->product_name) }} (' + skus.length + ' size)')"
+                                            class="text-[11px] text-red-400 hover:text-red-300">Hapus semua size produk ini</button>
+                                    </div>
                                     <template x-for="sku in skus" :key="sku.sku">
                                         <div
                                             class="flex items-center justify-between p-2 bg-slate-900/50 rounded-lg border border-slate-800/50 hover:border-cyan-500/30 transition-all">
@@ -251,6 +287,13 @@
                                                     :class="sku.status === 'AKTIF' ? 'bg-emerald-500/20 text-emerald-400' :
                                                         'bg-slate-500/20 text-slate-400'"
                                                     x-text="sku.status"></span>
+                                                <button type="button" @click="deleteSkus([sku.sku], sku.sku)" title="Hapus SKU"
+                                                    class="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded transition-colors">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
                                                 <a :href="'/master-skus/' + sku.id + '/edit'"
                                                     class="p-1 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded transition-colors">
                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor"
@@ -387,7 +430,7 @@
                     <li>• Muncul pratinjau: SKU baru, stok bertambah, stok berkurang, dan data yang berubah</li>
                     <li>• Stok disamakan dengan kolom CURRENT_STOCK / Total Stok Saat Ini, selisihnya tercatat di Pergerakan Stok</li>
                     <li>• Bisa pakai file Export di atas atau sheet sendiri dengan judul kolom bahasa Indonesia</li>
-                    <li>• Data lama tidak dihapus</li>
+                    <li>• Data lama tidak dihapus. Kalau salah import, pakai <b>Batalkan import</b> di daftar Import terakhir</li>
                 </ul>
             </div>
             <form method="POST" action="{{ route('master-skus.import') }}" enctype="multipart/form-data"
@@ -408,9 +451,29 @@
         </div>
     </div>
 
+    <form id="deleteSkusForm" method="POST" action="{{ route('master-skus.bulk-destroy') }}" class="hidden">
+        @csrf
+    </form>
+
     <script>
         function masterSkuApp() {
             return {
+                deleteSkus(skus, label) {
+                    if (!confirm(`Hapus ${label}?\n\nSKU yang sudah dipakai di order, PO, retur, atau pergerakan stok tidak akan dihapus. Stok SKU yang dihapus dinolkan dan tercatat di Pergerakan Stok.`)) {
+                        return;
+                    }
+                    const form = document.getElementById('deleteSkusForm');
+                    form.querySelectorAll('input[name="skus[]"]').forEach(el => el.remove());
+                    skus.forEach(sku => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'skus[]';
+                        input.value = sku;
+                        form.appendChild(input);
+                    });
+                    form.submit();
+                },
+
                 async toggleProduct(productName, version, component) {
                     component.expanded = !component.expanded;
 
