@@ -67,7 +67,7 @@
             // Paket ekspedisi ini yang masih tertinggal (dihitung ulang dari layar, karena scan tidak memuat ulang halaman)
             $total = $orders->filter(fn ($order) => filled($order->tracking_number))->count();
         @endphp
-        <form method="POST" action="{{ route('gudang.handover.finish', $handover) }}" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3"
+        <form method="POST" action="{{ route('gudang.handover.finish', $handover) }}" enctype="multipart/form-data" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3"
               onsubmit="const left = {{ $total }} - parseInt(document.querySelector('[data-scan-qty=count]').textContent || '0', 10);
                         return confirm((left > 0 ? 'Masih ada ' + left + ' paket ' + @js($handover->courier) + ' yang belum di-scan. Paket itu tetap Siap Kirim untuk penjemputan berikutnya.\n\n' : '') + 'Semua paket yang sudah di-scan akan berstatus Dikirim. Lanjutkan?')">
             @csrf
@@ -76,6 +76,24 @@
                 <input id="driver_name" type="text" name="driver_name" maxlength="100" placeholder="Contoh: Pak Andi SPX"
                        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:ring-cyan-500">
             </div>
+            {{-- Bukti terima: tanda tangan kurir di layar dan/atau foto tumpukan paket --}}
+            <div x-data="signaturePad()" class="space-y-1">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-slate-400">Tanda tangan kurir (opsional)</span>
+                    <button type="button" x-show="signed" x-cloak @click="clear()" class="text-xs text-slate-400 hover:text-red-400">Hapus</button>
+                </div>
+                <canvas x-ref="canvas" class="w-full h-36 bg-white rounded-lg touch-none"
+                    @pointerdown="start($event)" @pointermove="move($event)" @pointerup="end()" @pointerleave="end()"></canvas>
+                <input type="hidden" name="signature" x-ref="input">
+                <p class="text-[11px] text-slate-500" x-show="!signed">Minta kurir tanda tangan di kotak putih.</p>
+            </div>
+            <div>
+                <label for="photo" class="block text-xs font-medium text-slate-400 mb-1">Foto tumpukan paket (opsional)</label>
+                <input id="photo" type="file" name="photo" accept="image/*" capture="environment"
+                       class="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-slate-700 file:text-white">
+            </div>
+            @error('signature') <p class="text-xs text-red-400">{{ $message }}</p> @enderror
+            @error('photo') <p class="text-xs text-red-400">{{ $message }}</p> @enderror
             <button type="submit" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold rounded-xl">Serahkan dan cetak manifest</button>
             <p class="text-xs text-slate-500">Paket yang belum di-scan tetap Siap Kirim dan bisa diserahkan di serah terima berikutnya.</p>
         </form>
@@ -87,4 +105,65 @@
             <button type="submit" class="text-sm text-red-400 hover:text-red-300 underline">Batalkan serah terima</button>
         </form>
     </div>
+
+    <script>
+        /** Kotak tanda tangan: goresan jari/pena disimpan sebagai PNG di input tersembunyi */
+        function signaturePad() {
+            return {
+                signed: false,
+                drawing: false,
+                ctx: null,
+                // Ukuran kanvas mengikuti lebar layar saat mulai menggores (bisa 0 saat halaman baru dimuat)
+                setup() {
+                    const canvas = this.$refs.canvas;
+                    const ratio = window.devicePixelRatio || 1;
+                    if (this.ctx && canvas.width === Math.round(canvas.offsetWidth * ratio)) {
+                        return;
+                    }
+                    canvas.width = canvas.offsetWidth * ratio;
+                    canvas.height = canvas.offsetHeight * ratio;
+                    this.ctx = canvas.getContext('2d');
+                    this.ctx.scale(ratio, ratio);
+                    this.ctx.lineWidth = 2.5;
+                    this.ctx.lineCap = 'round';
+                    this.ctx.lineJoin = 'round';
+                    this.ctx.strokeStyle = '#0f172a';
+                },
+                point(event) {
+                    const rect = this.$refs.canvas.getBoundingClientRect();
+                    return [event.clientX - rect.left, event.clientY - rect.top];
+                },
+                start(event) {
+                    this.setup();
+                    this.drawing = true;
+                    this.$refs.canvas.setPointerCapture(event.pointerId);
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(...this.point(event));
+                },
+                move(event) {
+                    if (!this.drawing) {
+                        return;
+                    }
+                    this.ctx.lineTo(...this.point(event));
+                    this.ctx.stroke();
+                    this.signed = true;
+                },
+                end() {
+                    if (!this.drawing) {
+                        return;
+                    }
+                    this.drawing = false;
+                    if (this.signed) {
+                        this.$refs.input.value = this.$refs.canvas.toDataURL('image/png');
+                    }
+                },
+                clear() {
+                    const canvas = this.$refs.canvas;
+                    this.ctx?.clearRect(0, 0, canvas.width, canvas.height);
+                    this.$refs.input.value = '';
+                    this.signed = false;
+                },
+            };
+        }
+    </script>
 </x-app-layout>

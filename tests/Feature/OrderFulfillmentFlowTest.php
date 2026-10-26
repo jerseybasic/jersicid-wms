@@ -32,7 +32,7 @@ class OrderFulfillmentFlowTest extends TestCase
 
     public function test_order_runs_from_creation_until_shipped_and_stock_is_reduced(): void
     {
-        $staff = $this->userWithRole('STAFF_GUDANG');
+        $staff = $this->userWithRole('ADMIN_GUDANG');
         $this->makeSku('JSC-A-L');
         $this->putStock('JSC-A-L', 'A1-01', 10);
 
@@ -56,11 +56,11 @@ class OrderFulfillmentFlowTest extends TestCase
 
         // Ambil sebagian dulu, lalu sisanya: stok hanya berkurang total 3
         $item = $picking->items->first();
-        $this->post(route('gudang.picking.pick', [$picking->id, $item->id]), ['qty_picked' => 1, 'bin_code' => 'A1-01'])
+        $this->post(route('gudang.picking.pick', [$picking->id, $item->id]), ['qty_picked' => 1, 'bin_code' => 'A1-01', 'reason' => 'barcode rusak'])
             ->assertSessionHas('success');
         $this->assertSame(9, $this->stockQty('JSC-A-L', 'A1-01'));
 
-        $this->post(route('gudang.picking.pick', [$picking->id, $item->id]), ['qty_picked' => 3, 'bin_code' => 'A1-01'])
+        $this->post(route('gudang.picking.pick', [$picking->id, $item->id]), ['qty_picked' => 3, 'bin_code' => 'A1-01', 'reason' => 'barcode rusak'])
             ->assertSessionHas('success');
         $this->assertSame(7, $this->stockQty('JSC-A-L', 'A1-01'));
         $this->assertSame('COMPLETED', $picking->fresh()->status);
@@ -78,7 +78,7 @@ class OrderFulfillmentFlowTest extends TestCase
         $this->assertSame('IN_PROGRESS', $packing->status);   // langsung berjalan, tanpa tombol Mulai
         $this->get(route('gudang.packing.show', $packing->id))->assertOk();
 
-        $this->post(route('gudang.packing.pack', [$packing->id, $packing->items->first()->id]), ['qty_packed' => 3])
+        $this->post(route('gudang.packing.pack', [$packing->id, $packing->items->first()->id]), ['qty_packed' => 3, 'reason' => 'barcode rusak'])
             ->assertSessionHas('success');
         $this->assertSame('COMPLETED', $packing->fresh()->status);
         $this->assertSame('READY_TO_SHIP', $order->fresh()->status);
@@ -150,7 +150,7 @@ class OrderFulfillmentFlowTest extends TestCase
 
     public function test_picking_more_than_available_stock_is_rejected(): void
     {
-        $staff = $this->userWithRole('STAFF_GUDANG');
+        $staff = $this->userWithRole('ADMIN_GUDANG');
         $this->makeSku('JSC-A-L');
         $this->putStock('JSC-A-L', 'A1-01', 1);
 
@@ -160,7 +160,7 @@ class OrderFulfillmentFlowTest extends TestCase
         $picking = PickingSession::with('items')->firstOrFail();
         $this->post(route('gudang.picking.start', $picking->id));
 
-        $this->post(route('gudang.picking.pick', [$picking->id, $picking->items->first()->id]), ['qty_picked' => 2, 'bin_code' => 'A1-01'])
+        $this->post(route('gudang.picking.pick', [$picking->id, $picking->items->first()->id]), ['qty_picked' => 2, 'bin_code' => 'A1-01', 'reason' => 'barcode rusak'])
             ->assertSessionHas('error');
 
         $this->assertSame(1, $this->stockQty('JSC-A-L', 'A1-01'));
@@ -169,7 +169,7 @@ class OrderFulfillmentFlowTest extends TestCase
 
     public function test_deleting_picking_session_returns_stock_and_order(): void
     {
-        $staff = $this->userWithRole('STAFF_GUDANG');
+        $staff = $this->userWithRole('ADMIN_GUDANG');
         $this->makeSku('JSC-A-L');
         $this->putStock('JSC-A-L', 'A1-01', 5);
 
@@ -178,7 +178,7 @@ class OrderFulfillmentFlowTest extends TestCase
         $this->post(route('gudang.picking.store'), ['order_id' => $order->id]);
         $picking = PickingSession::with('items')->firstOrFail();
         $this->post(route('gudang.picking.start', $picking->id));
-        $this->post(route('gudang.picking.pick', [$picking->id, $picking->items->first()->id]), ['qty_picked' => 2, 'bin_code' => 'A1-01']);
+        $this->post(route('gudang.picking.pick', [$picking->id, $picking->items->first()->id]), ['qty_picked' => 2, 'bin_code' => 'A1-01', 'reason' => 'barcode rusak']);
         $this->assertSame(3, $this->stockQty('JSC-A-L', 'A1-01'));
 
         $this->delete(route('gudang.picking.destroy', $picking->id))->assertSessionHas('success');

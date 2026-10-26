@@ -15,7 +15,7 @@
 
     @php
         $running = $session->status === 'IN_PROGRESS';
-        $canManual = in_array(auth()->user()->role, ['OWNER', 'SUPERVISOR', 'ADMIN_GUDANG'], true);
+        $canManual = in_array(auth()->user()->role, \App\Services\Picking::MANUAL_ROLES, true);
         $order = $session->order;
     @endphp
 
@@ -49,6 +49,10 @@
                 <button type="submit" class="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded-xl">Mulai picking</button>
             </form>
         @elseif ($running)
+            <x-pick-next :items="$session->items->map(fn ($item) => [
+                'key' => $item->id, 'bin' => $item->bin_code, 'sku' => $item->sku, 'name' => $item->masterSku?->product_name,
+                'size' => $item->masterSku?->size, 'need' => $item->qty_ordered, 'qty' => $item->qty_picked,
+            ])->values()" />
             <x-scan-box :endpoint="route('gudang.picking.scan', $session->id)" storage-key="picking-bin-{{ $session->id }}"
                 hint="Scan rak lalu scan barang, atau ketuk tombol +1 di barang yang belum ada barcode-nya." />
         @elseif ($session->status === 'CANCELLED')
@@ -59,6 +63,15 @@
         @elseif ($session->status === 'COMPLETED')
             <div class="bg-emerald-900/20 border border-emerald-500/40 rounded-xl p-4 space-y-3">
                 <p class="text-sm text-emerald-300">Semua barang sudah diambil. Bawa ke meja packing.</p>
+                @if ($order?->status === 'PACKING' && !$order->packingSession)
+                    <form method="POST" action="{{ route('gudang.packing.store') }}">
+                        @csrf
+                        <input type="hidden" name="order_id" value="{{ $order->id }}">
+                        <button type="submit" class="w-full py-4 bg-purple-500 hover:bg-purple-400 text-white font-bold rounded-xl">Kemas order ini sekarang</button>
+                    </form>
+                @elseif ($order?->packingSession && $order->packingSession->status !== 'CANCELLED')
+                    <a href="{{ route('gudang.packing.show', $order->packingSession->id) }}" class="block w-full py-4 text-center bg-purple-500 hover:bg-purple-400 text-white font-bold rounded-xl">Buka packing order ini</a>
+                @endif
                 <form method="POST" action="{{ route('gudang.picking-batch.auto') }}">
                     @csrf
                     <button type="submit" class="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl">Ambil picking berikutnya</button>
@@ -86,7 +99,7 @@
                                 <p class="font-mono text-sm font-bold text-white break-all">{{ $item->sku }}</p>
                                 <p class="text-xs text-slate-400 truncate">{{ $item->masterSku?->product_name }}</p>
                                 @if ($item->masterSku?->size)
-                                    <span class="inline-block mt-1 px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-sm font-bold text-white">Ukuran {{ $item->masterSku->size }}</span>
+                                    <span class="inline-block mt-1 px-2 py-0.5 rounded-md bg-white text-slate-900 text-sm font-black">Ukuran {{ $item->masterSku->size }}</span>
                                 @endif
                             </div>
                             <p class="shrink-0 text-right">
@@ -122,6 +135,10 @@
                                         <label class="flex-1 min-w-[6rem]">Rak
                                             <input type="text" name="bin_code" value="{{ $item->bin_code }}" required
                                                 class="mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono">
+                                        </label>
+                                        <label class="w-full">Alasan (tercatat di riwayat)
+                                            <input type="text" name="reason" required maxlength="200" placeholder="mis. barcode rusak, sudah dicek manual"
+                                                class="mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm">
                                         </label>
                                         <button type="submit" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-lg">Simpan</button>
                                     </form>

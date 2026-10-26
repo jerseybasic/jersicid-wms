@@ -16,7 +16,7 @@
     @php
         $running = $session->status === 'IN_PROGRESS';
         $order = $session->order;
-        $canManual = in_array(auth()->user()->role, ['OWNER', 'SUPERVISOR', 'ADMIN_GUDANG'], true);
+        $canManual = in_array(auth()->user()->role, \App\Services\Picking::MANUAL_ROLES, true);
         // Setelah lapor masalah, order kembali ke picking sampai barang penggantinya diambil
         $waitingReplacement = $running && $order?->status === 'PICKING';
         $replacements = $waitingReplacement
@@ -25,7 +25,7 @@
         $problems = \App\Http\Controllers\Warehouse\PackingController::PROBLEMS;
     @endphp
 
-    <div class="max-w-3xl mx-auto space-y-4">
+    <div class="max-w-3xl mx-auto space-y-4" x-data="{ done: false }" @scan-completed.window="done = true">
         @if (session('success'))
             <div class="p-3 bg-emerald-900/30 border border-emerald-500/50 text-emerald-400 rounded-lg text-sm">{{ session('success') }}</div>
         @endif
@@ -76,8 +76,14 @@
                 <p class="text-xs text-amber-300/80">Setelah penggantinya diambil, kembali ke halaman ini untuk melanjutkan packing.</p>
             </div>
         @elseif ($running)
+            {{-- Selesai tanpa pindah halaman: kotak scan langsung siap untuk keranjang berikutnya --}}
+            <div x-show="done" x-cloak class="bg-emerald-900/30 border-2 border-emerald-500 rounded-xl p-4 space-y-1">
+                <p class="text-lg font-bold text-emerald-300">Paket selesai dikemas</p>
+                <p class="text-sm text-emerald-200">Tempel label BigSeller{{ $order?->tracking_number ? ' (resi ' . $order->tracking_number . ')' : '' }}, taruh di rak Siap Kirim, lalu scan no. order atau resi keranjang berikutnya.</p>
+            </div>
             <x-scan-box :endpoint="route('gudang.packing.scan', $session->id)" storage-key="packing-{{ $session->id }}"
-                :with-bin="false" hint="Scan setiap barang yang dimasukkan ke paket, atau ketuk +1 di barang yang belum ada barcode-nya." />
+                :with-bin="false" hint="Scan setiap barang yang dimasukkan ke paket, atau ketuk +1 di barang yang belum ada barcode-nya."
+                :next-endpoint="route('gudang.command')" next-hint="Scan no. order/resi keranjang berikutnya." />
         @elseif ($session->status === 'COMPLETED')
             <div class="bg-emerald-900/20 border border-emerald-500/40 rounded-xl p-4 text-sm text-emerald-300">
                 Packing selesai. Tempel label BigSeller, lalu paket masuk daftar Siap Kirim untuk diserahkan ke kurir.
@@ -98,7 +104,7 @@
                                 <p class="font-mono text-sm font-bold text-white break-all">{{ $item->sku }}</p>
                                 <p class="text-xs text-slate-400 truncate">{{ $item->masterSku?->product_name }}</p>
                                 @if ($item->masterSku?->size)
-                                    <span class="inline-block mt-1 px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-sm font-bold text-white">Ukuran {{ $item->masterSku->size }}</span>
+                                    <span class="inline-block mt-1 px-2 py-0.5 rounded-md bg-white text-slate-900 text-sm font-black">Ukuran {{ $item->masterSku->size }}</span>
                                 @endif
                             </div>
                             <p class="shrink-0 text-right">
@@ -107,6 +113,7 @@
                         </div>
 
                         @if ($running && !$waitingReplacement)
+                            <div x-show="!done" class="space-y-3">
                             <div class="grid grid-cols-3 gap-2">
                                 <button type="button" onclick="scanTap(@js(route('gudang.packing.tap', [$session->id, $item->id])), { delta: -1 })"
                                     class="py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl">−1</button>
@@ -129,16 +136,21 @@
                             @if ($canManual && !$complete)
                                 <details class="text-xs text-slate-400">
                                     <summary class="cursor-pointer select-none">Input jumlah manual</summary>
-                                    <form method="POST" action="{{ route('gudang.packing.pack', [$session->id, $item->id]) }}" class="mt-2 flex items-end gap-2">
+                                    <form method="POST" action="{{ route('gudang.packing.pack', [$session->id, $item->id]) }}" class="mt-2 flex flex-wrap items-end gap-2">
                                         @csrf
-                                        <label class="flex-1">Jumlah dikemas
+                                        <label class="flex-1 min-w-[6rem]">Jumlah dikemas
                                             <input type="number" name="qty_packed" value="{{ $item->qty_packed }}" min="0" max="{{ $item->qty_ordered }}" required
+                                                class="mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm">
+                                        </label>
+                                        <label class="w-full order-first">Alasan (tercatat di riwayat)
+                                            <input type="text" name="reason" required maxlength="200" placeholder="mis. barcode rusak, sudah dicek manual"
                                                 class="mt-1 w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm">
                                         </label>
                                         <button type="submit" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-lg">Simpan</button>
                                     </form>
                                 </details>
                             @endif
+                            </div>
                         @endif
                     </div>
                 @endforeach

@@ -78,14 +78,14 @@ class ScanWorkflowTest extends TestCase
 
     public function test_packing_by_scan_rejects_items_outside_the_order(): void
     {
-        $staff = $this->userWithRole('STAFF_GUDANG');
+        $staff = $this->userWithRole('ADMIN_GUDANG');
         $this->makeSku('JSC-A-L');
         $this->makeSku('JSC-B-L');
         $this->putStock('JSC-A-L', 'A-01-01', 5);
 
         $picking = $this->startedPicking($staff, 'JSC-A-L', 2);
         $item = $picking->items()->first();
-        $this->post(route('gudang.picking.pick', [$picking->id, $item->id]), ['qty_picked' => 2, 'bin_code' => 'A-01-01']);
+        $this->post(route('gudang.picking.pick', [$picking->id, $item->id]), ['qty_picked' => 2, 'bin_code' => 'A-01-01', 'reason' => 'barcode rusak']);
 
         $this->post(route('gudang.packing.store'), ['order_id' => $picking->order_id, 'courier' => 'JNE']);
         $packing = PackingSession::where('order_id', $picking->order_id)->firstOrFail();

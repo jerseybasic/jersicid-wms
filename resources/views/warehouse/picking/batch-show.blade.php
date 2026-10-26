@@ -50,6 +50,10 @@
                 </form>
             </div>
         @else
+            <x-pick-next :items="$pickList->map(fn ($row) => [
+                'key' => 'sku-' . $row['sku'], 'bin' => $row['bins']->first(), 'sku' => $row['sku'], 'name' => $row['product'],
+                'size' => $row['size'], 'need' => $row['qty_ordered'], 'qty' => $row['qty_picked'],
+            ])->values()" />
             <x-scan-box :endpoint="route('gudang.picking-batch.scan', $batch)" storage-key="batch-bin-{{ $batch->id }}"
                 hint="Scan rak lalu scan barang (atau ketuk +1 di daftar). Layar menunjukkan nomor keranjangnya." />
         @endif

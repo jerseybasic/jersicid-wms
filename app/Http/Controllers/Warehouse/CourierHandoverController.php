@@ -11,6 +11,8 @@ use App\Models\CourierAlias;
 use App\Models\SkuAlias;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -283,10 +285,23 @@ class CourierHandoverController extends Controller
      */
     public function finish(Request $request, CourierHandover $handover)
     {
-        $validated = $request->validate(['driver_name' => ['nullable', 'string', 'max:100']]);
+        $validated = $request->validate([
+            'driver_name' => ['nullable', 'string', 'max:100'],
+            // Tanda tangan kurir dari layar (PNG base64), maksimal sekitar 500 KB
+            'signature' => ['nullable', 'string', 'max:700000', 'regex:/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/'],
+            'photo' => ['nullable', 'image', 'max:8192'],
+        ], [
+            'signature.regex' => 'Tanda tangan tidak terbaca. Hapus lalu tanda tangan lagi.',
+            'photo.image' => 'Foto harus berupa gambar.',
+            'photo.max' => 'Foto maksimal 8 MB.',
+        ]);
+        if ($handover->status !== 'OPEN') {
+            return back()->with('error', 'Serah terima ini sudah selesai.');
+        }
+        $proof = $this->storeProof($handover, $validated['signature'] ?? null, $request->file('photo'));
 
         try {
-            $count = DB::transaction(function () use ($handover, $validated, $request) {
+            $count = DB::transaction(function () use ($handover, $validated, $request, $proof) {
                 $handover = CourierHandover::lockForUpdate()->findOrFail($handover->id);
                 if ($handover->status !== 'OPEN') {
                     throw new \RuntimeException('Serah terima ini sudah selesai.');
@@ -308,7 +323,7 @@ class CourierHandoverController extends Controller
                     'status' => 'COMPLETED',
                     'completed_at' => $now,
                     'driver_name' => $validated['driver_name'] ?? null,
-                ]);
+                ] + $proof);
 
                 AuditTrail::create([
                     'user_id' => auth()->id(),
@@ -325,6 +340,8 @@ class CourierHandoverController extends Controller
                 return $orders->count();
             });
         } catch (\RuntimeException $e) {
+            Storage::disk('local')->delete(array_values($proof));
+
             return back()->with('error', $e->getMessage());
         }
 
@@ -397,6 +414,36 @@ class CourierHandoverController extends Controller
 
         return redirect()->route('gudang.handover.couriers')
             ->with('success', $changed ? count($changed) . ' nama jasa kirim dipetakan ulang.' : 'Tidak ada yang berubah.');
+    }
+
+    /** Simpan tanda tangan dan foto bukti serah terima di disk privat */
+    private function storeProof(CourierHandover $handover, ?string $signature, ?UploadedFile $photo): array
+    {
+        $proof = [];
+        $dir = 'serah-terima/' . $handover->id;
+        if ($signature) {
+            $path = "{$dir}/tanda-tangan-" . now()->format('YmdHis') . '.png';
+            Storage::disk('local')->put($path, base64_decode(substr($signature, strpos($signature, ',') + 1)));
+            $proof['signature_path'] = $path;
+        }
+        if ($photo) {
+            $proof['photo_path'] = $photo->storeAs($dir, 'foto-' . now()->format('YmdHis') . '.' . ($photo->extension() ?: 'jpg'), 'local');
+        }
+
+        return $proof;
+    }
+
+    /** Tampilkan tanda tangan atau foto bukti serah terima */
+    public function proof(CourierHandover $handover, string $type)
+    {
+        $path = match ($type) {
+            'tanda-tangan' => $handover->signature_path,
+            'foto' => $handover->photo_path,
+            default => null,
+        };
+        abort_unless($path && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path);
     }
 
     public function print(CourierHandover $handover)

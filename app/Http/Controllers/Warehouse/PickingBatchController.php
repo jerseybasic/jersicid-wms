@@ -144,6 +144,8 @@ class PickingBatchController extends Controller
                 return [
                     'sku' => $sku,
                     'name' => trim(($items->first()->masterSku?->product_name ?? '') . ' ' . ($items->first()->masterSku?->size ?? '')),
+                    'product' => $items->first()->masterSku?->product_name,
+                    'size' => $items->first()->masterSku?->size,
                     'bins' => $items->pluck('bin_code')->unique()->sort()->values(),
                     'qty_ordered' => $items->sum('qty_ordered'),
                     'qty_picked' => $items->sum('qty_picked'),

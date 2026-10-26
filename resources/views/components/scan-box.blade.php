@@ -6,9 +6,12 @@
     // Tampilkan kotak lokasi bin (picking, inbound, opname)
     'withBin' => true,
     'hint' => 'Scan lokasi rak dulu, lalu scan barang. Setiap scan barang menambah 1.',
+    // Setelah semua item selesai: kotak scan pindah ke URL ini tanpa memuat ulang halaman (meja packing)
+    'nextEndpoint' => null,
+    'nextHint' => null,
 ])
 
-<div x-data="scanBox(@js($endpoint), @js($storageKey), @js(route('gudang.command')))"
+<div x-data="scanBox(@js($endpoint), @js($storageKey), @js(route('gudang.command')), @js($nextEndpoint), @js($nextHint))"
     @scan-result.window="handle($event.detail)"
     class="rounded-2xl border-2 p-4 transition-colors"
     :class="{
@@ -75,9 +78,11 @@
             window.dispatchEvent(new CustomEvent('scan-result', { detail: result }));
         }
 
-        function scanBox(endpoint, storageKey, commandUrl) {
+        function scanBox(endpoint, storageKey, commandUrl, nextEndpoint, nextHint) {
             return {
                 endpoint: endpoint,
+                nextEndpoint: nextEndpoint,
+                nextHint: nextHint,
                 commandUrl: commandUrl,
                 storageKey: storageKey,
                 bin: '',
@@ -184,6 +189,15 @@
 
                     if (result.ok && result.redirect) {
                         setTimeout(() => window.location.href = result.redirect, 400);
+                        return;
+                    }
+
+                    if (result.completed && this.nextEndpoint) {
+                        // Lanjut di layar yang sama: scan berikutnya memakai URL baru
+                        this.endpoint = this.nextEndpoint;
+                        this.nextEndpoint = null;
+                        this.message = result.message + ' Semua item selesai. ' + (this.nextHint || '');
+                        window.dispatchEvent(new CustomEvent('scan-completed'));
                         return;
                     }
 

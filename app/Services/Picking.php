@@ -18,6 +18,9 @@ use Illuminate\Support\Facades\DB;
  */
 class Picking
 {
+    /** Role yang boleh mengisi jumlah diambil/dikemas secara manual (melewati scan) */
+    public const MANUAL_ROLES = ['OWNER', 'SUPERVISOR', 'ADMIN_GUDANG'];
+
     public const CANCELLED_MESSAGE = 'Order ini sudah dibatalkan. Jangan diambil atau dikemas; kembalikan barangnya lewat menu Kembalikan ke Rak.';
 
     /**

@@ -205,6 +205,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::delete('/{handover}/paket/{order}', [CourierHandoverController::class, 'removeItem'])->name('.remove');
         Route::post('/{handover}/serahkan', [CourierHandoverController::class, 'finish'])->name('.finish');
         Route::get('/{handover}/manifest', [CourierHandoverController::class, 'print'])->name('.print');
+        Route::get('/{handover}/bukti/{type}', [CourierHandoverController::class, 'proof'])->whereIn('type', ['tanda-tangan', 'foto'])->name('.proof');
         Route::delete('/{handover}', [CourierHandoverController::class, 'destroy'])->name('.destroy');
     });
 

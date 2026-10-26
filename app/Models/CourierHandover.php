@@ -17,7 +17,7 @@ class CourierHandover extends Model
 
     public const NO_COURIER = 'TANPA KURIR';
 
-    protected $fillable = ['handover_number', 'courier', 'driver_name', 'user_id', 'status', 'completed_at'];
+    protected $fillable = ['handover_number', 'courier', 'driver_name', 'signature_path', 'photo_path', 'user_id', 'status', 'completed_at'];
 
     protected $casts = ['completed_at' => 'datetime'];
 
