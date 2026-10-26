@@ -59,3 +59,11 @@
         </form>
     @endif
 @endif
+@if($order->status === 'CANCELLED' && in_array(auth()->user()->role, \App\Services\OrderCancellation::ROLES))
+    {{-- Batal karena salah klik atau uji coba: order kembali Pending seperti order baru --}}
+    <form method="POST" action="{{ route('gudang.outbound.reactivate', $order->id) }}"
+        onsubmit="return confirm(@js('Aktifkan lagi order ' . $order->order_number . '? Order kembali Pending seperti order baru, lalu bisa dikonfirmasi dan diproses lagi.'))">
+        @csrf
+        <button class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Aktifkan lagi</button>
+    </form>
+@endif
