@@ -66,7 +66,8 @@ Buka **Transfer Stok**, isi SKU, rak asal, rak tujuan, dan jumlahnya, lalu simpa
 1. Buka **Stock Opname**, lalu klik **Buat Opname**. Pilih rak yang mau dihitung. Jika tidak ada rak yang dipilih, yang dihitung seluruh gudang.
 2. Klik **Mulai Opname**. Scan lokasi rak, lalu scan barangnya satu per satu.
 3. Jika ada barang yang tidak ada di daftar, form **Tambah barang** otomatis terisi saat barangnya di-scan.
-4. Klik **Simpan Sementara** sesering mungkin. Setelah semua lokasi dihitung, klik **Selesaikan & Adjust Stok**.
+4. Klik **Simpan Sementara** sesering mungkin. Setelah semua lokasi dihitung, klik **Kirim untuk Disetujui**. Stok sistem belum berubah sampai Owner/Supervisor menyetujui.
+5. Jika opname dikembalikan, alasannya tampil di atas daftar. Hitung ulang bagian itu, lalu kirim lagi.
 
 ### Menata barang ke rak (Denah Gudang)
 1. Buka **Denah Gudang**. Jika ada tulisan "stok belum punya lokasi rak", artinya stok hasil import atau form SKU masih tercatat di DEFAULT-01 atau GUDANG-UTAMA.
@@ -92,6 +93,11 @@ Semua pekerjaan STAFF_GUDANG, ditambah:
 ## SUPERVISOR
 
 Semua pekerjaan ADMIN_GUDANG, ditambah:
+
+### Persetujuan stok
+Buka **Persetujuan Stok** (juga muncul di lonceng):
+- **Stock opname** yang dikirim staf: buka, periksa baris yang selisih, lalu klik **Setujui & Sesuaikan Stok**, atau **Kembalikan untuk dihitung ulang** dengan alasan. Opname yang dibuat dan diselesaikan Owner/Supervisor sendiri langsung menyesuaikan stok.
+- **Barang tidak ada di rak** yang dilaporkan picker: cek raknya. Jika memang kosong, klik **Setujui, nolkan stok**. Jika barangnya ada, klik **Tolak, barang ada**, dan order yang tadi ditunda kembali ke antrean picking. Selama belum diputuskan, rak itu tidak dijatah ke picking.
 
 ### Membuat dan menyetujui PO
 1. Buka **Purchase Order**, lalu buat PO baru. Tombol **PO dari Stok Menipis** mengisi otomatis SKU yang stoknya di bawah batas.

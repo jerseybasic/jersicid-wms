@@ -36,13 +36,57 @@ class StockOpnameFlowTest extends TestCase
             ],
         ])->assertSessionHas('success');
 
+        // Staf mengirim untuk disetujui: stok belum berubah, rak tetap terkunci
+        $this->post(route('gudang.opname.complete', $opname->id))->assertSessionHas('success', fn ($m) => str_contains($m, 'dikirim untuk disetujui'));
+        $this->assertSame('SUBMITTED', $opname->fresh()->status);
+        $this->assertSame($staff->id, $opname->fresh()->submitted_by);
+        $this->assertSame(10, $this->stockQty('JSC-A-L', 'A1-01'));
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id])->assertSessionHas('error');
+
+        // Staf tidak bisa menyetujui sendiri dan tidak bisa membuka halaman persetujuan
+        $this->post(route('gudang.opname.approve', $opname->id))->assertForbidden();
+        $this->get(route('gudang.stock-approvals'))->assertForbidden();
+
+        // Supervisor mengembalikan dengan alasan: opname dihitung ulang, stok tetap
+        $supervisor = $this->userWithRole('SUPERVISOR');
+        $this->actingAs($supervisor)->get(route('gudang.stock-approvals'))->assertOk()->assertSee($opname->opname_number);
+        $this->post(route('gudang.opname.reject', $opname->id))->assertSessionHasErrors('reason');
+        $this->post(route('gudang.opname.reject', $opname->id), ['reason' => 'Hitung ulang rak A1'])->assertSessionHas('success');
+        $this->assertSame('IN_PROGRESS', $opname->fresh()->status);
+        $this->assertSame(10, $this->stockQty('JSC-A-L', 'A1-01'));
+        $this->actingAs($staff)->get(route('gudang.opname.show', $opname->id))->assertSee('Hitung ulang rak A1');
+
+        // Dikirim lagi lalu disetujui: stok disesuaikan
         $this->post(route('gudang.opname.complete', $opname->id))->assertSessionHas('success');
+        $this->actingAs($supervisor)->get(route('dashboard.gudang'))->assertSee('Penyesuaian stok menunggu persetujuan');
+        $this->post(route('gudang.opname.approve', $opname->id))->assertSessionHas('success');
+        $this->post(route('gudang.opname.approve', $opname->id))->assertSessionHas('error');
 
         $this->assertSame('COMPLETED', $opname->fresh()->status);
+        $this->assertSame($supervisor->id, $opname->fresh()->approved_by);
+        $this->assertNull($opname->fresh()->rejection_note);
         $this->assertSame(8, $this->stockQty('JSC-A-L', 'A1-01'));
         $this->assertSame(5, $this->stockQty('JSC-A-XL', 'A1-02'));
         $this->assertDatabaseHas('stock_movements', ['sku' => 'JSC-A-L', 'type' => 'ADJUSTMENT', 'qty' => 2, 'qty_after' => 8]);
         $this->assertDatabaseMissing('stock_movements', ['sku' => 'JSC-A-XL', 'type' => 'ADJUSTMENT']);
+    }
+
+    public function test_owner_completing_opname_adjusts_stock_directly(): void
+    {
+        $owner = $this->userWithRole('OWNER');
+        $warehouse = $this->makeWarehouse();
+        $this->makeSku('JSC-A-L');
+        $this->putStock('JSC-A-L', 'A1-01', 10);
+
+        $this->actingAs($owner)->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id]);
+        $opname = StockOpname::with('items')->firstOrFail();
+        $this->post(route('gudang.opname.start', $opname->id));
+        $this->post(route('gudang.opname.update', $opname->id), ['items' => [['id' => $opname->items->first()->id, 'physical_qty' => 12]]]);
+
+        $this->post(route('gudang.opname.complete', $opname->id))->assertSessionHas('success');
+        $this->assertSame('COMPLETED', $opname->fresh()->status);
+        $this->assertSame($owner->id, $opname->fresh()->approved_by);
+        $this->assertSame(12, $this->stockQty('JSC-A-L', 'A1-01'));
     }
 
     public function test_opname_cannot_complete_until_every_item_is_counted(): void
@@ -139,6 +183,8 @@ class StockOpnameFlowTest extends TestCase
             ],
         ])->assertSessionHas('success');
         $this->post(route('gudang.opname.complete', $opname->id))->assertSessionHas('success');
+        $this->assertSame(0, $this->stockQty('JSC-X-L', 'A-01-02'));
+        $this->actingAs($this->userWithRole('OWNER'))->post(route('gudang.opname.approve', $opname->id))->assertSessionHas('success');
 
         $this->assertSame(3, $this->stockQty('JSC-A-L', 'A-01-01'));
         $this->assertSame(2, $this->stockQty('JSC-X-L', 'A-01-02'));

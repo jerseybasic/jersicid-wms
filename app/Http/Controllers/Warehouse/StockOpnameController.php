@@ -17,7 +17,10 @@ use Illuminate\Support\Facades\DB;
 class StockOpnameController extends Controller
 {
     /** Opname yang masih terbuka: raknya tidak boleh ikut opname lain */
-    private const OPEN_STATUSES = ['DRAFT', 'IN_PROGRESS'];
+    private const OPEN_STATUSES = ['DRAFT', 'IN_PROGRESS', 'SUBMITTED'];
+
+    /** Yang boleh menyetujui opname (stok baru disesuaikan setelah disetujui) */
+    public const MANAGER_ROLES = ['OWNER', 'SUPERVISOR'];
 
     public function index(Request $request)
     {
@@ -119,7 +122,7 @@ class StockOpnameController extends Controller
 
     public function show(Request $request, $id)
     {
-        $opname = StockOpname::with(['creator:id,name', 'warehouse:id,name'])->findOrFail($id);
+        $opname = StockOpname::with(['creator:id,name', 'submitter:id,name', 'approver:id,name', 'warehouse:id,name'])->findOrFail($id);
 
         // Ringkasan dihitung dari semua item, bukan hanya halaman yang tampil
         $summary = [
@@ -240,13 +243,17 @@ class StockOpnameController extends Controller
         }
     }
 
+    /**
+     * Selesai menghitung. Owner/Supervisor langsung menyesuaikan stok; role lain mengirim opname
+     * untuk disetujui dulu, dan stok baru berubah setelah Owner/Supervisor menyetujui.
+     */
     public function complete($id)
     {
-        $opname = StockOpname::with('items')->findOrFail($id);
+        $opname = StockOpname::findOrFail($id);
         $user = auth()->user();
 
         if ($opname->status !== 'IN_PROGRESS') {
-            return back()->with('error', 'Hanya opname IN_PROGRESS yang bisa diselesaikan.');
+            return back()->with('error', 'Hanya opname yang sedang dihitung yang bisa diselesaikan.');
         }
 
         $unfilled = $opname->items()->whereNull('physical_qty')->count();
@@ -254,8 +261,61 @@ class StockOpnameController extends Controller
             return back()->with('error', "Masih ada {$unfilled} item yang belum dihitung fisiknya.");
         }
 
+        if (!$this->isManager()) {
+            $opname->update(['status' => 'SUBMITTED', 'submitted_by' => $user->id, 'submitted_at' => now(), 'rejection_note' => null]);
+            $this->audit('SUBMIT', $opname, ['diff_items' => $opname->items()->where('difference', '!=', 0)->count()]);
+
+            return back()->with('success', 'Opname dikirim untuk disetujui. Stok sistem belum berubah sampai Owner/Supervisor menyetujui.');
+        }
+
+        return $this->applyAdjustments($opname, 'Stock Opname selesai. Stok sistem sudah disesuaikan.');
+    }
+
+    /** Owner/Supervisor menyetujui opname yang dikirim staf: stok disesuaikan sekarang */
+    public function approve($id)
+    {
+        abort_unless($this->isManager(), 403, 'Hanya Owner atau Supervisor yang bisa menyetujui opname.');
+        $opname = StockOpname::findOrFail($id);
+
+        if ($opname->status !== 'SUBMITTED') {
+            return back()->with('error', 'Opname ini tidak sedang menunggu persetujuan.');
+        }
+
+        return $this->applyAdjustments($opname, 'Opname disetujui. Stok sistem sudah disesuaikan.');
+    }
+
+    /** Owner/Supervisor menolak: opname kembali ke staf untuk dihitung ulang, stok tidak berubah */
+    public function reject(Request $request, $id)
+    {
+        abort_unless($this->isManager(), 403, 'Hanya Owner atau Supervisor yang bisa menolak opname.');
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+        ], [
+            'reason.required' => 'Tulis alasan supaya staf tahu apa yang perlu dihitung ulang.',
+        ]);
+        $opname = StockOpname::findOrFail($id);
+
+        if ($opname->status !== 'SUBMITTED') {
+            return back()->with('error', 'Opname ini tidak sedang menunggu persetujuan.');
+        }
+
+        $opname->update(['status' => 'IN_PROGRESS', 'rejection_note' => $validated['reason']]);
+        $this->audit('REJECT', $opname, ['reason' => $validated['reason']]);
+
+        return back()->with('success', 'Opname dikembalikan ke staf untuk dihitung ulang. Stok sistem tidak berubah.');
+    }
+
+    private function applyAdjustments(StockOpname $opname, string $message)
+    {
+        $user = auth()->user();
+
         try {
             DB::transaction(function () use ($opname, $user) {
+                $opname = StockOpname::lockForUpdate()->findOrFail($opname->id);
+                if (!in_array($opname->status, ['IN_PROGRESS', 'SUBMITTED'], true)) {
+                    throw new \RuntimeException('Opname ini sudah diproses.');
+                }
+
                 foreach ($opname->items as $item) {
                     $diff = $item->physical_qty - $item->system_qty;
 
@@ -265,30 +325,28 @@ class StockOpnameController extends Controller
                             ['sku' => $item->sku, 'bin_code' => $item->bin_code],
                             ['qty' => 0, 'reserved_qty' => 0]
                         );
+                        $stock = StockActive::lockForUpdate()->find($stock->id);
 
-                        if ($stock) {
-                            $oldQty = $stock->qty;
-                            $newQty = $oldQty + $diff;
-                            if ($newQty < 0) $newQty = 0;
+                        $oldQty = $stock->qty;
+                        $newQty = max(0, $oldQty + $diff);
 
-                            $stock->update([
-                                'qty' => $newQty,
-                                'last_movement_at' => now(),
-                            ]);
+                        $stock->update([
+                            'qty' => $newQty,
+                            'last_movement_at' => now(),
+                        ]);
 
-                            StockMovement::create([
-                                'user_id' => $user->id,
-                                'sku' => $item->sku,
-                                'bin_code' => $item->bin_code,
-                                'type' => 'ADJUSTMENT',
-                                'qty' => abs($diff),
-                                'qty_before' => $oldQty,
-                                'qty_after' => $newQty,
-                                'reference_no' => $opname->opname_number,
-                                'notes' => "Opname Adj: {$diff} (Sys: {$item->system_qty}, Phy: {$item->physical_qty})",
-                                'ip_address' => request()->ip(),
-                            ]);
-                        }
+                        StockMovement::create([
+                            'user_id' => $user->id,
+                            'sku' => $item->sku,
+                            'bin_code' => $item->bin_code,
+                            'type' => 'ADJUSTMENT',
+                            'qty' => abs($diff),
+                            'qty_before' => $oldQty,
+                            'qty_after' => $newQty,
+                            'reference_no' => $opname->opname_number,
+                            'notes' => "Opname Adj: {$diff} (Sys: {$item->system_qty}, Phy: {$item->physical_qty})",
+                            'ip_address' => request()->ip(),
+                        ]);
                     }
                 }
 
@@ -296,15 +354,33 @@ class StockOpnameController extends Controller
                     'status' => 'COMPLETED',
                     'completed_at' => now(),
                     'approved_by' => $user->id,
+                    'rejection_note' => null,
                 ]);
+                $this->audit('APPROVE', $opname, ['diff_items' => $opname->items()->where('difference', '!=', 0)->count()]);
             });
 
             $released = WaitingStock::release($user->id, request()->ip());
 
-            return back()->with('success', 'Stock Opname Selesai! Stok sistem telah disesuaikan otomatis.' . WaitingStock::releasedMessage($released));
+            return back()->with('success', $message . WaitingStock::releasedMessage($released));
         } catch (\Exception $e) {
             return back()->with('error', 'Gagal menyelesaikan opname: ' . safe_error_message($e));
         }
+    }
+
+    private function isManager(): bool
+    {
+        return in_array(auth()->user()->role, self::MANAGER_ROLES, true);
+    }
+
+    private function audit(string $action, StockOpname $opname, array $values = []): void
+    {
+        AuditTrail::create([
+            'user_id' => auth()->id(),
+            'action' => $action,
+            'module' => 'STOCK_OPNAME',
+            'new_values' => json_encode(['opname_number' => $opname->opname_number, 'scope' => $opname->scope_label] + $values),
+            'ip_address' => request()->ip(),
+        ]);
     }
 
     public function destroy($id)

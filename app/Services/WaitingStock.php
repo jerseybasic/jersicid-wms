@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AuditTrail;
+use App\Models\MissingStockReport;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PurchaseOrderItem;
@@ -108,14 +109,15 @@ class WaitingStock
             ->groupBy('sku')
             ->selectRaw('sku, SUM(qty_ordered - qty_picked) as qty')
             ->pluck('qty', 'sku');
+        $held = MissingStockReport::heldQtyBySku($skus);
         $incoming = PurchaseOrderItem::whereIn('sku', $skus)
             ->whereHas('purchaseOrder', fn ($q) => $q->whereIn('status', self::INCOMING_PO_STATUSES))
             ->groupBy('sku')
             ->selectRaw('sku, SUM(qty_ordered - qty_received) as qty')
             ->pluck('qty', 'sku');
 
-        return $needs->map(function ($row, $sku) use ($onHand, $committed, $incoming) {
-            $available = max(0, (int) ($onHand[$sku] ?? 0) - (int) ($committed[$sku] ?? 0));
+        return $needs->map(function ($row, $sku) use ($onHand, $held, $committed, $incoming) {
+            $available = max(0, (int) ($onHand[$sku] ?? 0) - (int) ($held[$sku] ?? 0) - (int) ($committed[$sku] ?? 0));
             $coming = max(0, (int) ($incoming[$sku] ?? 0));
 
             return [

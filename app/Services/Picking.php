@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AuditTrail;
+use App\Models\MissingStockReport;
 use App\Models\Order;
 use App\Models\PickingBatch;
 use App\Models\PickingSession;
@@ -63,6 +64,8 @@ class Picking
      */
     public static function allocateBin(string $sku, int $qty, array $exceptBins = []): ?string
     {
+        // Bin yang dilaporkan kosong dan belum diputuskan supervisor tidak dijatah
+        $exceptBins = array_merge($exceptBins, MissingStockReport::heldBins($sku));
         $stock = StockActive::where('sku', $sku)->where('qty', '>', 0)
             ->whereNotIn('bin_code', $exceptBins)
             ->pluck('qty', 'bin_code');
@@ -325,8 +328,9 @@ class Picking
     }
 
     /**
-     * Picker melaporkan barang tidak ada di rak saran. Stok bin itu dinolkan (stok di sistem ternyata
-     * tidak ada fisiknya). Jika bin lain masih punya stok yang belum dijatah, picker diarahkan ke sana.
+     * Picker melaporkan barang tidak ada di rak saran. Stok bin itu belum diubah: laporannya menunggu
+     * persetujuan Owner/Supervisor, dan selama itu stok di bin tersebut ditahan (tidak dijatah ke picking
+     * dan tidak dihitung tersedia). Jika bin lain masih punya stok yang belum dijatah, picker diarahkan ke sana.
      * Jika tidak, order ditunda sebagai "Menunggu stok": barang yang sudah diambil untuk order ini
      * dikembalikan ke raknya dan order keluar dari picking. Sesi dan item harus sudah dikunci.
      *
@@ -342,22 +346,17 @@ class Picking
         }
 
         $bin = $item->bin_code;
-        $stock = StockActive::where('sku', $item->sku)->where('bin_code', $bin)->lockForUpdate()->first();
-        if ($stock && $stock->qty > 0) {
-            StockMovement::create([
-                'user_id' => $userId,
+        $stock = StockActive::where('sku', $item->sku)->where('bin_code', $bin)->first();
+        if ($stock && $stock->qty > 0
+            && !MissingStockReport::pending()->where('sku', $item->sku)->where('bin_code', $bin)->exists()) {
+            MissingStockReport::create([
                 'sku' => $item->sku,
                 'bin_code' => $bin,
-                'type' => 'ADJUSTMENT',
                 'qty' => $stock->qty,
-                'qty_before' => $stock->qty,
-                'qty_after' => 0,
                 'reference_no' => $session->session_number,
-                'reference_type' => 'PICKING_MISSING',
-                'notes' => 'Dilaporkan kosong saat picking',
-                'ip_address' => $ip,
+                'order_id' => $session->order_id,
+                'reported_by' => $userId,
             ]);
-            $stock->update(['qty' => 0, 'last_movement_at' => now()]);
         }
 
         AuditTrail::create([
@@ -370,7 +369,7 @@ class Picking
 
         // Satu item diambil dari satu bin, jadi pindah bin hanya jika belum ada yang diambil
         $need = $item->qty_ordered - $item->qty_picked;
-        if ($item->qty_picked === 0 && ($other = self::allocateBin($item->sku, $need, [$bin]))) {
+        if ($item->qty_picked === 0 && ($other = self::allocateBin($item->sku, $need))) {
             $item->update(['bin_code' => $other]);
 
             return ["{$item->sku} tidak ada di {$bin}. Coba ambil di rak {$other}.", $other];
@@ -391,7 +390,7 @@ class Picking
         $order->refresh()->update(['status' => 'PENDING', 'picked_by' => null, 'picked_at' => null]);
         WaitingStock::mark($order, $userId, $ip, "{$item->sku} tidak ada di rak saat picking");
 
-        $message = "Stok {$item->sku} habis. Order {$order->order_number} ditunda (Menunggu stok) dan otomatis kembali ke antrean saat barangnya diterima.";
+        $message = "{$item->sku} tidak ditemukan di rak. Order {$order->order_number} ditunda (Menunggu stok) dan otomatis kembali ke antrean saat barangnya ada. Laporan dikirim ke supervisor untuk dicek.";
         if ($picked > 0) {
             $message .= ' Kembalikan ' . $picked . ' pcs yang sudah diambil' . ($basket ? " dari keranjang {$basket}" : '') . ' ke raknya masing-masing.';
         }

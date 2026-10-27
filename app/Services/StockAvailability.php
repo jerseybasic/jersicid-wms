@@ -2,13 +2,15 @@
 
 namespace App\Services;
 
+use App\Models\MissingStockReport;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\StockActive;
 
 /**
  * Cek apakah stok cukup untuk sebuah order, dengan memperhitungkan order lain
- * yang sudah dikonfirmasi tapi barangnya belum selesai diambil.
+ * yang sudah dikonfirmasi tapi barangnya belum selesai diambil, dan stok yang ditahan
+ * karena dilaporkan tidak ada di rak (menunggu persetujuan).
  */
 class StockAvailability
 {
@@ -33,10 +35,11 @@ class StockAvailability
             ->groupBy('sku')
             ->selectRaw('sku, SUM(qty_ordered - qty_picked) as qty')
             ->pluck('qty', 'sku');
+        $held = MissingStockReport::heldQtyBySku($needs->keys());
 
         $short = [];
         foreach ($needs as $sku => $need) {
-            $available = max(0, (int) ($onHand[$sku] ?? 0) - (int) ($committed[$sku] ?? 0));
+            $available = max(0, (int) ($onHand[$sku] ?? 0) - (int) ($held[$sku] ?? 0) - (int) ($committed[$sku] ?? 0));
             if ($available < (int) $need) {
                 $short[] = ['sku' => $sku, 'need' => (int) $need, 'available' => $available];
             }

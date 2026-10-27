@@ -19,6 +19,7 @@ use App\Http\Controllers\Warehouse\PickingController;
 use App\Http\Controllers\Warehouse\PackingController;
 use App\Http\Controllers\Warehouse\TransferController;
 use App\Http\Controllers\Warehouse\ReplenishmentController;
+use App\Http\Controllers\Warehouse\StockApprovalController;
 use App\Http\Controllers\Warehouse\StockOpnameController;
 use App\Http\Controllers\Warehouse\WarehouseMappingController;
 use App\Http\Controllers\Warehouse\BarcodeScannerController;
@@ -245,10 +246,22 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/{id}/update', [StockOpnameController::class, 'updatePhysicalQty'])->name('gudang.opname.update');
     Route::post('/{id}/item', [StockOpnameController::class, 'addItem'])->name('gudang.opname.add-item');
     Route::post('/{id}/complete', [StockOpnameController::class, 'complete'])->name('gudang.opname.complete');
+    Route::post('/{id}/setujui', [StockOpnameController::class, 'approve'])->name('gudang.opname.approve');
+    Route::post('/{id}/tolak', [StockOpnameController::class, 'reject'])->name('gudang.opname.reject');
     Route::delete('/{id}', [StockOpnameController::class, 'destroy'])->name('gudang.opname.destroy');
 });
 
 // ==================== WAREHOUSE MAPPING (GUDANG) ====================
+// Persetujuan Stok: opname dari staf dan laporan barang tidak ada di rak
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
+    ->prefix('gudang/persetujuan-stok')
+    ->name('gudang.stock-approvals')
+    ->group(function () {
+        Route::get('/', [StockApprovalController::class, 'index']);
+        Route::post('/barang-tidak-ada/{report}/setujui', [StockApprovalController::class, 'approveMissing'])->name('.missing.approve');
+        Route::post('/barang-tidak-ada/{report}/tolak', [StockApprovalController::class, 'rejectMissing'])->name('.missing.reject');
+    });
+
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/mapping')
     ->group(function () {

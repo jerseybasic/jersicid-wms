@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\MissingStockReport;
 use App\Models\Order;
 use App\Models\PurchaseOrder;
 use App\Models\StockOpname;
@@ -49,6 +50,15 @@ class WorkQueue
                 'hint' => 'Setujui atau tolak',
                 'count' => PurchaseOrder::where('status', 'PENDING')->count(),
                 'url' => route('po.index', ['status' => 'PENDING']),
+                'color' => 'amber',
+            ];
+
+            $items[] = [
+                'key' => 'stock_approve',
+                'label' => 'Penyesuaian stok menunggu persetujuan',
+                'hint' => 'Opname dan barang tidak ada di rak',
+                'count' => StockOpname::where('status', 'SUBMITTED')->count() + MissingStockReport::pending()->count(),
+                'url' => route('gudang.stock-approvals'),
                 'color' => 'amber',
             ];
         }
