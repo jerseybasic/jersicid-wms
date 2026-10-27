@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\MasterSku;
+use App\Models\SystemSetting;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
 use App\Services\LowStock;
+use App\Services\PoNotifier;
+use App\Services\WhatsApp;
 use App\Services\WaitingStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -139,6 +142,43 @@ class PurchaseOrderController extends Controller
         return view('warehouse.po.show', compact('po'));
     }
 
+    /** Halaman cetak A4 untuk dikirim ke supplier (cetak atau simpan PDF dari browser) */
+    public function print($id)
+    {
+        $po = PurchaseOrder::with(['items.masterSku', 'supplier', 'creator:id,name', 'approver:id,name'])->findOrFail($id);
+
+        return view('warehouse.po.print', [
+            'po' => $po,
+            'company' => [
+                'name' => SystemSetting::get('company_name', config('app.name')),
+                'phone' => SystemSetting::get('company_phone', ''),
+                'address' => SystemSetting::get('company_address', ''),
+            ],
+            'waText' => self::vendorText($po),
+            'waPhone' => $po->supplier?->phone ? WhatsApp::normalize($po->supplier->phone) : null,
+        ]);
+    }
+
+    /** Ringkasan PO untuk dikirim ke supplier lewat WhatsApp milik pengguna sendiri */
+    private static function vendorText(PurchaseOrder $po): string
+    {
+        $lines = ["PO {$po->po_number} - " . SystemSetting::get('company_name', config('app.name'))];
+        if ($po->expected_date) {
+            $lines[] = 'Target selesai: ' . $po->expected_date->format('d/m/Y');
+        }
+        $lines[] = '';
+        foreach ($po->items as $item) {
+            $lines[] = "- {$item->sku}" . ($item->masterSku ? " ({$item->masterSku->product_name} {$item->masterSku->size})" : '') . ": {$item->qty_ordered} pcs";
+        }
+        $lines[] = '';
+        $lines[] = 'Total: ' . (int) $po->items->sum('qty_ordered') . ' pcs';
+        if ($po->notes) {
+            $lines[] = 'Catatan: ' . $po->notes;
+        }
+
+        return implode("\n", $lines);
+    }
+
     public function edit($id)
     {
         $this->authorizeManager();
@@ -267,6 +307,8 @@ class PurchaseOrderController extends Controller
             $this->audit('UPDATE_PO_STATUS', $po, ['from' => $oldStatus, 'to' => $updateData['status']]
                 + (isset($validated['reason']) ? ['reason' => $validated['reason']] : []));
         });
+
+        PoNotifier::statusChanged($po, $user->name, $validated['reason'] ?? null);
 
         if ($newStatus === 'DRAFT') {
             return back()->with('success', "PO {$po->po_number} ditolak dan dikembalikan ke Draft untuk diperbaiki.");

@@ -12,6 +12,7 @@ use App\Models\WhatsAppMessage;
 use App\Console\Commands\SendLowStockAlert;
 use App\Services\LowStock;
 use App\Services\ShipDeadline;
+use App\Services\PoNotifier;
 use App\Services\WhatsApp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -46,6 +47,7 @@ class SettingsController extends Controller
             'extra' => WhatsApp::extraTargets(),
             'members' => WhatsApp::members(),
             'ready' => WhatsApp::configured(),
+            'po_notify' => PoNotifier::enabled(),
             'seen_at' => WhatsApp::macroSeenAt(),
             'counts' => WhatsAppMessage::selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status'),
             'recent' => WhatsAppMessage::latest('id')->limit(10)->get(),
@@ -103,7 +105,11 @@ class SettingsController extends Controller
         ]);
 
         WhatsApp::saveExtraTargets($validated['whatsapp_target'] ?? null);
-        AuditTrail::record('UPDATE_WHATSAPP', 'SETTINGS', ['nomor_tambahan' => $validated['whatsapp_target'] ?? null]);
+        PoNotifier::setEnabled($request->boolean('po_auto_notify'));
+        AuditTrail::record('UPDATE_WHATSAPP', 'SETTINGS', [
+            'nomor_tambahan' => $validated['whatsapp_target'] ?? null,
+            'notifikasi_po' => PoNotifier::enabled() ? 'Aktif' : 'Mati',
+        ]);
 
         return back()->with('success', 'Pengaturan WhatsApp disimpan.');
     }

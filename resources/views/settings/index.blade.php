@@ -190,6 +190,13 @@
                         placeholder="Nomor di luar anggota, dipisah koma" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"/>
                     @error('whatsapp_target')<p class="text-xs text-red-400 mt-1">{{ $message }}</p>@enderror
                 </div>
+                <label class="flex items-start gap-3 text-sm text-slate-300">
+                    <input type="checkbox" name="po_auto_notify" value="1" @checked($whatsapp['po_notify'])
+                        class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"/>
+                    <span>Kirim notifikasi WhatsApp saat status PO berubah
+                        <span class="block text-xs text-slate-500">Diajukan, disetujui, ditolak, mulai produksi, siap diambil, diterima, dan dibatalkan.</span>
+                    </span>
+                </label>
                 <div class="flex flex-wrap justify-end gap-3">
                     @if ($whatsapp['members']->isNotEmpty() || $whatsapp['extra'])
                         <button type="submit" form="whatsapp-test" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-sm font-semibold rounded-xl border border-cyan-500/40 transition-all">Kirim Tes</button>

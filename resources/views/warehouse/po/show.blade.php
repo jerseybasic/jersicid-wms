@@ -63,6 +63,9 @@
             <h3 class="text-sm font-semibold text-white mb-3">Aksi Tersedia</h3>
             <div class="flex flex-wrap items-center gap-2">
 
+                <a href="{{ route('po.print', $po->id) }}" target="_blank"
+                    class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl transition-all">Cetak PO</a>
+
                 @if ($isManager && $po->status === 'DRAFT')
                     <a href="{{ route('po.edit', $po->id) }}"
                         class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition-all">Edit PO</a>

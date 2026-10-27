@@ -10,6 +10,7 @@ use App\Models\AuditTrail;
 use App\Models\Warehouse;
 use App\Models\WarehouseRack;
 use App\Models\PurchaseOrder;
+use App\Services\PoNotifier;
 use App\Services\WaitingStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -131,7 +132,8 @@ class InboundController extends Controller
         ]);
 
         try {
-            $firstMovementId = DB::transaction(function () use ($validated, $request) {
+            $receivedPo = null;
+            $firstMovementId = DB::transaction(function () use ($validated, $request, &$receivedPo) {
                 $user = auth()->user();
                 $receiptNo = $validated['receipt_number'];
                 $firstMovementId = null;
@@ -199,8 +201,9 @@ class InboundController extends Controller
 
                             // Cek apakah semua item PO sudah diterima
                             $allReceived = $po->items()->whereColumn('qty_received', '<', 'qty_ordered')->count() === 0;
-                            if ($allReceived) {
+                            if ($allReceived && $po->status !== 'RECEIVED') {
                                 $po->update(['status' => 'RECEIVED']);
+                                $receivedPo = $po;
                             }
                         }
                     }
@@ -222,6 +225,10 @@ class InboundController extends Controller
 
                 return $firstMovementId;
             });
+
+            if ($receivedPo) {
+                PoNotifier::statusChanged($receivedPo, auth()->user()->name);
+            }
 
             // Order yang menunggu stok langsung kembali ke antrean jika barangnya sekarang cukup
             $released = WaitingStock::release(auth()->id(), $request->ip());
