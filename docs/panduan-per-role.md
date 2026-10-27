@@ -33,6 +33,8 @@ Di semua role, ikon **lonceng** di kanan atas menunjukkan pekerjaan yang sedang 
 2. Mulai sesi, pergi ke rak yang disarankan, scan rak, lalu scan setiap barang.
 3. Setelah semua barang terambil, order otomatis pindah ke packing.
 
+Jika tidak ada satu rak yang cukup, satu barang dibagi ke beberapa rak dan tampil sebagai beberapa baris (mis. 4 pcs dari B-01-01 dan 1 pcs dari A-01-01). Jika rak habis di tengah jalan, scan rak lain yang masih ada barangnya lalu lanjutkan scan barang, atau ketuk **Barang tidak ada**: yang sudah diambil tetap tercatat, dan sisanya diarahkan ke rak lain.
+
 ### Picking gabungan (beberapa order sekaligus)
 1. Di **Tugas Saya**, klik **Ambil beberapa order sekaligus** (atau **Picking Gabungan** di halaman Picking).
 2. Centang order yang mau diambil (2 sampai 20), atau klik **5 terlama** / **10 terlama**, lalu klik **Mulai picking gabungan**.

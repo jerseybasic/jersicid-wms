@@ -199,10 +199,14 @@ class PickingController extends Controller
                     throw new \RuntimeException("Kode {$code} tidak dikenal sebagai SKU maupun lokasi rak.");
                 }
 
+                // Baris di rak yang sedang dipilih dulu, lalu yang sudah mulai diambil, lalu sisanya
+                $activeBin = strtoupper(trim($validated['bin_code'] ?? ''));
                 $item = $session->items()
                     ->where('sku', $code)
                     ->whereColumn('qty_picked', '<', 'qty_ordered')
                     ->lockForUpdate()
+                    ->get()
+                    ->sortBy(fn ($row) => [$row->bin_code === $activeBin ? 0 : 1, $row->qty_picked > 0 ? 0 : 1])
                     ->first();
 
                 if (!$item) {
@@ -294,7 +298,7 @@ class PickingController extends Controller
     private function pickOne(PickingSession $session, PickingSessionItem $item, ?string $activeBin, Request $request, string $via = 'scan'): array
     {
         [$binCode, $warning] = Picking::resolveBin($item, $activeBin);
-        Picking::apply($session, $item, $item->qty_picked + 1, $binCode, auth()->id(), $request->ip());
+        $item = Picking::apply($session, $item, $item->qty_picked + 1, $binCode, auth()->id(), $request->ip());
 
         if ($via !== 'scan') {
             AuditTrail::create([

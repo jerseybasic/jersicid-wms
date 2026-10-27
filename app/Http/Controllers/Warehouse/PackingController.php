@@ -350,14 +350,16 @@ class PackingController extends Controller
                 }
 
                 $picking = PickingSession::with('order', 'batch')->lockForUpdate()->findOrFail($session->picking_session_id);
-                $pickItem = $picking->items()->where('order_item_id', $item->order_item_id)->lockForUpdate()->firstOrFail();
+                // Item bisa diambil dari beberapa rak: keluarkan dari baris rak yang terakhir diambil
+                $pickItem = $picking->items()->where('order_item_id', $item->order_item_id)->where('qty_picked', '>', 0)
+                    ->orderByDesc('updated_at')->lockForUpdate()->firstOrFail();
 
                 Picking::replaceOne($picking, $pickItem, $validated['reason'], auth()->id(), $request->ip());
 
                 // Barang yang dikeluarkan tidak lagi dihitung sebagai sudah dikemas
-                $pickItem->refresh();
-                if ($item->qty_packed > $pickItem->qty_picked) {
-                    $item->update(['qty_packed' => $pickItem->qty_picked, 'status' => $pickItem->qty_picked > 0 ? 'PARTIAL' : 'PENDING']);
+                $picked = (int) $picking->items()->where('order_item_id', $item->order_item_id)->sum('qty_picked');
+                if ($item->qty_packed > $picked) {
+                    $item->update(['qty_packed' => $picked, 'status' => $picked > 0 ? 'PARTIAL' : 'PENDING']);
                 }
 
                 AuditTrail::create([
