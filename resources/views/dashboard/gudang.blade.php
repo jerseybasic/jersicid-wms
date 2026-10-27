@@ -37,10 +37,10 @@
             <x-dashboard.stat label="Selesai Hari Ini" :value="number_format($completedToday ?? 0)" sub="Sesi" color="emerald" :icon="$icons['check']" />
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-5 lg:gap-6">
-            <x-work-queue :items="$workItems" class="xl:col-span-2" />
-            <x-dashboard.quick-actions />
-        </div>
+        {{-- Aksi Cepat hanya muncul di tablet & HP --}}
+        <x-dashboard.quick-actions />
+
+        <x-work-queue :items="$workItems" />
 
         <!-- Stok menipis & pergerakan terakhir -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6">

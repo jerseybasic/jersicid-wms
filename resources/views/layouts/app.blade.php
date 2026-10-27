@@ -619,19 +619,44 @@
                     <svg x-show="current !== 'dark'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
                 </button>
 
-                <div class="flex items-center gap-2.5" :class="sidebarOpen ? 'p-2 rounded-xl bg-white/10' : 'justify-center'">
-                    <x-avatar :user="$user" />
-                    <div x-show="sidebarOpen" class="flex-1 min-w-0">
-                        <p class="text-[13px] font-bold text-on-accent truncate">{{ $user->name }}</p>
-                        <p class="text-[10.5px] uppercase tracking-wider truncate" style="color:#9CD3F0">{{ str_replace('_', ' ', $user->role) }}</p>
+                <!-- Akun: Profil, Pengaturan, Logout -->
+                <div x-data="{ userMenu: false }" @click.outside="userMenu = false" @keydown.escape="userMenu = false">
+                    <div x-show="userMenu && sidebarOpen" x-cloak x-transition.opacity.duration.150ms
+                        class="mb-2 p-1 rounded-xl bg-black/25" role="menu" aria-label="Menu akun">
+                        <a href="{{ route('settings.update-profile') }}" role="menuitem"
+                            class="flex items-center gap-3 h-10 px-3 rounded-lg text-sm hover:bg-white/10" style="color:#D6ECFA">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                            Profil
+                        </a>
+                        @if ($user->role === 'OWNER')
+                            <a href="{{ route('settings.index') }}" role="menuitem"
+                                class="flex items-center gap-3 h-10 px-3 rounded-lg text-sm hover:bg-white/10" style="color:#D6ECFA">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                Pengaturan
+                            </a>
+                        @endif
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" role="menuitem"
+                                class="w-full flex items-center gap-3 h-10 px-3 rounded-lg text-sm font-semibold hover:bg-red-500/20" style="color:#FCA5A5">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                                Logout
+                            </button>
+                        </form>
                     </div>
-                    <form x-show="sidebarOpen" method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" title="Logout" aria-label="Logout"
-                            class="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/15" style="color:#D6ECFA">
-                            <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                        </button>
-                    </form>
+
+                    {{-- Saat sidebar diciutkan, klik avatar membuka sidebar sekaligus menu akun --}}
+                    <button type="button" @click="if (!sidebarOpen) { sidebarOpen = true; userMenu = true } else { userMenu = !userMenu }"
+                        :aria-expanded="userMenu" aria-haspopup="menu" title="{{ $user->name }}"
+                        class="w-full flex items-center gap-2.5 text-left rounded-xl transition-colors"
+                        :class="sidebarOpen ? 'p-2 bg-white/10 hover:bg-white/15' : 'justify-center'">
+                        <x-avatar :user="$user" />
+                        <span x-show="sidebarOpen" class="flex-1 min-w-0">
+                            <span class="block text-[13px] font-bold text-on-accent truncate">{{ $user->name }}</span>
+                            <span class="block text-[10.5px] uppercase tracking-wider truncate" style="color:#9CD3F0">{{ str_replace('_', ' ', $user->role) }}</span>
+                        </span>
+                        <svg x-show="sidebarOpen" class="w-4 h-4 flex-shrink-0 transition-transform" :class="userMenu ? '' : 'rotate-180'" style="color:#D6ECFA" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
                 </div>
             </div>
         </aside>
@@ -656,19 +681,10 @@
                         </div>
                     </div>
 
-                    <!-- Right Side: Notifications & User Menu -->
+                    <!-- Kanan: cari & notifikasi (tema dan akun ada di bawah sidebar) -->
                     <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
 
                         <x-quick-search />
-
-                        <!-- Ganti tema terang/gelap -->
-                        <button type="button" x-data="themeSwitch" @click="toggle()"
-                            :title="current === 'dark' ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'"
-                            :aria-label="current === 'dark' ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'"
-                            class="p-2.5 text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-xl transition-colors border border-slate-800 hover:border-cyan-500/50">
-                            <svg x-show="current === 'dark'" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                            <svg x-show="current !== 'dark'" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-                        </button>
 
                         <!-- Notifications Dropdown -->
                         <div class="relative" x-data="{ open: false }" @click.away="open = false">
@@ -728,80 +744,6 @@
                                         class="text-xs text-cyan-400 hover:text-cyan-300 font-semibold transition-colors">
                                         Buka Tugas Saya
                                     </a>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- User Menu Dropdown -->
-                        <div class="relative" x-data="{ open: false }" @click.away="open = false">
-                            <button @click="open = !open"
-                                class="flex items-center gap-3 p-1.5 rounded-xl hover:bg-slate-800/80 transition-all duration-200 border border-slate-800 hover:border-cyan-500/50">
-                                <div class="text-right hidden sm:block">
-                                    <p class="text-sm font-semibold text-white">{{ auth()->user()->name ?? 'User' }}
-                                    </p>
-                                    <p class="text-[10px] text-slate-400 uppercase tracking-wider">
-                                        {{ auth()->user()->role ?? '' }}</p>
-                                </div>
-                                <x-avatar :user="auth()->user()" />
-                            </button>
-
-                            <!-- User Dropdown Menu - MODERN FUTURISTIC -->
-                            <div x-show="open" x-transition:enter="transition ease-out duration-200"
-                                x-transition:enter-start="opacity-0 scale-95 -translate-y-2"
-                                x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                                x-transition:leave="transition ease-in duration-150"
-                                x-transition:leave-start="opacity-100 scale-100"
-                                x-transition:leave-end="opacity-0 scale-95"
-                                class="absolute right-0 mt-3 w-56 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden"
-                                style="z-index: 1000;" x-cloak>
-                                <!-- User Info Header -->
-                                <div
-                                    class="bg-gradient-to-br from-slate-800 to-slate-900 border-b border-slate-700 px-4 py-3">
-                                    <p class="text-sm font-semibold text-white">{{ auth()->user()->name ?? 'User' }}
-                                    </p>
-                                    <p class="text-xs text-slate-400 truncate">{{ auth()->user()->email ?? '' }}</p>
-                                </div>
-
-                                <!-- Menu Items -->
-                                <div class="py-1">
-                                    <a href="{{ route('settings.update-profile') }}"
-                                        class="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors group">
-                                        <svg class="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors"
-                                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                        </svg>
-                                        <span>Profil</span>
-                                    </a>
-                                    @if ($user->role === 'OWNER')
-                                    <a href="{{ route('settings.index') }}"
-                                        class="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors group">
-                                        <svg class="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors"
-                                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        </svg>
-                                        <span>Pengaturan</span>
-                                    </a>
-                                    @endif
-                                </div>
-
-                                <!-- Logout -->
-                                <div class="border-t border-slate-700 py-1">
-                                    <form method="POST" action="{{ route('logout') }}">
-                                        @csrf
-                                        <button type="submit"
-                                            class="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors flex items-center gap-3 group">
-                                            <svg class="w-4 h-4 group-hover:scale-110 transition-transform"
-                                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                            </svg>
-                                            <span>Logout</span>
-                                        </button>
-                                    </form>
                                 </div>
                             </div>
                         </div>

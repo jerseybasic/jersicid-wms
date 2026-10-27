@@ -37,13 +37,16 @@
             <x-dashboard.stat label="Supplier" :value="number_format($activeSuppliers)" sub="Aktif" color="blue" :icon="$icons['building']" :href="route('suppliers.index')" />
         </div>
 
+        {{-- Aksi Cepat hanya muncul di tablet & HP --}}
+        <x-dashboard.quick-actions />
+
         <x-work-queue :items="$workItems" />
 
-        <!-- Charts Row (2 kolom: 2/3 + 1/3) -->
+        <!-- Grafik pergerakan stok -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
 
             <!-- Chart Pergerakan Stok (2/3 width) -->
-            <div class="lg:col-span-2 card p-5 lg:p-6">
+            <div class="lg:col-span-3 card p-5 lg:p-6">
                 <div class="flex items-center justify-between mb-6">
                     <div>
                         <h3 class="text-base font-bold text-white">Pergerakan Stok (7 Hari)</h3>
@@ -65,7 +68,6 @@
                 </div>
             </div>
 
-            <x-dashboard.quick-actions />
         </div>
 
         <!-- Bottom Row (3 kolom) -->
