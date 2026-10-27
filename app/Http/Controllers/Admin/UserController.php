@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditTrail;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -44,7 +45,7 @@ class UserController extends Controller
             'whatsapp.regex' => 'Nomor WhatsApp harus nomor HP Indonesia, contoh 081234567890.',
         ]);
 
-        User::create([
+        $user = User::create([
             'id' => (string) Str::uuid(),
             'name' => $validated['name'],
             'email' => $validated['email'],
@@ -55,6 +56,8 @@ class UserController extends Controller
             'whatsapp' => $validated['whatsapp'] ?? null,
             'notify_whatsapp' => $request->boolean('notify_whatsapp') && !empty($validated['whatsapp']),
         ]);
+
+        AuditTrail::record('CREATE', 'USER', self::auditFields($user));
 
         return redirect()->route('users.index')
             ->with('success', 'User berhasil ditambahkan!');
@@ -99,11 +102,20 @@ class UserController extends Controller
             'notify_whatsapp' => $request->boolean('notify_whatsapp') && !empty($validated['whatsapp']),
         ];
 
+        $before = self::auditFields($user);
         if (!empty($validated['password'])) {
             $updateData['password'] = Hash::make($validated['password']);
         }
 
         $user->update($updateData);
+
+        [$old, $new] = AuditTrail::changes($before, self::auditFields($user));
+        if (!empty($validated['password'])) {
+            $new['password'] = 'diganti';
+        }
+        if ($new) {
+            AuditTrail::record('UPDATE', 'USER', ['user' => $user->name] + $new, $old);
+        }
 
         return redirect()->route('users.index')
             ->with('success', 'User berhasil diperbarui!');
@@ -119,9 +131,24 @@ class UserController extends Controller
         }
 
         $user->delete();
+        AuditTrail::record('DELETE', 'USER', self::auditFields($user));
 
         return redirect()->route('users.index')
             ->with('success', 'User berhasil dihapus!');
+    }
+
+    /** Data user yang dicatat di riwayat (tanpa password) */
+    private static function auditFields(User $user): array
+    {
+        return [
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'workspace_default' => $user->workspace_default,
+            'status' => $user->status,
+            'whatsapp' => $user->whatsapp,
+            'notify_whatsapp' => (bool) $user->notify_whatsapp,
+        ];
     }
 
     public function toggleStatus($id)
@@ -134,6 +161,7 @@ class UserController extends Controller
 
         $newStatus = $user->status === 'AKTIF' ? 'NONAKTIF' : 'AKTIF';
         $user->update(['status' => $newStatus]);
+        AuditTrail::record('TOGGLE_STATUS', 'USER', ['user' => $user->name, 'status' => $newStatus], ['status' => $newStatus === 'AKTIF' ? 'NONAKTIF' : 'AKTIF']);
 
         return back()->with('success', "Status user {$user->name} diubah menjadi {$newStatus}!");
     }

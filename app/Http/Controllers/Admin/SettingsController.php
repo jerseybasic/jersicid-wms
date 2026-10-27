@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin; // ✅ PENTING: Namespace harus sesuai fol
 use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
 use App\Models\StockActive;
+use App\Models\AuditTrail;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\WhatsAppMessage;
@@ -67,6 +68,9 @@ class SettingsController extends Controller
             'ship_grace_days' => ['nullable', 'integer', 'min:0', 'max:14'],
         ]);
 
+        $keys = array_keys($validated);
+        $before = collect($keys)->mapWithKeys(fn ($k) => [$k => SystemSetting::get($k)])->all();
+
         SystemSetting::set('company_name', $validated['company_name'], 'COMPANY', 'Nama pengirim di label kirim');
         SystemSetting::set('company_phone', $validated['company_phone'] ?? '', 'COMPANY', 'Telepon pengirim di label kirim');
         SystemSetting::set('company_address', $validated['company_address'] ?? '', 'COMPANY', 'Alamat pengirim di label kirim');
@@ -79,6 +83,11 @@ class SettingsController extends Controller
         if (isset($validated['ship_grace_days'])) {
             SystemSetting::set('ship_grace_days', (string) $validated['ship_grace_days'], 'ORDER',
                 'Tambahan hari dari batas kirim order');
+        }
+
+        [$old, $new] = AuditTrail::changes($before, collect($keys)->mapWithKeys(fn ($k) => [$k => SystemSetting::get($k)])->all());
+        if ($new) {
+            AuditTrail::record('UPDATE', 'SETTINGS', $new, $old);
         }
 
         return back()->with('success', 'Pengaturan berhasil disimpan.');
@@ -94,6 +103,7 @@ class SettingsController extends Controller
         ]);
 
         WhatsApp::saveExtraTargets($validated['whatsapp_target'] ?? null);
+        AuditTrail::record('UPDATE_WHATSAPP', 'SETTINGS', ['nomor_tambahan' => $validated['whatsapp_target'] ?? null]);
 
         return back()->with('success', 'Pengaturan WhatsApp disimpan.');
     }
@@ -101,6 +111,9 @@ class SettingsController extends Controller
     /** Buat token baru untuk makro. Token hanya ditampilkan sekali. */
     public function whatsAppToken()
     {
+        // Tokennya sendiri tidak dicatat
+        AuditTrail::record('NEW_TOKEN', 'SETTINGS', ['token' => 'token makro WhatsApp dibuat ulang']);
+
         return back()->with('success', 'Token makro baru dibuat. Salin sekarang, token ini tidak ditampilkan lagi.')
             ->with('whatsapp_token', WhatsApp::generateToken());
     }
@@ -126,7 +139,11 @@ class SettingsController extends Controller
             'email' => ['required', 'email', Rule::unique('users')->ignore($user->id)],
         ]);
 
+        [$old, $new] = AuditTrail::changes($user->only(['name', 'email']), $validated);
         $user->update($validated);
+        if ($new) {
+            AuditTrail::record('UPDATE_PROFILE', 'USER', $new, $old);
+        }
 
         return back()->with('success', 'Profil sistem berhasil diperbarui!');
     }

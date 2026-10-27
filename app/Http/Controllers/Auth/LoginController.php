@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditTrail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -44,6 +45,7 @@ class LoginController extends Controller
             $request->session()->regenerate();
 
             $user = Auth::user();
+            AuditTrail::record('LOGIN', 'AUTH', ['email' => $user->email]);
 
             // Redirect berdasarkan role
             if ($user->role === 'OWNER') {
@@ -58,6 +60,7 @@ class LoginController extends Controller
         }
 
         RateLimiter::hit($throttleKey, 60);
+        AuditTrail::record('LOGIN_FAILED', 'AUTH', ['email' => Str::limit((string) $request->input('email'), 100, '')]);
 
         return back()->withErrors([
             'email' => 'Email atau password salah, atau akun belum aktif.',
@@ -69,6 +72,9 @@ class LoginController extends Controller
      */
     public function logout(Request $request)
     {
+        if (Auth::check()) {
+            AuditTrail::record('LOGOUT', 'AUTH', ['email' => Auth::user()->email]);
+        }
         Auth::logout();
 
         $request->session()->invalidate();
