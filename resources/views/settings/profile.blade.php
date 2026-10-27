@@ -29,7 +29,8 @@
         @endif
 
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <form method="POST" action="{{ route('settings.profile.update') }}" class="space-y-4">
+            <form method="POST" action="{{ route('settings.profile.update') }}" enctype="multipart/form-data" class="space-y-4"
+                x-data="{ preview: null, remove: false }">
                 @csrf
                 @method('PUT')
 
@@ -42,6 +43,32 @@
                         </ul>
                     </div>
                 @endif
+
+                <div class="flex items-center gap-4">
+                    <div class="relative">
+                        <template x-if="preview">
+                            <img :src="preview" alt="" class="w-20 h-20 rounded-full object-cover border-2 border-cyan-500/30">
+                        </template>
+                        <div x-show="!preview" :class="remove ? 'opacity-30' : ''">
+                            <x-avatar :user="$user" size="w-20 h-20 text-2xl" />
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="inline-block px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl border border-slate-700 cursor-pointer transition-all">
+                            {{ $user->profile_photo_path ? 'Ganti foto' : 'Pilih foto' }}
+                            <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" class="hidden"
+                                @change="const f = $event.target.files[0]; preview = f ? URL.createObjectURL(f) : null; if (f) remove = false">
+                        </label>
+                        @if ($user->profile_photo_path)
+                            <label class="flex items-center gap-2 text-sm text-slate-400">
+                                <input type="checkbox" name="remove_photo" value="1" x-model="remove" :disabled="preview !== null"
+                                    class="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"/>
+                                Hapus foto
+                            </label>
+                        @endif
+                        <p class="text-xs text-slate-500">JPG, PNG, atau WEBP, maksimal 5 MB. Foto dipotong persegi otomatis.</p>
+                    </div>
+                </div>
 
                 <div>
                     <label class="block text-sm font-medium text-slate-300 mb-2">Nama Lengkap</label>

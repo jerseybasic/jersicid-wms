@@ -13,10 +13,12 @@ use App\Console\Commands\SendLowStockAlert;
 use App\Services\LowStock;
 use App\Services\ShipDeadline;
 use App\Services\PoNotifier;
+use App\Services\ProfilePhoto;
 use App\Services\WhatsApp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class SettingsController extends Controller
@@ -143,10 +145,32 @@ class SettingsController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', Rule::unique('users')->ignore($user->id)],
+            'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ], [
+            'photo.image' => 'Foto profil harus berupa gambar.',
+            'photo.mimes' => 'Foto profil harus JPG, PNG, atau WEBP.',
+            'photo.max' => 'Foto profil maksimal 5 MB.',
         ]);
 
-        [$old, $new] = AuditTrail::changes($user->only(['name', 'email']), $validated);
-        $user->update($validated);
+        $fields = ['name' => $validated['name'], 'email' => $validated['email']];
+        [$old, $new] = AuditTrail::changes($user->only(['name', 'email']), $fields);
+        $user->update($fields);
+
+        $hadPhoto = (bool) $user->profile_photo_path;
+        try {
+            if ($request->hasFile('photo')) {
+                ProfilePhoto::store($user, $request->file('photo'));
+                $old['foto_profil'] = $hadPhoto ? 'Ada' : 'Belum ada';
+                $new['foto_profil'] = $hadPhoto ? 'Diganti' : 'Ditambahkan';
+            } elseif ($request->boolean('remove_photo') && $hadPhoto) {
+                ProfilePhoto::remove($user);
+                $old['foto_profil'] = 'Ada';
+                $new['foto_profil'] = 'Dihapus';
+            }
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['photo' => $e->getMessage()]);
+        }
+
         if ($new) {
             AuditTrail::record('UPDATE_PROFILE', 'USER', $new, $old);
         }
@@ -158,5 +182,16 @@ class SettingsController extends Controller
     {
         $user = Auth::user();
         return view('settings.profile', compact('user'));
+    }
+
+    /** Tampilkan foto profil seorang anggota (semua yang login boleh melihat) */
+    public function photo(User $user)
+    {
+        abort_unless($user->profile_photo_path && Storage::disk('local')->exists($user->profile_photo_path), 404);
+
+        return response()->file(Storage::disk('local')->path($user->profile_photo_path), [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'private, max-age=604800',
+        ]);
     }
 }
