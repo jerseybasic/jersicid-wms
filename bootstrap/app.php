@@ -17,7 +17,6 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
-            'workspace' => \App\Http\Middleware\CheckWorkspace::class,
         ]);
         $middleware->web(append: [
             \App\Http\Middleware\EnsureUserIsActive::class,
