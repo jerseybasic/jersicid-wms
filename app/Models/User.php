@@ -38,6 +38,21 @@ class User extends Authenticatable
         'notify_whatsapp' => 'boolean',
     ];
 
+    /** URL foto profil, atau null jika belum ada (tampilkan inisial) */
+    public function getProfilePhotoUrlAttribute(): ?string
+    {
+        return $this->profile_photo_path ? route('settings.photo', ['user' => $this->id, 'v' => basename($this->profile_photo_path, '.jpg')]) : null;
+    }
+
+    /** Dua huruf awal nama, mis. "Rina Gudang" → "RG" */
+    public function getInitialsAttribute(): string
+    {
+        $words = preg_split('/\s+/', trim((string) $this->name)) ?: [];
+        $letters = count($words) > 1 ? mb_substr($words[0], 0, 1) . mb_substr(end($words), 0, 1) : mb_substr($words[0] ?? 'U', 0, 2);
+
+        return mb_strtoupper($letters ?: 'U');
+    }
+
     protected static function boot()
     {
         parent::boot();

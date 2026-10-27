@@ -344,6 +344,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('reports')->group(f
 Route::middleware(['auth'])->prefix('settings')->name('settings.')->group(function () {
     Route::get('/profile', [SettingsController::class, 'profile'])->name('update-profile');
     Route::put('/profile', [SettingsController::class, 'updateProfile'])->name('profile.update');
+    Route::get('/foto-profil/{user}', [SettingsController::class, 'photo'])->name('photo');
 });
 
 // ==================== SETTINGS (OWNER ONLY) ====================

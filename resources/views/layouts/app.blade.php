@@ -760,10 +760,7 @@
                                     <p class="text-[10px] text-slate-400 uppercase tracking-wider">
                                         {{ auth()->user()->role ?? '' }}</p>
                                 </div>
-                                <div
-                                    class="w-9 h-9 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-cyan-500/30">
-                                    {{ strtoupper(substr(auth()->user()->name ?? 'U', 0, 2)) }}
-                                </div>
+                                <x-avatar :user="auth()->user()" />
                             </button>
 
                             <!-- User Dropdown Menu - MODERN FUTURISTIC -->

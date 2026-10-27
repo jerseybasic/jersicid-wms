@@ -4,6 +4,8 @@ Panduan ini berisi pekerjaan harian tiap role di JERSIC.ID WMS. Semua layar bisa
 
 Di semua role, ikon **lonceng** di kanan atas menunjukkan pekerjaan yang sedang menunggu. Isinya sama dengan kartu **Tugas Hari Ini** di dashboard. Menu **Tugas Saya** berisi daftar kerja ringkas untuk HP.
 
+Setiap anggota bisa memasang **foto profil** sendiri: klik nama di kanan atas, pilih **Profil**, lalu **Pilih foto** (JPG, PNG, atau WEBP, maksimal 5 MB). Foto dipotong persegi otomatis dan tampil di header serta di Kelola User. Tanpa foto, yang tampil adalah inisial nama.
+
 ---
 
 ## STAFF_GUDANG

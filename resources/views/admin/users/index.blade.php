@@ -74,7 +74,7 @@
                             <tr class="border-b border-slate-700/30 hover:bg-slate-800/50 transition-colors">
                                 <td class="py-4 px-6">
                                     <div class="flex items-center gap-3">
-                                        <img src="{{ $user->profile_photo_url }}" class="w-10 h-10 rounded-full object-cover border-2 border-cyan-500/30">
+                                        <x-avatar :user="$user" size="w-10 h-10 text-sm" />
                                         <div>
                                             <p class="text-sm font-medium text-white">{{ $user->name }}</p>
                                             <p class="text-xs text-slate-500">{{ $user->email }}</p>

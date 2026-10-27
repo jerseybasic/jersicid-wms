@@ -103,11 +103,7 @@
             <div class="px-3 py-4 border-t border-slate-800">
                 <!-- Info User -->
                 <div class="flex items-center gap-3 w-full px-3 py-2" x-bind:class="sidebarOpen ? '' : 'justify-center'">
-                    <img 
-                        src="{{ auth()->user()->profile_photo_url }}" 
-                        alt="{{ auth()->user()->name }}"
-                        class="w-8 h-8 rounded-full object-cover border-2 border-cyan-500/30 flex-shrink-0"
-                    />
+                    <x-avatar :user="auth()->user()" size="w-8 h-8 text-xs" />
                     <div class="flex-1 text-left min-w-0" x-show="sidebarOpen" x-transition>
                         <p class="text-sm font-medium text-white truncate">{{ auth()->user()->name }}</p>
                         <p class="text-xs text-slate-500 truncate">{{ auth()->user()->role }}</p>
@@ -202,11 +198,7 @@
                                 <p class="text-sm font-medium text-white">{{ auth()->user()->name }}</p>
                                 <p class="text-xs text-slate-500">{{ auth()->user()->role }}</p>
                             </div>
-                            <img 
-                                src="{{ auth()->user()->profile_photo_url }}" 
-                                alt="{{ auth()->user()->name }}"
-                                class="w-8 h-8 rounded-full object-cover border-2 border-cyan-500/30"
-                            />
+                            <x-avatar :user="auth()->user()" size="w-8 h-8 text-xs" />
                             <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                             </svg>
@@ -227,7 +219,7 @@
                         >
                             <div class="p-3 border-b border-slate-700 bg-slate-900/50">
                                 <div class="flex items-center gap-3">
-                                    <img src="{{ auth()->user()->profile_photo_url }}" class="w-10 h-10 rounded-full object-cover border-2 border-cyan-500/30">
+                                    <x-avatar :user="auth()->user()" size="w-10 h-10 text-sm" />
                                     <div class="min-w-0 flex-1">
                                         <p class="text-sm font-medium text-white truncate">{{ auth()->user()->name }}</p>
                                         <p class="text-xs text-slate-400 truncate">{{ auth()->user()->email }}</p>
