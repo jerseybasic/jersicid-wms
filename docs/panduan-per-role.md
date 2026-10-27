@@ -87,6 +87,7 @@ Semua pekerjaan STAFF_GUDANG, ditambah:
 1. Buka **Purchase Order** untuk melihat PO yang sudah disetujui.
 2. Saat supplier mulai mengerjakan, klik **Mulai Produksi**.
 3. Saat barang siap, klik **Siap Diambil**. Penerimaan barangnya dilakukan lewat Inbound.
+4. Klik **Cetak PO** untuk membuka lembar PO A4. Dari sana PO bisa dicetak atau disimpan sebagai PDF, teksnya disalin, atau langsung dikirim ke WhatsApp supplier (nomor diambil dari data supplier). PO yang belum disetujui diberi cap DRAFT.
 
 ---
 
@@ -103,6 +104,7 @@ Buka **Persetujuan Stok** (juga muncul di lonceng):
 1. Buka **Purchase Order**, lalu buat PO baru. Tombol **PO dari Stok Menipis** mengisi otomatis SKU yang stoknya di bawah batas.
 2. Klik **Ajukan untuk Approval** jika PO sudah siap.
 3. PO yang menunggu persetujuan bisa disetujui (**Approve PO**) atau dikembalikan (**Tolak**) dengan alasan. PO yang ditolak kembali menjadi draft dan bisa diedit.
+4. Setiap perubahan status PO (diajukan, disetujui, ditolak, mulai produksi, siap diambil, diterima, dibatalkan) dikirim ke antrean WhatsApp anggota. Matikan lewat centang **Kirim notifikasi WhatsApp saat status PO berubah** di Pengaturan.
 
 ### Laporan
 Buka **Laporan** untuk melihat:
