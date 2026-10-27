@@ -41,6 +41,9 @@ class Order extends Model
     /** Status yang bisa dibatalkan walau barangnya sudah mulai diambil dari rak */
     public const IN_PROCESS_STATUSES = ['PICKING', 'PACKING', 'READY_TO_SHIP'];
 
+    /** Order yang belum dikirim dan belum dibatalkan (kartu Order Aktif di Dashboard Owner) */
+    public const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'PICKING', 'PACKING', 'READY_TO_SHIP'];
+
     protected $fillable = [
         'id',
         'order_number',
