@@ -116,7 +116,7 @@
                 </div>
                 <p class="text-xs text-indigo-400 mb-0.5">Order Aktif</p>
                 <p class="text-xl font-bold text-white">{{ $activeOrders }}</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">Aktif</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">Belum dikirim</p>
             </div>
         </div>
 

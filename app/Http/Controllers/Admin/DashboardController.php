@@ -56,7 +56,8 @@ class DashboardController extends Controller
                 'activeSuppliers' => Supplier::where('status', 'AKTIF')->count(),
 
                 // Order Aktif (PO dengan status APPROVED/SENT)
-                'activeOrders' => PurchaseOrder::whereIn('status', ['APPROVED', 'SENT'])->count(),
+                // Order pembeli yang belum dikirim (termasuk Menunggu stok), bukan PO
+                'activeOrders' => Order::whereIn('status', Order::ACTIVE_STATUSES)->count(),
 
                 // Chart 7 hari terakhir
                 'last7Days' => $last7Days,

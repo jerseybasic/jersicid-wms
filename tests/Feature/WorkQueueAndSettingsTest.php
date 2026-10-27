@@ -97,6 +97,20 @@ class WorkQueueAndSettingsTest extends TestCase
         $this->get('/api/notifications')->assertNotFound();
     }
 
+    public function test_owner_dashboard_counts_customer_orders_not_yet_shipped(): void
+    {
+        $owner = $this->userWithRole('OWNER');
+        foreach (['PENDING', 'CONFIRMED', 'PICKING', 'PACKING', 'READY_TO_SHIP', 'SHIPPED', 'COMPLETED', 'CANCELLED'] as $i => $status) {
+            Order::create(['order_number' => "ORD-AKTIF-{$i}", 'customer_name' => 'Budi', 'shipping_address' => 'Bandung', 'status' => $status]);
+        }
+        // PO yang disetujui tidak ikut dihitung sebagai order aktif
+        $this->pendingPo($this->makeSku()->sku, $owner->id)->update(['status' => 'APPROVED']);
+
+        $this->actingAs($owner)->get(route('dashboard.owner'))->assertOk()
+            ->assertViewHas('activeOrders', 5)
+            ->assertSee('Belum dikirim');
+    }
+
     public function test_low_stock_uses_sku_minimum_or_general_threshold(): void
     {
         SystemSetting::set('low_stock_threshold', '10', 'INVENTORY');
