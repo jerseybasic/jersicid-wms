@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Models\StockMovement;
-use App\Models\InboundReceipt;
 use App\Models\Order;
 use App\Models\PickingSession;
 use App\Models\PackingSession;
