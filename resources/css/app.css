@@ -211,3 +211,48 @@ html.light {
         backdrop-filter: blur(12px);
     }
 }
+
+/* ============================================
+   HALAMAN LOGIN (ilustrasi gudang + awan)
+   ============================================ */
+:root,
+html.dark {
+    --login-page-left: linear-gradient(160deg, #03070F 0%, #071226 60%, #0A1E33 100%);
+    --login-cloud2: rgb(255 255 255 / 0.07);
+    --login-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
+}
+
+html.light {
+    --login-page-left: linear-gradient(160deg, #08203D 0%, #0B3B66 60%, #0B5A85 100%);
+    --login-cloud2: rgb(255 255 255 / 0.45);
+    --login-shadow: 0 24px 60px rgb(11 59 102 / 0.18);
+}
+
+@layer components {
+    .login-cloud {
+        fill: rgb(var(--c-slate-900));
+    }
+
+    .login-cloud2 {
+        fill: var(--login-cloud2);
+    }
+
+    .login-field {
+        @apply flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 transition-colors;
+    }
+
+    .login-field:focus-within {
+        @apply border-cyan-500;
+        box-shadow: 0 0 0 4px rgb(var(--c-cyan-500) / 0.12);
+    }
+
+    .login-field input {
+        @apply w-full p-0 border-0 bg-transparent text-[15px] text-white placeholder-slate-500 focus:ring-0;
+    }
+
+    @media (min-width: 1024px) {
+        .login-page {
+            background: linear-gradient(90deg, transparent 50%, rgb(var(--c-slate-950)) 50%), var(--login-page-left);
+        }
+    }
+}
