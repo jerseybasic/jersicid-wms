@@ -15,7 +15,7 @@
                 <label class="block text-xs text-slate-400 mb-1">Cari SKU / produk</label>
                 <input type="text" name="search" value="{{ request('search') }}" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none">
             </div>
-            <button type="submit" class="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">Tampilkan</button>
+            <button type="submit" class="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-lg transition-all">Tampilkan</button>
         </form>
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">

@@ -48,7 +48,7 @@
 
                     <div class="flex items-center gap-3 pt-4 border-t border-slate-800">
                         <a href="{{ route('gudang.packing') }}" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700 transition-all">Batal</a>
-                        <button type="submit" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">
+                        <button type="submit" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-on-accent font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">
                             Buat Packing Session
                         </button>
                     </div>

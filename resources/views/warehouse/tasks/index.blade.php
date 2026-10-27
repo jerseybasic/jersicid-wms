@@ -38,7 +38,7 @@
                 <input type="hidden" name="order_id" value="{{ $nextPack?->id }}">
                 <input type="hidden" name="courier" value="{{ $nextPack?->courier }}">
                 <button type="submit" @disabled(!$nextPack)
-                    class="w-full h-full rounded-2xl p-4 text-center bg-purple-500 text-white disabled:bg-slate-800 disabled:text-slate-500 active:scale-[0.98] transition-all">
+                    class="w-full h-full rounded-2xl p-4 text-center bg-purple-500 text-on-accent disabled:bg-slate-800 disabled:text-slate-500 active:scale-[0.98] transition-all">
                     <span class="block text-3xl font-black">{{ $toPack->count() }}</span>
                     <span class="block text-sm font-bold mt-1">Packing</span>
                     <span class="block text-[11px] opacity-80">{{ $nextPack ? 'kemas berikutnya' : 'tidak ada keranjang' }}</span>
@@ -143,7 +143,7 @@
                                 <span class="text-xl font-bold text-white">{{ $session->items->sum('qty_packed') }}</span>/{{ $session->items->sum('qty_ordered') }} pcs
                             </p>
                         </div>
-                        <a href="{{ route('gudang.packing.show', $session->id) }}" class="{{ $bigButton }} bg-purple-500 text-white">
+                        <a href="{{ route('gudang.packing.show', $session->id) }}" class="{{ $bigButton }} bg-purple-500 text-on-accent">
                             {{ $session->status === 'PENDING' ? 'Buka & mulai' : 'Lanjutkan packing' }}
                         </a>
                     </div>
@@ -223,7 +223,7 @@
                         <input type="hidden" name="order_id" value="{{ $order->id }}">
                         <input type="hidden" name="courier" value="{{ $order->courier }}">
                         <input type="hidden" name="start_now" value="1">
-                        <button type="submit" class="{{ $bigButton }} bg-purple-500 text-white">Ambil & mulai packing</button>
+                        <button type="submit" class="{{ $bigButton }} bg-purple-500 text-on-accent">Ambil & mulai packing</button>
                     </form>
                 </div>
             @empty

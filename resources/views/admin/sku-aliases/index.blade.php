@@ -39,7 +39,7 @@
                     <input id="sku" type="text" name="sku" value="{{ old('sku') }}" required list="sku-options" autocomplete="off" placeholder="Ketik kode atau nama produk"
                            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:ring-cyan-500">
                 </div>
-                <button type="submit" class="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">Simpan</button>
+                <button type="submit" class="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-lg transition-all">Simpan</button>
             </div>
             <p class="text-xs text-slate-500">Jika SKU marketplace sudah dipetakan, pemetaannya diganti.</p>
         </form>

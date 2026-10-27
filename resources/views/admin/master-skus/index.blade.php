@@ -7,7 +7,7 @@
             </div>
             <div class="flex items-center gap-2 flex-wrap">
                 <a href="{{ route('master-skus.export') }}"
-                    class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/25">
+                    class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/25">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -15,7 +15,7 @@
                     Export
                 </a>
                 <button onclick="document.getElementById('importModal').classList.remove('hidden')"
-                    class="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-cyan-500/25">
+                    class="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-cyan-500/25">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -172,7 +172,7 @@
                     <option value="TEENS" {{ request('size_category') == 'TEENS' ? 'selected' : '' }}>Teens</option>
                 </select>
                 <button type="submit"
-                    class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition-all text-sm">Filter</button>
+                    class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-semibold rounded-lg transition-all text-sm">Filter</button>
                 <a href="{{ route('master-skus.index') }}"
                     class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg border border-slate-700 transition-all text-sm">Reset</a>
             </form>

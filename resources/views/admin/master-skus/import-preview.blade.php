@@ -58,7 +58,7 @@
                         @endif
                     </p>
                 </div>
-                <button type="submit" class="shrink-0 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-all">
+                <button type="submit" class="shrink-0 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-lg transition-all">
                     Simpan perubahan
                 </button>
             </form>

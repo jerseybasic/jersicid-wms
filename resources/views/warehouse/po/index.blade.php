@@ -73,7 +73,7 @@
                     @endforeach
                 </select>
 
-                <button type="submit" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition-all text-sm">Filter</button>
+                <button type="submit" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-semibold rounded-lg transition-all text-sm">Filter</button>
                 <a href="{{ route('po.index') }}" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg border border-slate-700 transition-all text-sm">Reset</a>
                 @if (in_array(auth()->user()->role, ['OWNER', 'SUPERVISOR']))
                     <a href="{{ route('po.create') }}" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all text-sm flex items-center gap-2">

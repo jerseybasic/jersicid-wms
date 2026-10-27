@@ -37,10 +37,10 @@
             <input type="text" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Cari SKU, no. order, nama..."
                 class="px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500">
             <div class="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-6">
-                <button type="submit" class="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl">Terapkan filter</button>
+                <button type="submit" class="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-xl">Terapkan filter</button>
                 <a href="{{ route('audit-trails.index') }}" class="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl">Reset</a>
                 <a href="{{ route('audit-trails.index', array_filter($filters) + ['export' => 1]) }}"
-                    class="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-semibold rounded-xl">Export Excel</a>
+                    class="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-on-accent text-sm font-semibold rounded-xl">Export Excel</a>
                 <span class="self-center text-xs text-slate-400 ml-auto">{{ $activities->total() }} aktivitas</span>
             </div>
         </form>

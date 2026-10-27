@@ -98,7 +98,7 @@
                             </svg>
                             Item Pesanan
                         </h3>
-                        <button type="button" id="add-item" class="px-4 py-2 mt-1 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
+                        <button type="button" id="add-item" class="px-4 py-2 mt-1 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
                             </svg>

@@ -101,7 +101,7 @@
                             <option value="{{ $size }}" @selected((int) request('per_page', 15) === $size)>{{ $size }} / halaman</option>
                         @endforeach
                     </select>
-                    <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium">Filter</button>
+                    <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent rounded-lg text-sm font-medium">Filter</button>
                     <a href="{{ route('gudang.outbound') }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium border border-slate-700">Reset</a>
                     @if ($stats['ready'] > 0)
                         <a href="{{ route('gudang.label.shipping-bulk') }}" target="_blank" class="px-4 py-2 ml-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-all text-sm flex items-center gap-2 border border-slate-700">
@@ -198,7 +198,7 @@
                 <form method="POST" action="{{ route('gudang.outbound.bulk-status') }}" class="flex flex-wrap gap-2">
                     @csrf
                     <template x-for="id in selected" :key="id"><input type="hidden" name="ids[]" :value="id"></template>
-                    <button name="status" value="CONFIRMED" x-show="count('PENDING')" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-lg font-semibold">
+                    <button name="status" value="CONFIRMED" x-show="count('PENDING')" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-on-accent text-xs rounded-lg font-semibold">
                         Konfirmasi (<span x-text="count('PENDING')"></span>)
                     </button>
                     <button name="status" value="COMPLETED" x-show="count('SHIPPED')" class="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white text-xs rounded-lg font-semibold">
@@ -212,7 +212,7 @@
                     @if (in_array(auth()->user()->role, \App\Services\OrderCancellation::ROLES))
                         <button name="status" value="REACTIVATE" x-show="count('CANCELLED')"
                             @click="confirm('Aktifkan lagi ' + count('CANCELLED') + ' order yang dibatalkan? Order kembali Pending seperti order baru.') || $event.preventDefault()"
-                            class="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded-lg font-semibold">
+                            class="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-xs rounded-lg font-semibold">
                             Aktifkan lagi (<span x-text="count('CANCELLED')"></span>)
                         </button>
                     @endif

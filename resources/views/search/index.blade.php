@@ -10,7 +10,7 @@
         <form method="GET" action="{{ route('search') }}" class="flex gap-2">
             <input type="search" name="q" value="{{ $query }}" autofocus placeholder="No. order, resi, nama pembeli, SKU, rak, PO, retur..."
                 class="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none">
-            <button class="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl">Cari</button>
+            <button class="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-semibold rounded-xl">Cari</button>
         </form>
 
         @if ($tooShort)

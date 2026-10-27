@@ -67,10 +67,10 @@
                     <form method="POST" action="{{ route('gudang.packing.store') }}">
                         @csrf
                         <input type="hidden" name="order_id" value="{{ $order->id }}">
-                        <button type="submit" class="w-full py-4 bg-purple-500 hover:bg-purple-400 text-white font-bold rounded-xl">Kemas order ini sekarang</button>
+                        <button type="submit" class="w-full py-4 bg-purple-500 hover:bg-purple-400 text-on-accent font-bold rounded-xl">Kemas order ini sekarang</button>
                     </form>
                 @elseif ($order?->packingSession && $order->packingSession->status !== 'CANCELLED')
-                    <a href="{{ route('gudang.packing.show', $order->packingSession->id) }}" class="block w-full py-4 text-center bg-purple-500 hover:bg-purple-400 text-white font-bold rounded-xl">Buka packing order ini</a>
+                    <a href="{{ route('gudang.packing.show', $order->packingSession->id) }}" class="block w-full py-4 text-center bg-purple-500 hover:bg-purple-400 text-on-accent font-bold rounded-xl">Buka packing order ini</a>
                 @endif
                 <form method="POST" action="{{ route('gudang.picking-batch.auto') }}">
                     @csrf
@@ -112,7 +112,7 @@
                                 <button type="button" onclick="scanTap(@js(route('gudang.picking.tap', [$session->id, $item->id])), { delta: -1 })"
                                     class="py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl">−1</button>
                                 <button type="button" onclick="scanTap(@js(route('gudang.picking.tap', [$session->id, $item->id])), { delta: 1 })"
-                                    class="col-span-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl">+1 Ambil</button>
+                                    class="col-span-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-bold rounded-xl">+1 Ambil</button>
                             </div>
 
                             @unless ($complete)

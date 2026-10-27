@@ -48,7 +48,7 @@
                 @if($opname->status === 'DRAFT')
                     <form method="POST" action="{{ route('gudang.opname.start', $opname->id) }}">
                         @csrf
-                        <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg text-sm transition-all">
+                        <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-on-accent font-semibold rounded-lg text-sm transition-all">
                             ▶ Mulai Opname
                         </button>
                     </form>
@@ -60,7 +60,7 @@
                         <!-- Hidden inputs will be injected by JS if needed, but we use form inside table -->
                     </form>
                     
-                    <button type="submit" form="mainOpnameForm" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg text-sm transition-all">
+                    <button type="submit" form="mainOpnameForm" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-semibold rounded-lg text-sm transition-all">
                         💾 Simpan Sementara
                     </button>
 
@@ -68,7 +68,7 @@
                     <form method="POST" action="{{ route('gudang.opname.complete', $opname->id) }}"
                         onsubmit="return confirm('{{ $isManager ? 'Selesaikan opname? Stok sistem akan disesuaikan sesuai selisih.' : 'Kirim opname untuk disetujui? Stok sistem baru berubah setelah Owner/Supervisor menyetujui.' }}')">
                         @csrf
-                        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm shadow-lg shadow-emerald-500/20 transition-all">
+                        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent font-bold rounded-lg text-sm shadow-lg shadow-emerald-500/20 transition-all">
                             {{ $isManager ? '✅ Selesaikan & Sesuaikan Stok' : '📨 Kirim untuk Disetujui' }}
                         </button>
                     </form>
@@ -94,7 +94,7 @@
                         <form method="POST" action="{{ route('gudang.opname.approve', $opname->id) }}"
                             onsubmit="return confirm('Setujui opname ini? Stok sistem akan disesuaikan sesuai selisih.')">
                             @csrf
-                            <button type="submit" class="w-full md:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm">✅ Setujui & Sesuaikan Stok</button>
+                            <button type="submit" class="w-full md:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent font-bold rounded-lg text-sm">✅ Setujui & Sesuaikan Stok</button>
                         </form>
                         <form method="POST" action="{{ route('gudang.opname.reject', $opname->id) }}" class="flex-1 flex flex-col sm:flex-row gap-2">
                             @csrf

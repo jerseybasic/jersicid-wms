@@ -55,7 +55,7 @@
                     <option value="NONAKTIF" {{ request('status') == 'NONAKTIF' ? 'selected' : '' }}>Nonaktif</option>
                 </select>
 
-                <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition-all text-sm">
+                <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-semibold rounded-lg transition-all text-sm">
                     Filter
                 </button>
 
@@ -311,7 +311,7 @@
                     <button type="button" onclick="closeAddModal()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded transition-all border border-slate-700">
                         Batal
                     </button>
-                    <button type="submit" form="addSupplierForm" id="submitBtn" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold rounded shadow-lg shadow-emerald-500/25 transition-all border border-slate-700">
+                    <button type="submit" form="addSupplierForm" id="submitBtn" class="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-on-accent text-sm font-semibold rounded shadow-lg shadow-emerald-500/25 transition-all border border-slate-700">
                         Simpan Supplier
                     </button>
                 </div>
@@ -449,7 +449,7 @@
                     <button type="button" onclick="closeEditModal()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded transition-all">
                         Batal
                     </button>
-                    <button type="submit" form="editSupplierForm" id="editSubmitBtn" class="px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white text-sm font-semibold rounded shadow-lg shadow-cyan-500/25 transition-all">
+                    <button type="submit" form="editSupplierForm" id="editSubmitBtn" class="px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-on-accent text-sm font-semibold rounded shadow-lg shadow-cyan-500/25 transition-all">
                         Update Supplier
                     </button>
                 </div>
