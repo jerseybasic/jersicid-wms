@@ -113,7 +113,10 @@ Buka **Laporan** untuk melihat:
 - **Nilai Stok**: nilai jual, nilai modal (HPP), dan potensi laba per kategori dan per produk
 
 ### Riwayat Aktivitas
-Berisi catatan siapa mengubah apa dan kapan. Gunakan untuk menelusuri selisih stok atau perubahan PO.
+Berisi catatan siapa mengubah apa dan kapan, termasuk nilai sebelum dan sesudah (dicoret merah → hijau). Gunakan untuk menelusuri selisih stok atau perubahan PO.
+- Saring per user, modul, aksi, dan tanggal, atau cari SKU, nomor order, atau nama.
+- Yang tercatat juga: login, login gagal, dan logout; perubahan user (role, status, password diganti, tanpa isi password); supplier; pengaturan; template printer; serta opname dan laporan barang tidak ada di rak.
+- **Export Excel** mengunduh hasil filter (maksimal 5.000 baris).
 
 ---
 

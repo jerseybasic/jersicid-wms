@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditTrail;
 use App\Models\Supplier;
 use Illuminate\Http\Request;
 
@@ -68,7 +69,8 @@ class SupplierController extends Controller
 
         $validated['created_by'] = auth()->id();
 
-        Supplier::create($validated);
+        $supplier = Supplier::create($validated);
+        AuditTrail::record('CREATE', 'SUPPLIER', ['supplier' => $supplier->name, 'type' => $supplier->type, 'status' => $supplier->status]);
 
         // Return JSON untuk AJAX
         if ($request->wantsJson() || $request->ajax()) {
@@ -99,7 +101,12 @@ class SupplierController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
+        $before = $supplier->only(array_keys($validated));
         $supplier->update($validated);
+        [$old, $new] = AuditTrail::changes($before, $supplier->only(array_keys($validated)));
+        if ($new) {
+            AuditTrail::record('UPDATE', 'SUPPLIER', ['supplier' => $supplier->name] + $new, $old);
+        }
 
         // Return JSON untuk AJAX
         if ($request->wantsJson() || $request->ajax()) {
@@ -121,6 +128,7 @@ class SupplierController extends Controller
         }
 
         $supplier->delete();
+        AuditTrail::record('DELETE', 'SUPPLIER', ['supplier' => $supplier->name, 'supplier_code' => $supplier->supplier_code]);
 
         return redirect()->route('suppliers.index')
             ->with('success', 'Supplier berhasil dihapus!');
@@ -129,9 +137,11 @@ class SupplierController extends Controller
     public function toggleStatus($id)
     {
         $supplier = Supplier::findOrFail($id);
+        $oldStatus = $supplier->status;
         $supplier->update([
             'status' => $supplier->status === 'AKTIF' ? 'NONAKTIF' : 'AKTIF'
         ]);
+        AuditTrail::record('TOGGLE_STATUS', 'SUPPLIER', ['supplier' => $supplier->name, 'status' => $supplier->status], ['status' => $oldStatus]);
 
         return back()->with('success', 'Status supplier berhasil diubah!');
     }

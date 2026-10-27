@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\AuditTrailController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\MasterSkuController;
 use App\Http\Controllers\Admin\SupplierController;
@@ -355,6 +356,7 @@ Route::middleware(['auth', 'role:OWNER'])->prefix('settings')->name('settings.')
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
         \Illuminate\Support\Facades\Artisan::call('view:clear');
         \Illuminate\Support\Facades\Artisan::call('config:clear');
+        \App\Models\AuditTrail::record('CLEAR_CACHE', 'SETTINGS');
         return back()->with('success', 'Cache berhasil dibersihkan!');
     })->name('clear-cache');
 });
@@ -371,9 +373,4 @@ Route::middleware(['auth', 'role:OWNER'])->prefix('users')->group(function () {
 });
 
 // ==================== AUDIT TRAIL (OWNER & SUPERVISOR) ====================
-Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->get('/audit-trails', function () {
-    $activities = \App\Models\AuditTrail::with('user:id,name')
-        ->orderBy('created_at', 'desc')
-        ->paginate(20);
-    return view('dashboard.audit-trails', compact('activities'));
-})->name('audit-trails.index');
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->get('/audit-trails', [AuditTrailController::class, 'index'])->name('audit-trails.index');

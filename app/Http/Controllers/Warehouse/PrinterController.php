@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Warehouse;
 
+use App\Models\AuditTrail;
 use App\Rules\LanPrinterIp;
 use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
@@ -254,7 +255,7 @@ class PrinterController extends Controller
                 'dpi' => 'required|integer|in:203,300,600',
             ]);
 
-            PrinterTemplate::create([
+            $template = PrinterTemplate::create([
                 'name' => $validated['name'],
                 'type' => $validated['type'],
                 'zpl_code' => $validated['zpl_code'],
@@ -264,6 +265,8 @@ class PrinterController extends Controller
                 'is_active' => true,
                 'user_id' => auth()->id(),
             ]);
+
+            AuditTrail::record('CREATE', 'PRINTER', ['template' => $template->name, 'type' => $template->type]);
 
             return back()->with('success', 'Template printer berhasil disimpan!');
         } catch (\Exception $e) {
@@ -291,7 +294,16 @@ class PrinterController extends Controller
                 'is_active' => 'boolean',
             ]);
 
+            $fields = array_diff(array_keys($validated), ['zpl_code']);
+            $before = $template->only($fields) + ['zpl_code' => md5((string) $template->zpl_code)];
             $template->update($validated);
+            [$old, $new] = AuditTrail::changes($before, $template->only($fields) + ['zpl_code' => md5((string) $template->zpl_code)]);
+            if (isset($new['zpl_code'])) {
+                [$old['zpl_code'], $new['zpl_code']] = ['(lama)', 'kode ZPL diubah'];
+            }
+            if ($new) {
+                AuditTrail::record('UPDATE', 'PRINTER', ['template' => $template->name] + $new, $old);
+            }
 
             return back()->with('success', 'Template berhasil diupdate!');
         } catch (\Exception $e) {
@@ -309,6 +321,7 @@ class PrinterController extends Controller
         try {
             $template = PrinterTemplate::findOrFail($id);
             $template->delete();
+            AuditTrail::record('DELETE', 'PRINTER', ['template' => $template->name, 'type' => $template->type]);
 
             return response()->json([
                 'success' => true,
