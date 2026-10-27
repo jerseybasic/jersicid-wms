@@ -157,6 +157,7 @@ class ScanWorkflowTest extends TestCase
         $this->postJson($packTap, ['delta' => -1])->assertStatus(422);
         $this->postJson($packTap, ['delta' => 1])->assertOk()->assertJson(['completed' => false]);
         $this->postJson($packTap, ['delta' => -1])->assertOk()->assertJson(['type' => 'undo']);
+        $this->assertSame(1, \App\Models\AuditTrail::where('action', 'PACK_UNDO')->where('user_id', $staff->id)->count());
         $this->postJson($packTap, ['delta' => 1]);
         $this->postJson($packTap, ['delta' => 1])->assertJson(['completed' => true]);
         $this->assertSame('READY_TO_SHIP', $picking->order->fresh()->status);
