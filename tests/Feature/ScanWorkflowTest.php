@@ -62,18 +62,20 @@ class ScanWorkflowTest extends TestCase
             ->assertOk()->assertJson(['ok' => true, 'completed' => false]);
         $this->assertSame(4, $this->stockQty('JSC-A-L', 'A-01-01'));
 
-        // Item yang sudah mulai diambil dari A-01-01 tetap dicatat dari A-01-01, dengan peringatan
+        // Pcs berikutnya diambil di rak lain: dicatat dari rak itu, dan item dipecah jadi dua baris rak
         $this->postJson($scan, ['code' => 'JSC-A-L', 'bin_code' => 'A-02-01'])
-            ->assertOk()->assertJson(['completed' => true, 'active_bin' => 'A-01-01'])
-            ->assertJsonPath('warning', fn ($w) => str_contains($w, 'sudah mulai diambil dari A-01-01'));
-        $this->assertSame(9, $this->stockQty('JSC-A-L', 'A-02-01'));
-        $this->assertSame(3, $this->stockQty('JSC-A-L', 'A-01-01'));
+            ->assertOk()->assertJson(['completed' => true, 'active_bin' => 'A-02-01', 'warning' => null]);
+        $this->assertSame(8, $this->stockQty('JSC-A-L', 'A-02-01'));
+        $this->assertSame(4, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame([['A-01-01', 1, 1], ['A-02-01', 1, 1]], $picking->items()->orderBy('bin_code')->get()
+            ->map(fn ($row) => [$row->bin_code, $row->qty_ordered, $row->qty_picked])->all());
+        $this->assertSame(2, $picking->order->items()->value('qty_picked'));
         $this->assertSame('COMPLETED', $picking->fresh()->status);
         $this->assertSame('PACKING', $picking->order->fresh()->status);
 
         // Sudah lengkap: scan lagi ditolak, stok tidak berubah
         $this->postJson($scan, ['code' => 'JSC-A-L', 'bin_code' => 'A-01-01'])->assertStatus(422);
-        $this->assertSame(3, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame(4, $this->stockQty('JSC-A-L', 'A-01-01'));
     }
 
     public function test_packing_by_scan_rejects_items_outside_the_order(): void

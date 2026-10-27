@@ -147,9 +147,13 @@ class PickingBatchController extends Controller
                     'product' => $items->first()->masterSku?->product_name,
                     'size' => $items->first()->masterSku?->size,
                     'bins' => $items->pluck('bin_code')->unique()->sort()->values(),
+                    'bin_qty' => $items->groupBy('bin_code')->map(fn ($rows) => (int) $rows->sum('qty_ordered')),
                     'qty_ordered' => $items->sum('qty_ordered'),
                     'qty_picked' => $items->sum('qty_picked'),
-                    'baskets' => $pairs->map(fn ($pair) => ['no' => $pair[0]->basket_no, 'qty' => $pair[1]->qty_ordered])->sortBy('no')->values(),
+                    // Satu item bisa dipecah ke beberapa rak, jadi jumlah per keranjang dijumlahkan
+                    'baskets' => $pairs->groupBy(fn ($pair) => $pair[0]->basket_no)
+                        ->map(fn ($rows, $no) => ['no' => $no, 'qty' => $rows->sum(fn ($pair) => $pair[1]->qty_ordered)])
+                        ->sortBy('no')->values(),
                 ];
             })
             ->sortBy(fn ($row) => [$row['qty_picked'] >= $row['qty_ordered'] ? 1 : 0, $row['bins']->first(), $row['sku']])
@@ -202,10 +206,12 @@ class PickingBatchController extends Controller
                     throw new \RuntimeException($inBatch ? "SKU {$code} sudah lengkap untuk semua keranjang." : "SKU {$code} tidak dipesan di picking ini. Jangan diambil.");
                 }
 
-                // Lanjutkan item yang sudah mulai diambil dari bin ini dulu, lalu keranjang berikutnya.
-                // Item yang sudah mulai dari bin lain dilewati karena satu item harus dari satu bin.
+                // Lanjutkan baris yang sudah mulai diambil dari bin ini dulu, lalu baris yang dijatah ke bin ini,
+                // lalu keranjang berikutnya. Baris yang sudah mulai dari bin lain dilewati jika ada pilihan lain,
+                // karena pindah bin memecah sisanya ke baris baru.
                 $fits = fn ($item) => $bin === '' || (int) $item->qty_picked === 0 || $item->bin_code === $bin;
                 $chosen = $candidates->first(fn ($item) => (int) $item->qty_picked > 0 && $fits($item))
+                    ?? ($bin !== '' ? $candidates->first(fn ($item) => $item->bin_code === $bin) : null)
                     ?? $candidates->first($fits)
                     ?? $candidates->first();
 
@@ -213,7 +219,7 @@ class PickingBatchController extends Controller
                 $item = PickingSessionItem::lockForUpdate()->findOrFail($chosen->id);
                 [$binCode, $warning] = Picking::resolveBin($item, $bin ?: null);
 
-                Picking::apply($session, $item, $item->qty_picked + 1, $binCode, auth()->id(), $request->ip());
+                $item = Picking::apply($session, $item, $item->qty_picked + 1, $binCode, auth()->id(), $request->ip());
 
                 // Ketuk +1 di daftar = diambil tanpa scan, dicatat seperti picking satu order
                 if ($tapped) {

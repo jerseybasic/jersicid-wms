@@ -72,7 +72,7 @@
                                 @if ($bin === 'UNKNOWN')
                                     <p class="text-xs font-semibold text-amber-400">Belum ada di rak</p>
                                 @else
-                                    <p class="font-mono text-sm font-bold text-cyan-400 break-all">{{ $bin }}</p>
+                                    <p class="font-mono text-sm font-bold text-cyan-400 break-all">{{ $bin }}@if ($row['bins']->count() > 1)<span class="text-slate-400 font-normal"> ×{{ $row['bin_qty'][$bin] }}</span>@endif</p>
                                 @endif
                             @endforeach
                         </div>

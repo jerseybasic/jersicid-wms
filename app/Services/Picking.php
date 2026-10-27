@@ -39,16 +39,19 @@ class Picking
             'status' => 'PENDING',
         ]);
 
+        // Satu baris per rak: jika tidak ada satu rak yang cukup, item dipecah ke beberapa rak
         foreach ($order->items as $item) {
-            PickingSessionItem::create([
-                'picking_session_id' => $session->id,
-                'order_item_id' => $item->id,
-                'sku' => $item->sku,
-                'bin_code' => self::allocateBin($item->sku, (int) $item->qty_ordered) ?? 'UNKNOWN',
-                'qty_ordered' => $item->qty_ordered,
-                'qty_picked' => 0,
-                'status' => 'PENDING',
-            ]);
+            foreach (self::allocatePlan($item->sku, (int) $item->qty_ordered) as [$bin, $qty]) {
+                PickingSessionItem::create([
+                    'picking_session_id' => $session->id,
+                    'order_item_id' => $item->id,
+                    'sku' => $item->sku,
+                    'bin_code' => $bin,
+                    'qty_ordered' => $qty,
+                    'qty_picked' => 0,
+                    'status' => 'PENDING',
+                ]);
+            }
         }
 
         $order->update(['status' => 'PICKING']);
@@ -64,13 +67,55 @@ class Picking
      */
     public static function allocateBin(string $sku, int $qty, array $exceptBins = []): ?string
     {
+        return self::rankBins($sku, $qty, $exceptBins)->first()['bin'] ?? null;
+    }
+
+    /**
+     * Rencana ambil qty pcs SKU ini: [[bin, qty], ...]. Satu bin jika ada yang cukup. Jika tidak,
+     * diambil dari beberapa bin (urutan sama dengan allocateBin) sampai qty terpenuhi. Kekurangan yang
+     * tidak tertutup stok bebas mana pun ditambahkan ke baris pertama, supaya jumlah total tetap sama.
+     *
+     * @return array<int, array{0: string, 1: int}>
+     */
+    public static function allocatePlan(string $sku, int $qty): array
+    {
+        $ranked = self::rankBins($sku, $qty);
+        if ($ranked->isEmpty()) {
+            return [['UNKNOWN', $qty]];
+        }
+        if ($ranked->first()['free'] >= $qty) {
+            return [[$ranked->first()['bin'], $qty]];
+        }
+
+        $plan = [];
+        $left = $qty;
+        foreach ($ranked->where('free', '>', 0) as $row) {
+            $take = min($row['free'], $left);
+            $plan[] = [$row['bin'], $take];
+            $left -= $take;
+            if ($left === 0) {
+                break;
+            }
+        }
+
+        if ($plan === []) {
+            return [[$ranked->first()['bin'], $qty]];
+        }
+        $plan[0][1] += $left;
+
+        return $plan;
+    }
+
+    /** Bin yang punya stok SKU ini, urut dari yang paling cocok untuk diambil qty pcs */
+    private static function rankBins(string $sku, int $qty, array $exceptBins = [])
+    {
         // Bin yang dilaporkan kosong dan belum diputuskan supervisor tidak dijatah
         $exceptBins = array_merge($exceptBins, MissingStockReport::heldBins($sku));
         $stock = StockActive::where('sku', $sku)->where('qty', '>', 0)
             ->whereNotIn('bin_code', $exceptBins)
             ->pluck('qty', 'bin_code');
         if ($stock->isEmpty()) {
-            return null;
+            return collect();
         }
 
         $allocated = PickingSessionItem::where('sku', $sku)
@@ -95,15 +140,69 @@ class Picking
                 fn ($a, $b) => $b['pick'] <=> $a['pick'],
                 fn ($a, $b) => $b['free'] <=> $a['free'],
             ])
-            ->first()['bin'];
+            ->values();
+    }
+
+    /**
+     * Sisa item yang belum diambil dipindah ke baris baru di bin lain (atau digabung ke baris bin itu
+     * yang belum mulai), dan baris lama ditutup sebesar yang sudah diambil. Dipakai saat bin pertama
+     * habis di tengah jalan. Item harus sudah dikunci.
+     */
+    public static function splitRemainder(PickingSessionItem $item, string $binCode): PickingSessionItem
+    {
+        $remaining = $item->qty_ordered - $item->qty_picked;
+        if ($remaining < 1 || $item->qty_picked < 1) {
+            throw new \RuntimeException("{$item->sku} tidak bisa dipecah ke rak lain.");
+        }
+
+        $item->update(['qty_ordered' => $item->qty_picked, 'status' => 'COMPLETED']);
+
+        $sibling = PickingSessionItem::where('picking_session_id', $item->picking_session_id)
+            ->where('order_item_id', $item->order_item_id)
+            ->where('bin_code', $binCode)
+            ->whereKeyNot($item->id)
+            ->lockForUpdate()
+            ->first();
+        if ($sibling) {
+            $sibling->update(['qty_ordered' => $sibling->qty_ordered + $remaining, 'status' => $sibling->qty_picked > 0 ? 'PARTIAL' : 'PENDING']);
+
+            return $sibling;
+        }
+
+        return PickingSessionItem::create([
+            'picking_session_id' => $item->picking_session_id,
+            'order_item_id' => $item->order_item_id,
+            'sku' => $item->sku,
+            'bin_code' => $binCode,
+            'qty_ordered' => $remaining,
+            'qty_picked' => 0,
+            'status' => 'PENDING',
+        ]);
+    }
+
+    /** Jumlah diambil di item order = total semua baris rak untuk item itu di sesi ini */
+    private static function syncOrderItem(PickingSessionItem $item, array $extra = []): void
+    {
+        $orderItem = $item->orderItem;
+        if (!$orderItem) {
+            return;
+        }
+
+        $picked = (int) PickingSessionItem::where('picking_session_id', $item->picking_session_id)
+            ->where('order_item_id', $item->order_item_id)
+            ->sum('qty_picked');
+        $orderItem->update(['qty_picked' => $picked, 'bin_code' => $item->bin_code] + $extra);
     }
 
     /**
      * Set total qty diambil untuk satu item. Stok hanya dikurangi sebesar
-     * tambahannya. Sesi dan item harus sudah dikunci.
+     * tambahannya. Jika item sudah mulai diambil dari bin lain, sisanya dipecah ke baris baru di bin ini
+     * (qtyPicked tetap dihitung sebagai total item). Mengembalikan baris yang dipakai.
+     * Sesi dan item harus sudah dikunci.
      */
-    public static function apply(PickingSession $session, PickingSessionItem $item, int $qtyPicked, string $binCode, string $userId, ?string $ip): void
+    public static function apply(PickingSession $session, PickingSessionItem $item, int $qtyPicked, string $binCode, string $userId, ?string $ip): PickingSessionItem
     {
+        $binCode = strtoupper(trim($binCode));
         if ($session->status === 'CANCELLED') {
             throw new \RuntimeException(self::CANCELLED_MESSAGE);
         }
@@ -118,9 +217,12 @@ class Picking
             throw new \RuntimeException('Jumlah yang sudah diambil tidak bisa dikurangi. Hapus sesi picking untuk mengulang.');
         }
 
-        // Satu item diambil dari satu bin, supaya stok bisa dikembalikan ke bin yang benar
-        if ($item->qty_picked > 0 && $binCode !== $item->bin_code) {
-            throw new \RuntimeException("{$item->sku} sudah mulai diambil dari bin {$item->bin_code}. Lanjutkan dari bin yang sama.");
+        // Satu baris = satu bin, supaya stok bisa dikembalikan ke bin yang benar. Pindah bin di tengah jalan
+        // memecah sisanya ke baris baru.
+        if ($delta > 0 && $item->qty_picked > 0 && $binCode !== $item->bin_code) {
+            $item = self::splitRemainder($item, $binCode);
+            $newQty = min($item->qty_picked + $delta, $item->qty_ordered);
+            $delta = $newQty - $item->qty_picked;
         }
 
         if ($delta > 0) {
@@ -160,10 +262,7 @@ class Picking
             'status' => $newQty >= $item->qty_ordered ? 'COMPLETED' : 'PARTIAL',
         ]);
 
-        $item->orderItem?->update([
-            'qty_picked' => $newQty,
-            'bin_code' => $binCode,
-        ]);
+        self::syncOrderItem($item);
 
         $allPicked = $session->items()->whereColumn('qty_picked', '<', 'qty_ordered')->doesntExist();
 
@@ -184,6 +283,8 @@ class Picking
                 self::refreshBatch($session->batch);
             }
         }
+
+        return $item;
     }
 
     /**
@@ -197,14 +298,25 @@ class Picking
     {
         $activeBin = $activeBin ? strtoupper(trim($activeBin)) : null;
 
-        // Satu item diambil dari satu bin: setelah mulai, lanjutkan dari bin yang sama
+        $stock = StockActive::where('sku', $item->sku)->where('qty', '>', 0)->pluck('qty', 'bin_code');
+
+        // Sudah mulai dari bin lain: tetap di bin itu, kecuali picker sekarang di rak lain yang ada
+        // stoknya atau bin itu habis. Sisanya lalu dipecah ke bin baru (lihat apply).
         if ($item->qty_picked > 0) {
-            return [$item->bin_code, $activeBin && $activeBin !== $item->bin_code
-                ? "Barang ini sudah mulai diambil dari {$item->bin_code}, jadi dicatat dari {$item->bin_code}."
-                : null];
+            if (isset($stock[$item->bin_code]) && (!$activeBin || $activeBin === $item->bin_code || !isset($stock[$activeBin]))) {
+                return [$item->bin_code, $activeBin && $activeBin !== $item->bin_code
+                    ? "Di rak {$activeBin} tidak ada {$item->sku}, dicatat dari {$item->bin_code}."
+                    : null];
+            }
+
+            $bin = $activeBin && isset($stock[$activeBin]) ? $activeBin : $stock->sortDesc()->keys()->first();
+            if (!$bin) {
+                throw new \RuntimeException("Stok {$item->sku} kosong di semua rak.");
+            }
+
+            return [$bin, $activeBin === $bin ? null : "Rak {$item->bin_code} sudah habis, sisa {$item->sku} dicatat dari {$bin}."];
         }
 
-        $stock = StockActive::where('sku', $item->sku)->where('qty', '>', 0)->pluck('qty', 'bin_code');
         $bin = collect([$activeBin, $item->bin_code])->filter()->first(fn ($bin) => isset($stock[$bin]))
             ?? $stock->sortDesc()->keys()->first();
 
@@ -262,7 +374,7 @@ class Picking
 
         $newQty = $item->qty_picked - 1;
         $item->update(['qty_picked' => $newQty, 'status' => $newQty > 0 ? 'PARTIAL' : 'PENDING']);
-        $item->orderItem?->update(['qty_picked' => $newQty]);
+        self::syncOrderItem($item);
 
         if ($session->status === 'COMPLETED') {
             $session->update(['status' => 'IN_PROGRESS', 'completed_at' => null]);
@@ -367,12 +479,19 @@ class Picking
             'ip_address' => $ip,
         ]);
 
-        // Satu item diambil dari satu bin, jadi pindah bin hanya jika belum ada yang diambil
+        // Pindah ke bin lain yang masih ada stoknya. Jika sebagian sudah diambil dari bin ini,
+        // yang sudah diambil tetap tercatat di bin ini dan sisanya dipecah ke baris bin baru.
         $need = $item->qty_ordered - $item->qty_picked;
-        if ($item->qty_picked === 0 && ($other = self::allocateBin($item->sku, $need))) {
-            $item->update(['bin_code' => $other]);
+        if ($other = self::allocateBin($item->sku, $need, [$bin])) {
+            if ($item->qty_picked === 0) {
+                $item->update(['bin_code' => $other]);
 
-            return ["{$item->sku} tidak ada di {$bin}. Coba ambil di rak {$other}.", $other];
+                return ["{$item->sku} tidak ada di {$bin}. Coba ambil di rak {$other}.", $other];
+            }
+
+            self::splitRemainder($item, $other);
+
+            return ["{$item->sku} di {$bin} habis. Ambil sisanya ({$need} pcs) di rak {$other}.", $other];
         }
 
         $order = $session->order;
@@ -432,8 +551,10 @@ class Picking
 
         $newQty = $item->qty_picked - 1;
         $item->update(['qty_picked' => $newQty, 'status' => $newQty > 0 ? 'PARTIAL' : 'PENDING']);
-        $orderItem = $item->orderItem;
-        $orderItem?->update(['qty_picked' => $newQty, 'qty_packed' => min((int) $orderItem->qty_packed, $newQty)]);
+        self::syncOrderItem($item);
+        if ($orderItem = $item->orderItem?->fresh()) {
+            $orderItem->update(['qty_packed' => min((int) $orderItem->qty_packed, (int) $orderItem->qty_picked)]);
+        }
 
         $session->update(['status' => 'IN_PROGRESS', 'completed_at' => null]);
         $session->order->update(['status' => 'PICKING', 'picked_by' => null, 'picked_at' => null]);

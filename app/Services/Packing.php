@@ -31,13 +31,13 @@ class Packing
             'started_at' => now(),
         ]);
 
-        // Ambil items dari picking session
-        foreach ($order->pickingSession?->items ?? [] as $pickItem) {
+        // Satu baris per item order (satu item bisa diambil dari beberapa rak saat picking)
+        foreach (($order->pickingSession?->items ?? collect())->groupBy('order_item_id') as $pickItems) {
             PackingSessionItem::create([
                 'packing_session_id' => $session->id,
-                'order_item_id' => $pickItem->order_item_id,
-                'sku' => $pickItem->sku,
-                'qty_ordered' => $pickItem->qty_ordered,
+                'order_item_id' => $pickItems->first()->order_item_id,
+                'sku' => $pickItems->first()->sku,
+                'qty_ordered' => $pickItems->sum('qty_ordered'),
                 'qty_packed' => 0,
                 'status' => 'PENDING',
             ]);
