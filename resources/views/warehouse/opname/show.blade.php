@@ -64,15 +64,54 @@
                         💾 Simpan Sementara
                     </button>
 
-                    <form method="POST" action="{{ route('gudang.opname.complete', $opname->id) }}" onsubmit="return confirm('Yakin ingin menyelesaikan Opname? Stok sistem akan disesuaikan otomatis berdasarkan selisih!')">
+                    @php $isManager = in_array(auth()->user()->role, \App\Http\Controllers\Warehouse\StockOpnameController::MANAGER_ROLES, true); @endphp
+                    <form method="POST" action="{{ route('gudang.opname.complete', $opname->id) }}"
+                        onsubmit="return confirm('{{ $isManager ? 'Selesaikan opname? Stok sistem akan disesuaikan sesuai selisih.' : 'Kirim opname untuk disetujui? Stok sistem baru berubah setelah Owner/Supervisor menyetujui.' }}')">
                         @csrf
                         <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm shadow-lg shadow-emerald-500/20 transition-all">
-                            ✅ Selesaikan & Adjust Stok
+                            {{ $isManager ? '✅ Selesaikan & Sesuaikan Stok' : '📨 Kirim untuk Disetujui' }}
                         </button>
                     </form>
                 @endif
             </div>
         </div>
+
+        @if ($opname->status === 'IN_PROGRESS' && $opname->rejection_note)
+            <div class="p-4 bg-amber-900/30 border border-amber-500/50 text-amber-300 rounded-xl text-sm">
+                <p class="font-semibold">Dikembalikan untuk dihitung ulang</p>
+                <p class="mt-1">{{ $opname->rejection_note }}</p>
+            </div>
+        @endif
+
+        @if ($opname->status === 'SUBMITTED')
+            <div class="p-4 bg-blue-900/20 border border-blue-500/40 rounded-xl space-y-3">
+                <p class="text-sm text-blue-200">
+                    Dikirim {{ $opname->submitter?->name ?? '-' }} pada {{ $opname->submitted_at?->format('d M Y H:i') }}.
+                    Stok sistem belum berubah. Periksa baris yang selisih di bawah sebelum memutuskan.
+                </p>
+                @if (in_array(auth()->user()->role, \App\Http\Controllers\Warehouse\StockOpnameController::MANAGER_ROLES, true))
+                    <div class="flex flex-col md:flex-row gap-2">
+                        <form method="POST" action="{{ route('gudang.opname.approve', $opname->id) }}"
+                            onsubmit="return confirm('Setujui opname ini? Stok sistem akan disesuaikan sesuai selisih.')">
+                            @csrf
+                            <button type="submit" class="w-full md:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm">✅ Setujui & Sesuaikan Stok</button>
+                        </form>
+                        <form method="POST" action="{{ route('gudang.opname.reject', $opname->id) }}" class="flex-1 flex flex-col sm:flex-row gap-2">
+                            @csrf
+                            <input type="text" name="reason" required maxlength="500" placeholder="Alasan dikembalikan, mis. rak A-02 dihitung ulang"
+                                class="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500">
+                            <button type="submit" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm">Kembalikan untuk dihitung ulang</button>
+                        </form>
+                    </div>
+                @else
+                    <p class="text-xs text-slate-400">Menunggu persetujuan Owner/Supervisor.</p>
+                @endif
+            </div>
+        @endif
+
+        @if ($opname->status === 'COMPLETED' && $opname->approver)
+            <p class="text-xs text-slate-400">Disetujui {{ $opname->approver->name }} pada {{ $opname->completed_at?->format('d M Y H:i') }}.</p>
+        @endif
 
         @if($opname->status === 'IN_PROGRESS')
             <x-scan-box storage-key="opname-bin-{{ $opname->id }}"

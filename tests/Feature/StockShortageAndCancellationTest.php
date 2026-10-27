@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\CourierHandover;
 use App\Models\CourierHandoverItem;
+use App\Models\MissingStockReport;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PackingSession;
@@ -126,13 +127,14 @@ class StockShortageAndCancellationTest extends TestCase
         $itemB = $picking->items->firstWhere('sku', 'JSC-B-L');
         $this->assertSame('A-01-01', $itemA->bin_code);
 
-        // B sudah diambil, lalu A ternyata tidak ada di A-01-01: stoknya dinolkan, picker diarahkan ke B-01-01
+        // B sudah diambil, lalu A ternyata tidak ada di A-01-01: dilaporkan ke supervisor, picker diarahkan ke B-01-01
         $this->postJson(route('gudang.picking.tap', [$picking->id, $itemB->id]), ['delta' => 1])->assertOk();
         $this->post(route('gudang.picking.missing', [$picking->id, $itemA->id]))
             ->assertSessionHas('success', 'JSC-A-L tidak ada di A-01-01. Coba ambil di rak B-01-01.');
-        $this->assertSame(0, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame(5, $this->stockQty('JSC-A-L', 'A-01-01'));   // stok belum berubah sebelum disetujui
         $this->assertSame('B-01-01', $itemA->fresh()->bin_code);
-        $this->assertTrue(StockMovement::where('reference_type', 'PICKING_MISSING')->where('qty', 5)->exists());
+        $reportA = MissingStockReport::where('bin_code', 'A-01-01')->firstOrFail();
+        $this->assertSame(['PENDING', 5, $order->id], [$reportA->status, $reportA->qty, $reportA->order_id]);
 
         // Di B-01-01 juga tidak ada: order ditunda, barang B yang sudah diambil kembali ke raknya
         $this->post(route('gudang.picking.missing', [$picking->id, $itemA->id]))
@@ -142,7 +144,36 @@ class StockShortageAndCancellationTest extends TestCase
         $this->assertTrue($order->isWaitingStock());
         $this->assertNull($order->pickingSession);
         $this->assertSame(1, $this->stockQty('JSC-B-L', 'C-01-01'));
-        $this->assertSame(0, $this->stockQty('JSC-A-L', 'B-01-01'));
+        $this->assertSame(2, $this->stockQty('JSC-A-L', 'B-01-01'));
+        $this->assertSame(2, MissingStockReport::pending()->count());
+
+        // Stok yang dilaporkan kosong ditahan: tidak dihitung tersedia saat konfirmasi order lain
+        $other = Order::create(['order_number' => 'ORD-LAIN', 'customer_name' => 'Ani', 'shipping_address' => 'Bogor', 'status' => 'PENDING']);
+        OrderItem::create(['order_id' => $other->id, 'sku' => 'JSC-A-L', 'qty_ordered' => 1, 'qty_picked' => 0, 'qty_packed' => 0, 'price' => 1000]);
+        $this->assertNotEmpty(\App\Services\StockAvailability::shortages($other));
+
+        // Staf tidak bisa memutuskan
+        $this->post(route('gudang.stock-approvals.missing.approve', $reportA->id))->assertForbidden();
+
+        // Supervisor: B ternyata ada (ditolak) sehingga order kembali ke antrean; A memang kosong (disetujui)
+        $supervisor = $this->userWithRole('SUPERVISOR');
+        $this->actingAs($supervisor)->get(route('gudang.stock-approvals'))->assertOk()->assertSee('A-01-01')->assertSee('B-01-01');
+        $reportB = MissingStockReport::where('bin_code', 'B-01-01')->firstOrFail();
+        $this->post(route('gudang.stock-approvals.missing.reject', $reportB->id), ['note' => 'Ada di belakang'])
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'ORD-HILANG'));
+        $this->assertSame('REJECTED', $reportB->fresh()->status);
+        $this->assertSame('CONFIRMED', $order->fresh()->status);
+        $this->assertSame(2, $this->stockQty('JSC-A-L', 'B-01-01'));
+
+        // Selama A belum diputuskan, picking baru tidak diarahkan ke A-01-01
+        $this->actingAs($staff)->post(route('gudang.picking.store'), ['order_id' => $order->id]);
+        $this->assertSame('B-01-01', PickingSession::where('order_id', $order->id)->firstOrFail()->items()->where('sku', 'JSC-A-L')->value('bin_code'));
+
+        $this->actingAs($supervisor)->post(route('gudang.stock-approvals.missing.approve', $reportA->id))->assertSessionHas('success');
+        $this->post(route('gudang.stock-approvals.missing.approve', $reportA->id))->assertSessionHas('error');
+        $this->assertSame(0, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame('APPROVED', $reportA->fresh()->status);
+        $this->assertTrue(StockMovement::where('reference_type', 'PICKING_MISSING')->where('qty', 5)->where('user_id', $supervisor->id)->exists());
     }
 
     public function test_cancelling_an_order_in_process_sends_goods_back_to_the_rack(): void
