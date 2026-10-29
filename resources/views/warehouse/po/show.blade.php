@@ -66,9 +66,12 @@
                 <a href="{{ route('po.print', $po->id) }}" target="_blank"
                     class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl transition-all">Cetak PO</a>
 
-                @if ($isManager && $po->status === 'DRAFT')
+                @if ($isManager && $po->isEditable())
                     <a href="{{ route('po.edit', $po->id) }}"
                         class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition-all">Edit PO</a>
+                @endif
+
+                @if ($isManager && $po->status === 'DRAFT')
                     <form method="POST" action="{{ route('po.update-status', $po->id) }}" class="inline">
                         @csrf @method('PATCH')
                         <input type="hidden" name="status" value="PENDING">
@@ -138,20 +141,63 @@
                         class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-all">Terima Barang (Inbound)</a>
                 @endif
 
-                @if ($isManager && in_array($po->status, ['DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION']))
-                    <form method="POST" action="{{ route('po.update-status', $po->id) }}" class="inline"
-                        onsubmit="return confirm('Batalkan PO ini?')">
-                        @csrf @method('PATCH')
-                        <input type="hidden" name="status" value="CANCELLED">
-                        <button type="submit"
-                            class="px-4 py-2 bg-slate-700 hover:bg-red-600 text-white text-sm font-semibold rounded-xl transition-all">Batalkan</button>
-                    </form>
+                @if ($isManager && $po->canTransitionTo('CANCELLED'))
+                    <div x-data="{ open: false }" class="contents">
+                        <button type="button" @click="open = !open" x-show="!open"
+                            class="px-4 py-2 bg-slate-700 hover:bg-red-600 text-white text-sm font-semibold rounded-xl transition-all">Batalkan PO</button>
+                        <form x-show="open" x-cloak method="POST" action="{{ route('po.update-status', $po->id) }}"
+                            class="flex flex-wrap items-center gap-2 w-full p-3 rounded-xl border border-red-500/40 bg-red-900/10">
+                            @csrf @method('PATCH')
+                            <input type="hidden" name="status" value="CANCELLED">
+                            @if ($po->items->sum('qty_received') > 0)
+                                <p class="w-full text-xs text-amber-300">Sebagian barang sudah diterima. Barang itu tetap di stok; hanya sisa pesanan yang dibatalkan.</p>
+                            @endif
+                            <input type="text" name="reason" maxlength="500" placeholder="Alasan dibatalkan, mis. tidak jadi order"
+                                class="flex-1 min-w-[12rem] px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-red-400 focus:outline-none">
+                            <button type="submit" onclick="return confirm('Batalkan PO {{ $po->po_number }}?')"
+                                class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl transition-all">Ya, Batalkan</button>
+                            <button type="button" @click="open = false" class="text-sm text-slate-400 hover:text-white">Tutup</button>
+                        </form>
+                    </div>
                 @endif
 
                 @if (in_array($po->status, ['RECEIVED', 'CANCELLED']))
-                    <p class="text-sm text-slate-400">Tidak ada aksi. PO ini sudah {{ strtolower($po->status_label) }}.</p>
+                    <p class="text-sm text-slate-400">PO ini sudah {{ strtolower($po->status_label) }}.</p>
                 @endif
             </div>
+
+            {{-- Koreksi status: untuk membetulkan status yang terlanjur salah karena miskom --}}
+            @if ($isManager && $po->status !== 'RECEIVED')
+                <div x-data="{ open: {{ $errors->has('reason') && old('_correct') ? 'true' : 'false' }} }" class="mt-4 pt-4 border-t border-slate-800">
+                    <button type="button" @click="open = !open" class="text-sm text-cyan-400 hover:text-cyan-300">
+                        Status salah? <span class="underline">Koreksi status</span>
+                    </button>
+                    <form x-show="open" x-cloak method="POST" action="{{ route('po.correct-status', $po->id) }}"
+                        class="mt-3 flex flex-wrap items-center gap-2">
+                        @csrf @method('PATCH')
+                        <input type="hidden" name="_correct" value="1">
+                        <select name="status" required
+                            class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none">
+                            <option value="">-- Status yang benar --</option>
+                            @foreach (\App\Models\PurchaseOrder::CORRECTABLE_STATUSES as $status)
+                                @continue($status === $po->status)
+                                <option value="{{ $status }}" @selected(old('status') === $status)>{{ \App\Models\PurchaseOrder::STATUS_LABELS[$status] }}</option>
+                            @endforeach
+                        </select>
+                        <input type="text" name="reason" required maxlength="500" placeholder="Alasan koreksi (wajib), mis. salah klik, produksi belum mulai"
+                            class="flex-1 min-w-[12rem] px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none">
+                        <button type="submit" onclick="return confirm('Ubah status PO ini?')"
+                            class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition-all">Simpan Status</button>
+                        <p class="w-full text-xs text-slate-500">
+                            @if ($po->status === 'CANCELLED')
+                                PO yang dibatalkan bisa diaktifkan lagi dengan memilih statusnya sekarang.
+                            @else
+                                Dipakai jika status terakhir keliru. Alasan dicatat di catatan PO dan riwayat aktivitas.
+                            @endif
+                        </p>
+                    </form>
+                </div>
+            @endif
         </div>
 
         {{-- Items Table --}}

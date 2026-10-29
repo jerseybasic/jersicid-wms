@@ -112,6 +112,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG'])
         Route::put('/{id}', [PurchaseOrderController::class, 'update'])->name('update');
         Route::delete('/{id}', [PurchaseOrderController::class, 'destroy'])->name('destroy');
         Route::patch('/{id}/status', [PurchaseOrderController::class, 'updateStatus'])->name('update-status');
+        Route::patch('/{id}/koreksi-status', [PurchaseOrderController::class, 'correctStatus'])->name('correct-status');
         Route::get('/{id}/cetak', [PurchaseOrderController::class, 'print'])->name('print');
     });
 

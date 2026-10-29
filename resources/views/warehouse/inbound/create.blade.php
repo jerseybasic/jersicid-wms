@@ -14,7 +14,7 @@
         </div>
     </x-slot>
 
-    <div class="max-w-7xl mx-auto space-y-6" x-data="inboundForm()" x-init="init(@js($skus), @js($racks), @js($poData), @js($suggestedBins), @js((string) old('po_id', request('po_id'))), @js((string) old('supplier_name')))"
+    <div class="max-w-7xl mx-auto space-y-6" x-data="inboundForm()" x-init="setup(@js($skus), @js($racks), @js($poData), @js($suggestedBins), @js((string) old('po_id', request('po_id'))), @js((string) old('supplier_name')))"
         @scan-code.window="onScan($event.detail)">
 
         @if(session('success'))
@@ -295,7 +295,8 @@
                 poId: '',
                 supplierName: '',
 
-                init(skus, racks, poData, suggestedBins, poId, supplierName) {
+                // Bukan init(): Alpine memanggil init() otomatis tanpa argumen, jadi baris kosong ikut tertambah dua kali
+                setup(skus, racks, poData, suggestedBins, poId, supplierName) {
                     this.skus = skus;
                     this.racks = racks;
                     this.poData = poData || {};

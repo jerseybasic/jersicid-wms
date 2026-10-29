@@ -51,7 +51,7 @@
         </div>
 
         <form method="POST" action="{{ route('gudang.transfer.store') }}" x-show="from" x-cloak
-            class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden" @submit="return confirmSubmit($event)">
+            class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden" @submit="confirmSubmit($event)">
             @csrf
             <input type="hidden" name="bin_from" :value="from">
             @if ($prefill['from'] !== '')

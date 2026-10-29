@@ -61,8 +61,9 @@ class PurchaseOrderFlowTest extends TestCase
         $this->assertSame('APPROVED', $po->status);
         $this->assertSame($owner->id, $po->approved_by);
 
-        // Setelah approve, PO tidak bisa diedit lagi
-        $this->get(route('po.edit', $po->id))->assertRedirect(route('po.show', $po->id));
+        // Setelah approve, PO masih bisa diedit (untuk miskom), tapi wajib dengan alasan
+        $this->get(route('po.edit', $po->id))->assertOk()->assertSee('Alasan perubahan');
+        $this->put(route('po.update', $po->id), $payload)->assertSessionHasErrors('change_reason');
 
         // ADMIN_GUDANG memperbarui tahap produksi
         $this->actingAs($admin)->patch(route('po.update-status', $po->id), ['status' => 'IN_PRODUCTION'])->assertSessionHas('success');
