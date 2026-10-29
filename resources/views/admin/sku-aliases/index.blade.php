@@ -1,8 +1,13 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="min-w-0">
-            <h2 class="font-semibold text-xl text-white leading-tight">Pemetaan SKU</h2>
-            <p class="hidden sm:block text-sm text-slate-400 mt-1">SKU di marketplace yang berbeda dengan kode Master SKU</p>
+        <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <h2 class="font-semibold text-xl text-white leading-tight">Pemetaan SKU</h2>
+                <p class="hidden sm:block text-sm text-slate-400 mt-1">SKU di marketplace yang berbeda dengan kode Master SKU</p>
+            </div>
+            <a href="{{ route('blocked-skus.index') }}" class="shrink-0 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-lg border border-slate-700">
+                SKU Terhambat @if ($blockedCount)<span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-amber-500 text-slate-900">{{ $blockedCount }}</span>@endif
+            </a>
         </div>
     </x-slot>
 

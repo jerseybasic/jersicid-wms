@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\MasterSku;
 use App\Models\SkuAlias;
+use App\Models\UnregisteredSku;
 use Illuminate\Http\Request;
 
 /**
@@ -27,7 +28,9 @@ class SkuAliasController extends Controller
 
         $skuOptions = MasterSku::where('status', 'AKTIF')->orderBy('sku')->get(['sku', 'product_name', 'size']);
 
-        return view('admin.sku-aliases.index', compact('aliases', 'search', 'skuOptions'));
+        $blockedCount = UnregisteredSku::pending()->count();
+
+        return view('admin.sku-aliases.index', compact('aliases', 'search', 'skuOptions', 'blockedCount'));
     }
 
     public function store(Request $request)

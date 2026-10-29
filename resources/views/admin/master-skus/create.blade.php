@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="flex items-center gap-4">
-            <a href="{{ route('master-skus.index') }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-all flex items-center gap-2 border border-slate-700">
+            <a href="{{ $returnTo ?? route('master-skus.index') }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-all flex items-center gap-2 border border-slate-700">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                 </svg>
@@ -18,6 +18,15 @@
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
             <form method="POST" action="{{ route('master-skus.store') }}" class="space-y-4">
                 @csrf
+                <input type="hidden" name="from_code" value="{{ old('from_code', $fromCode ?? '') }}">
+                <input type="hidden" name="return_to" value="{{ old('return_to', $returnTo ?? '') }}">
+
+                @if (old('from_code', $fromCode ?? null))
+                    <div class="p-4 bg-cyan-500/10 border border-cyan-500/40 rounded-xl text-sm text-cyan-200">
+                        <p class="font-semibold">Membuat SKU baru untuk kode <span class="font-mono">{{ old('from_code', $fromCode) }}</span></p>
+                        <p class="text-cyan-300/80 mt-1">Data di bawah sudah diisi dari kode dan nama produk. Periksa dulu, terutama artikel, ukuran, dan harga. Jika kode SKU gudang diubah, kode asalnya otomatis dipetakan ke SKU baru ini.</p>
+                    </div>
+                @endif
 
                 @if($errors->any())
                     <div class="p-4 bg-red-900/30 border border-red-500/50 rounded-xl">
@@ -32,18 +41,18 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-300 mb-2">SKU <span class="text-red-400">*</span></label>
-                        <input type="text" name="sku" value="{{ old('sku') }}" required placeholder="JER-BASIC-L"
+                        <input type="text" name="sku" value="{{ old('sku', $prefill['sku'] ?? '') }}" required placeholder="JER-BASIC-L"
                                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all font-mono"/>
                         <p class="text-xs text-slate-500 mt-1">Format: JER-[ARTIKEL]-[SIZE]</p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-300 mb-2">Artikel <span class="text-red-400">*</span></label>
-                        <input type="text" name="article" value="{{ old('article') }}" required placeholder="BASIC"
+                        <input type="text" name="article" value="{{ old('article', $prefill['article'] ?? '') }}" required placeholder="BASIC"
                                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"/>
                     </div>
                     <div class="md:col-span-2">
                         <label class="block text-sm font-medium text-slate-300 mb-2">Nama Produk <span class="text-red-400">*</span></label>
-                        <input type="text" name="product_name" value="{{ old('product_name') }}" required placeholder="Jersey Basic Premium"
+                        <input type="text" name="product_name" value="{{ old('product_name', $prefill['product_name'] ?? '') }}" required placeholder="Jersey Basic Premium"
                                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"/>
                     </div>
                     <div>
@@ -67,7 +76,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-300 mb-2">Size <span class="text-red-400">*</span></label>
-                        <input type="text" name="size" value="{{ old('size') }}" required placeholder="L"
+                        <input type="text" name="size" value="{{ old('size', $prefill['size'] ?? '') }}" required placeholder="L"
                                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none transition-all"/>
                     </div>
                     <div>
@@ -106,7 +115,7 @@
                 </div>
 
                 <div class="flex items-center gap-3 pt-4 border-t border-slate-800">
-                    <a href="{{ route('master-skus.index') }}" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700 transition-all">Batal</a>
+                    <a href="{{ $returnTo ?? route('master-skus.index') }}" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700 transition-all">Batal</a>
                     <button type="submit" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">
                         ✨ Simpan SKU
                     </button>

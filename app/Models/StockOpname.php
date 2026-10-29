@@ -19,6 +19,7 @@ class StockOpname extends Model
         'opname_number',
         'warehouse_id',
         'rack_codes',
+        'sku_codes',
         'status',
         'notes',
         'created_by',
@@ -57,9 +58,42 @@ class StockOpname extends Model
         return $this->rack_codes ? explode(',', $this->rack_codes) : [];
     }
 
+    /**
+     * SKU yang dihitung di opname ini; array kosong = semua produk.
+     */
+    public function getSkusAttribute(): array
+    {
+        return $this->sku_codes ? explode(',', $this->sku_codes) : [];
+    }
+
     public function getScopeLabelAttribute(): string
     {
-        return $this->racks ? 'Rak ' . implode(', ', $this->racks) : 'Seluruh gudang';
+        $skus = $this->skus;
+        $products = match (true) {
+            count($skus) === 0 => null,
+            count($skus) === 1 => 'Produk ' . $skus[0],
+            count($skus) <= 3 => count($skus) . ' produk (' . implode(', ', $skus) . ')',
+            default => count($skus) . ' produk (' . implode(', ', array_slice($skus, 0, 3)) . ', …)',
+        };
+        $racks = $this->racks ? 'Rak ' . implode(', ', $this->racks) : null;
+
+        if ($products) {
+            return $racks ? "{$products} · {$racks}" : "{$products} · semua rak";
+        }
+
+        return $racks ?? 'Seluruh gudang';
+    }
+
+    /**
+     * Apakah opname ini menghitung barang yang sama dengan cakupan lain?
+     * Bertabrakan jika raknya beririsan DAN produknya beririsan (kosong = semua).
+     */
+    public function overlaps(array $racks, array $skus): bool
+    {
+        $racksOverlap = !$this->racks || !$racks || array_intersect($this->racks, $racks);
+        $skusOverlap = !$this->skus || !$skus || array_intersect($this->skus, $skus);
+
+        return $racksOverlap && $skusOverlap;
     }
 
     // ✅ Relasi ke Warehouse (meskipun bukan foreign key constraint)

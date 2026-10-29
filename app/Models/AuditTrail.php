@@ -60,6 +60,7 @@ class AuditTrail extends Model
         'NEW_TOKEN' => 'Buat token makro baru',
         'CLEAR_CACHE' => 'Bersihkan cache',
         'IMPORT' => 'Import',
+        'IGNORE' => 'Abaikan SKU belum terdaftar',
         'UNDO_IMPORT' => 'Batalkan import',
         'SUBMIT' => 'Kirim untuk disetujui',
         'APPROVE' => 'Setujui',
