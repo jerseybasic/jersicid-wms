@@ -74,6 +74,9 @@
                             Minta Owner, Supervisor, atau Admin Gudang memetakan SKU ini ke SKU gudang, atau menambahkannya di Master SKU.
                         @endif
                     </p>
+                    @if ($canMap)
+                        <p class="text-xs text-slate-500 mt-1">Yang belum dipetakan tetap tercatat di <a href="{{ route('blocked-skus.index') }}" class="text-cyan-400 underline">SKU Terhambat</a>.</p>
+                    @endif
                 </div>
 
                 @if ($canMap)
@@ -113,7 +116,7 @@
                             @endforeach
                         </div>
                         <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-                            <p class="text-xs text-slate-500">Yang dikosongkan dilewati dan tetap tercatat di <a href="{{ route('blocked-skus.index') }}" class="text-cyan-400 underline">SKU Terhambat</a>. Owner dan Supervisor bisa mengubah pemetaan di Master Data → Pemetaan SKU.</p>
+                            <p class="text-xs text-slate-500">Yang dikosongkan dilewati. Owner dan Supervisor bisa mengubahnya di Master Data → Pemetaan SKU.</p>
                             <button type="submit" class="shrink-0 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">Simpan pemetaan dan periksa ulang</button>
                         </div>
                     </form>
