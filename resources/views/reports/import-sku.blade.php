@@ -50,13 +50,13 @@
                     Upload File Excel
                 </h3>
                 <div class="flex gap-2">
-                    <a href="{{ route('reports.download-template') }}" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
+                    <a href="{{ route('reports.download-template') }}" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-on-accent text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                         </svg>
                         Template Kosong
                     </a>
-                    <a href="{{ route('reports.download-template', ['with_stock' => true]) }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
+                    <a href="{{ route('reports.download-template', ['with_stock' => true]) }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
@@ -75,7 +75,7 @@
                     </svg>
                     <p class="text-sm text-slate-400 mb-2">Drag & drop file Excel di sini, atau</p>
                     <input type="file" name="file" id="fileInput" accept=".xlsx,.xls,.csv" required class="hidden">
-                    <button type="button" onclick="document.getElementById('fileInput').click()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">
+                    <button type="button" onclick="document.getElementById('fileInput').click()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-lg transition-all">
                         Pilih File
                     </button>
                     <p class="text-xs text-slate-500 mt-3">Format: .xlsx, .xls, .csv (Max 10MB)</p>
@@ -90,7 +90,7 @@
                         </svg>
                         Batal
                     </a>
-                    <button type="submit" id="submitBtn" class="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer border-2 border-slate-700">
+                    <button type="submit" id="submitBtn" class="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-on-accent font-bold rounded-xl shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer border-2 border-slate-700">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                         </svg>

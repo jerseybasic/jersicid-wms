@@ -50,7 +50,7 @@
                     <p>SKU baru dari import ini dihapus permanen beserta stok dan lokasi raknya, jadi kodenya bisa dipakai lagi. Perubahan stok SKU lain dibalik dengan selisih yang sama.</p>
                     <p class="text-xs text-slate-500">Semua penyesuaian tercatat di Laporan Pergerakan Stok dengan referensi {{ $plan['reference'] }}. Setelah dibatalkan, upload lagi file yang benar lewat Import.</p>
                 </div>
-                <button type="submit" class="shrink-0 px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-lg transition-all">
+                <button type="submit" class="shrink-0 px-6 py-2.5 bg-red-600 hover:bg-red-500 text-on-accent text-sm font-semibold rounded-lg transition-all">
                     Batalkan import
                 </button>
             </form>

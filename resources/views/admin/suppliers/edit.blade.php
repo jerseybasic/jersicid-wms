@@ -33,7 +33,7 @@
             </div>
             <div class="flex justify-end gap-3">
                 <a href="{{ route('suppliers.index') }}" class="btn-ghost px-4 py-2 rounded-lg border-2 border-slate-600 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white">Batal</a>
-                <button type="submit" class="bg-indigo-600 text-white px-6 py-2 rounded-lg font-semibold border-2 border-indigo-600 hover:bg-indigo-500 hover:text-white">Update</button>
+                <button type="submit" class="bg-indigo-600 text-on-accent px-6 py-2 rounded-lg font-semibold border-2 border-indigo-600 hover:bg-indigo-500 hover:text-on-accent">Update</button>
             </div>
         </form>
     </div>

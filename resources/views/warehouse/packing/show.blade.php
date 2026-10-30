@@ -85,7 +85,7 @@
         @if ($session->status === 'PENDING')
             <form method="POST" action="{{ route('gudang.packing.start', $session->id) }}">
                 @csrf
-                <button type="submit" class="w-full py-4 bg-purple-500 hover:bg-purple-400 text-white font-bold rounded-xl">Mulai packing</button>
+                <button type="submit" class="w-full py-4 bg-purple-500 hover:bg-purple-400 text-on-accent font-bold rounded-xl">Mulai packing</button>
             </form>
         @elseif ($session->status === 'CANCELLED')
             <div class="bg-red-900/20 border border-red-500/40 rounded-xl p-4 text-sm text-red-300">
@@ -147,7 +147,7 @@
                                 <button type="button" onclick="scanTap(@js(route('gudang.packing.tap', [$session->id, $item->id])), { delta: -1 })"
                                     class="py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl">−1</button>
                                 <button type="button" onclick="scanTap(@js(route('gudang.packing.tap', [$session->id, $item->id])), { delta: 1 })"
-                                    class="col-span-2 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl">+1 Masukkan</button>
+                                    class="col-span-2 py-3 bg-purple-600 hover:bg-purple-500 text-on-accent font-bold rounded-xl">+1 Masukkan</button>
                             </div>
 
                             <details class="text-xs text-slate-400">

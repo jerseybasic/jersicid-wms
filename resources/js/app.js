@@ -5,57 +5,72 @@ import Alpine from 'alpinejs';
 import '../css/app.css';
 
 // ============================================
-// THEME MANAGER - Dark/Light Mode
+// TEMA - Terang / Gelap / Sistem
+// Kelas awal sudah dipasang <x-theme-script> di <head> (tanpa kedip).
+// Di sini hanya mengganti, menyimpan, dan memberi tahu halaman (event "themechange").
 // ============================================
-class ThemeManager {
-    constructor() {
-        this.theme = localStorage.getItem('theme') || 'dark';
-    }
+const THEME_KEY = 'theme';
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+let themeSwitchTimer;
 
-    init() {
-        this.applyTheme(this.theme);
-        window.addEventListener('storage', (e) => {
-            if (e.key === 'theme') {
-                this.applyTheme(e.newValue || 'dark');
-            }
-        });
-    }
-
-    applyTheme(theme) {
-        const html = document.documentElement;
-        html.classList.remove('dark', 'light');
-
-        if (theme === 'light') {
-            html.classList.add('light');
-        } else {
-            html.classList.add('dark');
-        }
-
-        this.theme = theme;
-        localStorage.setItem('theme', theme);
-        this.updateToggleIcon(theme);
-    }
-
-    toggle() {
-        const newTheme = this.theme === 'dark' ? 'light' : 'dark';
-        this.applyTheme(newTheme);
-    }
-
-    updateToggleIcon(theme) {
-        const sunIcon = document.getElementById('sun-icon');
-        const moonIcon = document.getElementById('moon-icon');
-
-        if (sunIcon && moonIcon) {
-            if (theme === 'light') {
-                sunIcon.classList.remove('hidden');
-                moonIcon.classList.add('hidden');
-            } else {
-                sunIcon.classList.add('hidden');
-                moonIcon.classList.remove('hidden');
-            }
-        }
+function storedTheme() {
+    try {
+        return localStorage.getItem(THEME_KEY) || 'system';
+    } catch (e) {
+        return 'system';
     }
 }
+
+function resolveTheme(mode) {
+    return mode === 'dark' || (mode === 'system' && darkQuery.matches) ? 'dark' : 'light';
+}
+
+function applyTheme(mode, animate) {
+    const html = document.documentElement;
+    const resolved = resolveTheme(mode);
+
+    // Transisi warna hanya selama pergantian, bukan sepanjang waktu
+    if (animate && !html.classList.contains(resolved)) {
+        html.classList.add('theme-switching');
+        clearTimeout(themeSwitchTimer);
+        themeSwitchTimer = setTimeout(() => html.classList.remove('theme-switching'), 300);
+    }
+
+    html.classList.remove('dark', 'light');
+    html.classList.add(resolved);
+    html.style.colorScheme = resolved;
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { mode, theme: resolved } }));
+}
+
+window.theme = {
+    get mode() {
+        return storedTheme();
+    },
+    get current() {
+        return resolveTheme(storedTheme());
+    },
+    set(mode) {
+        try {
+            localStorage.setItem(THEME_KEY, mode);
+        } catch (e) {}
+        applyTheme(mode, true);
+    },
+    toggle() {
+        this.set(this.current === 'dark' ? 'light' : 'dark');
+    },
+};
+
+window.toggleTheme = () => window.theme.toggle();
+
+// Mode "Sistem" ikut berubah saat setelan perangkat berubah
+darkQuery.addEventListener('change', () => {
+    if (storedTheme() === 'system') applyTheme('system', true);
+});
+
+// Tab lain mengganti tema
+window.addEventListener('storage', (e) => {
+    if (e.key === THEME_KEY) applyTheme(storedTheme(), true);
+});
 
 // ============================================
 // LAYOUT MANAGER - Sidebar & Responsive
@@ -150,29 +165,6 @@ class LayoutManagerClass {
 // EXPOSE KE WINDOW (GLOBAL) - PENTING!
 // ============================================
 
-// Theme Manager - Global
-const themeManagerInstance = new ThemeManager();
-
-window.themeManager = {
-    theme: themeManagerInstance.theme,
-    toggle: function() {
-        themeManagerInstance.toggle();
-        this.theme = themeManagerInstance.theme;
-    },
-    init: function() {
-        themeManagerInstance.init();
-    }
-};
-
-// Global function untuk onclick handler di HTML
-window.toggleTheme = function() {
-    if (window.themeManager) {
-        window.themeManager.toggle();
-    } else {
-        console.error('❌ themeManager not loaded yet!');
-    }
-};
-
 // Layout Manager - Global Function untuk Alpine
 window.layoutManager = function() {
     const manager = new LayoutManagerClass();
@@ -241,8 +233,23 @@ window.openCameraScan = (onCode, options) => import('./camera-scan.js').then((m)
 // ============================================
 window.Alpine = Alpine;
 
-// Initialize theme manager sebelum Alpine start
-themeManagerInstance.init();
+// Tombol tema (dipakai di header & sidebar)
+Alpine.data('themeSwitch', () => ({
+    mode: window.theme.mode,
+    current: window.theme.current,
+    init() {
+        window.addEventListener('themechange', (e) => {
+            this.mode = e.detail.mode;
+            this.current = e.detail.theme;
+        });
+    },
+    set(mode) {
+        window.theme.set(mode);
+    },
+    toggle() {
+        window.theme.toggle();
+    },
+}));
 
 // Start Alpine
 Alpine.start();
@@ -280,11 +287,6 @@ window.addEventListener('load', () => {
     document.documentElement.classList.remove('page-loading');
     document.documentElement.classList.add('page-loaded');
 });
-
-// Initialize theme manager
-if (window.themeManager) {
-    window.themeManager.init();
-}
 
 // Tambahkan di app.js
 window.toggleSidebarCollapse = function() {

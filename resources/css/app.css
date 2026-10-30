@@ -96,3 +96,163 @@
         transform: translateY(0);
     }
 }
+
+/* ============================================
+   TEMA TERANG / GELAP
+   Warna slate & aksen diatur lewat CSS variable (lihat tailwind.config.js).
+   Transisi hanya dipasang ~0,3 detik saat tema diganti, dan hanya untuk warna,
+   supaya halaman tetap ringan dan tata letak tidak bergeser.
+   ============================================ */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+    transition: background-color .25s ease, border-color .25s ease, color .25s ease, fill .25s ease, stroke .25s ease, box-shadow .25s ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.theme-switching,
+    html.theme-switching *,
+    html.theme-switching *::before,
+    html.theme-switching *::after {
+        transition: none !important;
+    }
+}
+
+:root,
+html.dark {
+    --sidebar-bg: linear-gradient(180deg, #060B16 0%, #0A1830 60%, #0B2A40 100%);
+    --hero-bg: linear-gradient(135deg, #0A2342 0%, #0B3B66 55%, #0A5470 100%);
+    --hero-shadow: 0 16px 40px rgb(0 0 0 / 0.45);
+    --card-shadow: none;
+}
+
+html.light {
+    --sidebar-bg: linear-gradient(180deg, #0B2545 0%, #0B3B66 55%, #0E7490 100%);
+    --hero-bg: linear-gradient(135deg, #0B3B66 0%, #0B5A85 55%, #0E7490 100%);
+    --hero-shadow: 0 16px 40px rgb(11 59 102 / 0.28);
+    --card-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 6px 18px rgb(15 23 42 / 0.05);
+}
+
+@layer components {
+    /* Sidebar biru (sama di kedua tema, sedikit lebih gelap di mode gelap) */
+    .app-sidebar-bg {
+        background: var(--sidebar-bg);
+    }
+
+    .sb-label {
+        @apply px-3 pb-1 text-[10.5px] font-bold uppercase tracking-[0.12em] whitespace-nowrap;
+        color: #9CD3F0;
+    }
+
+    .sb-link {
+        @apply relative flex items-center gap-3 min-h-[2.625rem] px-3 mr-3 rounded-xl text-sm;
+        color: #D6ECFA;
+    }
+
+    .sb-link:hover {
+        background: rgb(255 255 255 / 0.10);
+        color: #FFFFFF;
+    }
+
+    .sb-link.is-active {
+        @apply font-bold;
+        background: rgb(255 255 255 / 0.16);
+        color: #FFFFFF;
+    }
+
+    /* Desktop: menu aktif menyatu dengan isi halaman (tab melengkung) */
+    @media (min-width: 1024px) {
+        .sb-link.is-active {
+            margin-right: 0;
+            border-radius: 1.375rem 0 0 1.375rem;
+            background: rgb(var(--c-slate-950));
+            color: rgb(var(--c-slate-100));
+        }
+
+        .sb-link.is-active::before,
+        .sb-link.is-active::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            width: 1.25rem;
+            height: 1.25rem;
+            pointer-events: none;
+        }
+
+        .sb-link.is-active::before {
+            top: -1.25rem;
+            background: radial-gradient(circle at 0 0, transparent 1.2rem, rgb(var(--c-slate-950)) 1.25rem);
+        }
+
+        .sb-link.is-active::after {
+            bottom: -1.25rem;
+            background: radial-gradient(circle at 0 100%, transparent 1.2rem, rgb(var(--c-slate-950)) 1.25rem);
+        }
+    }
+
+    /* Kartu standar: bayangan halus hanya di mode terang */
+    .card {
+        @apply bg-slate-900 border border-slate-800 rounded-2xl;
+        box-shadow: var(--card-shadow);
+    }
+
+    /* Banner sambutan dengan kotak kaca */
+    .hero-banner {
+        background: var(--hero-bg);
+        box-shadow: var(--hero-shadow);
+        color: #FFFFFF;
+    }
+
+    .glass-tile {
+        background: rgb(255 255 255 / 0.12);
+        border: 1px solid rgb(255 255 255 / 0.22);
+        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(12px);
+    }
+}
+
+/* ============================================
+   HALAMAN LOGIN (ilustrasi gudang + awan)
+   ============================================ */
+:root,
+html.dark {
+    --login-page-left: linear-gradient(160deg, #03070F 0%, #071226 60%, #0A1E33 100%);
+    --login-cloud2: rgb(255 255 255 / 0.07);
+    --login-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
+}
+
+html.light {
+    --login-page-left: linear-gradient(160deg, #08203D 0%, #0B3B66 60%, #0B5A85 100%);
+    --login-cloud2: rgb(255 255 255 / 0.45);
+    --login-shadow: 0 24px 60px rgb(11 59 102 / 0.18);
+}
+
+@layer components {
+    .login-cloud {
+        fill: rgb(var(--c-slate-900));
+    }
+
+    .login-cloud2 {
+        fill: var(--login-cloud2);
+    }
+
+    .login-field {
+        @apply flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 transition-colors;
+    }
+
+    .login-field:focus-within {
+        @apply border-cyan-500;
+        box-shadow: 0 0 0 4px rgb(var(--c-cyan-500) / 0.12);
+    }
+
+    .login-field input {
+        @apply w-full p-0 border-0 bg-transparent text-[15px] text-white placeholder-slate-500 focus:ring-0;
+    }
+
+    @media (min-width: 1024px) {
+        .login-page {
+            background: linear-gradient(90deg, transparent 50%, rgb(var(--c-slate-950)) 50%), var(--login-page-left);
+        }
+    }
+}
