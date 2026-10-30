@@ -5,6 +5,8 @@
                 <h2 class="font-semibold text-xl text-white">Manajemen Outbound</h2>
                 <p class="text-sm text-slate-400 mt-1">Kelola order, picking, dan packing</p>
             </div>
+            {{-- Akhir hari: order yang belum diproses kembali Pending untuk besok --}}
+            <a href="{{ route('gudang.closing') }}" class="shrink-0 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-lg border border-slate-700">Tutup kiriman hari ini</a>
         </div>
     </x-slot>
 
@@ -77,7 +79,7 @@
         @endif
 
         <!-- Filter & Table -->
-        <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden" x-data="bulkOrders(@js($orders->pluck('status', 'id')))">
+        <div class="bg-slate-900 border border-slate-800 rounded-lg shadow-xl overflow-hidden" x-data="bulkOrders(@js($orders->pluck('status', 'id')), @js(array_keys(array_filter($stockReady))))">
             <div class="p-4 border-b border-slate-800 flex flex-wrap gap-3">
                 <form method="GET" class="flex flex-wrap gap-2 flex-1">
                     <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari No. Order / Customer..." class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none flex-1 min-w-[200px]"/>
@@ -103,6 +105,11 @@
                     </select>
                     <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium">Filter</button>
                     <a href="{{ route('gudang.outbound') }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium border border-slate-700">Reset</a>
+                    {{-- Centang order yang barangnya sudah ada (Pending stok siap + Siap Picking), lalu picking gabungan --}}
+                    <button type="button" x-show="processable.length" @click="selectProcessable()" x-cloak
+                        class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded-lg text-sm font-medium border border-emerald-500/40">
+                        Pilih yang stoknya siap (<span x-text="processable.length"></span>)
+                    </button>
                     @if ($stats['ready'] > 0)
                         <a href="{{ route('gudang.label.shipping-bulk') }}" target="_blank" class="px-4 py-2 ml-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-all text-sm flex items-center gap-2 border border-slate-700">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
@@ -170,6 +177,9 @@
                                 <span class="text-xs px-2 py-1 rounded-full {{ $order->isWaitingStock() ? 'bg-orange-500/20 text-orange-300' : ($statusColors[$order->status] ?? 'bg-slate-500/20 text-slate-400') }}">
                                     {{ $order->status_label }}
                                 </span>
+                                @if ($order->status === 'PENDING' && isset($stockReady[$order->id]))
+                                    <span class="block w-max mt-1 text-[10px] font-semibold {{ $stockReady[$order->id] ? 'text-emerald-400' : 'text-orange-300' }}">{{ $stockReady[$order->id] ? 'Stok siap' : 'Stok kurang' }}</span>
+                                @endif
                             </td>
                             <td class="py-3 px-4 text-xs text-slate-400">
                                 {{ $order->created_at->format('d M Y') }}
@@ -198,6 +208,10 @@
                 <form method="POST" action="{{ route('gudang.outbound.bulk-status') }}" class="flex flex-wrap gap-2">
                     @csrf
                     <template x-for="id in selected" :key="id"><input type="hidden" name="ids[]" :value="id"></template>
+                    <button formaction="{{ route('gudang.outbound.bulk-pick') }}" x-show="count('PENDING', 'CONFIRMED')"
+                        class="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded-lg font-semibold">
+                        Picking gabungan (<span x-text="count('PENDING', 'CONFIRMED')"></span>)
+                    </button>
                     <button name="status" value="CONFIRMED" x-show="count('PENDING')" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-lg font-semibold">
                         Konfirmasi (<span x-text="count('PENDING')"></span>)
                     </button>
@@ -217,6 +231,13 @@
                         </button>
                     @endif
                 </form>
+                <form method="POST" action="{{ route('gudang.packing-batch.store') }}" x-show="count('PACKING')">
+                    @csrf
+                    <template x-for="id in selected" :key="id"><input type="hidden" name="order_ids[]" :value="id"></template>
+                    <button class="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded-lg font-semibold">
+                        Packing gabungan (<span x-text="count('PACKING')"></span>)
+                    </button>
+                </form>
                 <form method="GET" action="{{ route('gudang.label.shipping-bulk') }}" target="_blank" x-show="count('READY_TO_SHIP', 'SHIPPED', 'COMPLETED')">
                     <template x-for="id in selected" :key="id"><input type="hidden" name="ids[]" :value="id"></template>
                     <button class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded-lg font-semibold">
@@ -229,10 +250,17 @@
     </div>
 
     <script>
-        function bulkOrders(statuses) {
+        function bulkOrders(statuses, stockReady) {
             return {
                 statuses,
                 selected: [],
+                /** Order di halaman ini yang barangnya sudah ada: Pending dengan stok siap, atau Siap Picking */
+                get processable() {
+                    return Object.keys(this.statuses).filter(id => this.statuses[id] === 'CONFIRMED' || stockReady.includes(id));
+                },
+                selectProcessable() {
+                    this.selected = this.processable;
+                },
                 get allChecked() {
                     const ids = Object.keys(this.statuses);
                     return ids.length > 0 && ids.every(id => this.selected.includes(id));

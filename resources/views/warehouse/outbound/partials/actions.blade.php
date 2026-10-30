@@ -6,11 +6,28 @@
         <button class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded font-medium">{{ $order->isWaitingStock() ? 'Cek stok lagi' : 'Konfirmasi' }}</button>
     </form>
 @elseif($order->status === 'CONFIRMED')
-    <a href="{{ route('gudang.picking.create') }}" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded font-medium">Buat Picking</a>
+    {{-- Langsung ke layar scan; untuk beberapa order sekaligus, centang lalu Picking gabungan --}}
+    <form method="POST" action="{{ route('gudang.picking.store') }}">
+        @csrf
+        <input type="hidden" name="order_id" value="{{ $order->id }}">
+        <input type="hidden" name="start_now" value="1">
+        <button class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded font-medium">Mulai Picking</button>
+    </form>
 @elseif($order->status === 'PICKING')
-    <a href="{{ route('gudang.picking') }}" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Lihat Picking</a>
+    @php $picking = $order->pickingSession; @endphp
+    <a href="{{ $picking?->batch_id ? route('gudang.picking-batch.show', $picking->batch_id) : ($picking ? route('gudang.picking.show', $picking->id) : route('gudang.picking')) }}" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Lihat Picking</a>
 @elseif($order->status === 'PACKING')
-    <a href="{{ route('gudang.packing') }}" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Ke Packing</a>
+    @php $packing = $order->packingSession; @endphp
+    @if ($packing)
+        <a href="{{ $packing->packing_batch_id ? route('gudang.packing-batch.show', $packing->packing_batch_id) : route('gudang.packing.show', $packing->id) }}" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Lanjut Packing</a>
+    @else
+        <form method="POST" action="{{ route('gudang.packing.store') }}">
+            @csrf
+            <input type="hidden" name="order_id" value="{{ $order->id }}">
+            <input type="hidden" name="courier" value="{{ $order->courier }}">
+            <button class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Mulai Packing</button>
+        </form>
+    @endif
 @elseif($order->status === 'READY_TO_SHIP')
     {{-- Dikirim hanya lewat serah terima kurir; di sini cukup lengkapi resinya --}}
     @if(blank($order->tracking_number))

@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PickingBatch;
 use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Services\ShipDeadline;
 use App\Services\OrderCancellation;
 use App\Services\OrderReprocess;
+use App\Services\Picking;
 use App\Services\StockAvailability;
 use App\Services\WaitingStock;
 use Carbon\Carbon;
@@ -22,7 +24,7 @@ class OutboundController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Order::with('items.masterSku')->orderBy('created_at', 'desc');
+        $query = Order::with('items.masterSku', 'pickingSession:id,order_id,batch_id', 'packingSession:id,order_id,packing_batch_id')->orderBy('created_at', 'desc');
 
         // Filter Status; "Menunggu stok" adalah order Pending yang ditunda karena stoknya kurang
         if ($request->status === 'WAITING_STOCK') {
@@ -68,7 +70,10 @@ class OutboundController extends Controller
             'ready' => Order::where('status', 'READY_TO_SHIP')->count(),
         ];
 
-        return view('warehouse.outbound.index', compact('orders', 'stats', 'needs'));
+        // Order Pending yang stoknya cukup: bisa langsung dicentang lalu masuk picking gabungan
+        $stockReady = StockAvailability::readyMap($orders->getCollection());
+
+        return view('warehouse.outbound.index', compact('orders', 'stats', 'needs', 'stockReady'));
     }
 
     /**
@@ -109,7 +114,7 @@ class OutboundController extends Controller
         // Perubahan status manual (konfirmasi, batal, kirim, selesai) dari audit trail
         $labels = ['CONFIRMED' => ['Dikonfirmasi', 'blue'], 'CANCELLED' => ['Dibatalkan', 'red'], 'SHIPPED' => ['Dikirim', 'emerald'], 'COMPLETED' => ['Selesai', 'slate']];
         AuditTrail::with('user:id,name')
-            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE', 'WAITING_STOCK', 'REACTIVATE'])
+            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE', 'WAITING_STOCK', 'REACTIVATE', 'CARRY_OVER'])
             ->where('new_values', 'like', '%' . $order->order_number . '%')
             ->orderBy('created_at')
             ->get()
@@ -120,6 +125,11 @@ class OutboundController extends Controller
                 }
                 if ($trail->action === 'REACTIVATE') {
                     $steps->push(['at' => $trail->created_at, 'title' => 'Diaktifkan lagi', 'detail' => 'Kembali Pending setelah dibatalkan', 'user' => $trail->user?->name, 'color' => 'cyan']);
+
+                    return;
+                }
+                if ($trail->action === 'CARRY_OVER') {
+                    $steps->push(['at' => $trail->created_at, 'title' => 'Kembali Pending', 'detail' => $values['reason'] ?? 'Belum diproses saat tutup kiriman', 'user' => $trail->user?->name, 'color' => 'amber']);
 
                     return;
                 }
@@ -426,6 +436,70 @@ class OutboundController extends Controller
         }
 
         return $redirect;
+    }
+
+    /**
+     * Aksi massal "Picking gabungan": order Pending yang dicentang dikonfirmasi dulu (stoknya dicek seperti
+     * biasa), lalu semua order yang siap picking langsung digabung jadi satu picking gabungan.
+     * Satu order saja langsung jadi picking biasa. Order yang stoknya kurang ditunda (Menunggu stok).
+     */
+    public function bulkPick(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['string'],
+        ], ['ids.required' => 'Pilih minimal satu order.']);
+
+        $orders = Order::whereIn('id', $validated['ids'])->orderBy('ship_by')->orderBy('created_at')->get();
+
+        // Yang paling mendesak dikonfirmasi dulu, supaya stok terbatas jatuh ke batas kirim terdekat
+        $skipped = [];
+        foreach ($orders->where('status', 'PENDING') as $order) {
+            if ($error = $this->changeStatus($order, 'CONFIRMED', $request)) {
+                $skipped[] = $error;
+            }
+        }
+        foreach ($orders->whereNotIn('status', ['PENDING', 'CONFIRMED']) as $order) {
+            $skipped[] = "Order {$order->order_number} sudah {$order->status_label}.";
+        }
+
+        [$started, $left] = DB::transaction(function () use ($validated, $request) {
+            $ready = PickingBatchController::waitingOrders()->whereIn('id', $validated['ids'])->with('items')->lockForUpdate()->get();
+            $left = max(0, $ready->count() - PickingBatch::MAX_ORDERS);
+            $ready = $ready->take(PickingBatch::MAX_ORDERS)->values();
+
+            if ($ready->count() === 1) {
+                $session = Picking::createForOrder($ready->first(), auth()->id(), ['status' => 'IN_PROGRESS', 'started_at' => now()]);
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'CREATE',
+                    'module' => 'PICKING',
+                    'new_values' => json_encode(['session_number' => $session->session_number, 'order_id' => $session->order_id, 'via' => 'Outbound']),
+                    'ip_address' => $request->ip(),
+                ]);
+
+                return [$session, $left];
+            }
+
+            return [$ready->isEmpty() ? null : PickingBatchController::createBatch($ready, auth()->id(), $request->ip()), $left];
+        });
+
+        $skippedText = $skipped
+            ? count($skipped) . ' order dilewati: ' . implode(' ', array_slice($skipped, 0, 10)) . (count($skipped) > 10 ? ' (dan ' . (count($skipped) - 10) . ' lainnya)' : '')
+            : null;
+
+        if (!$started) {
+            return back()->with('error', $skippedText ?? 'Tidak ada order yang bisa dipicking.');
+        }
+
+        $leftText = $left ? " {$left} order lainnya tetap di antrean picking (maksimal " . PickingBatch::MAX_ORDERS . ' sekali jalan).' : '';
+        $redirect = $started instanceof PickingBatch
+            ? redirect()->route('gudang.picking-batch.show', $started)
+                ->with('success', 'Picking gabungan ' . $started->sessions()->count() . ' order dibuat. Siapkan keranjang bernomor 1 sampai ' . $started->sessions()->count() . ', lalu mulai scan.' . $leftText)
+            : redirect()->route('gudang.picking.show', $started->id)
+                ->with('success', 'Hanya 1 order yang siap, langsung picking biasa. Mulai scan barang.' . $leftText);
+
+        return $skippedText ? $redirect->with('error', $skippedText) : $redirect;
     }
 
     /**

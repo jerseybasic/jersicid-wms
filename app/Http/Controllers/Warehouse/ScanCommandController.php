@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Warehouse;
 use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\Order;
+use App\Models\PackingBatch;
 use App\Models\PackingSession;
 use App\Models\PickingBatch;
 use App\Models\PickingSession;
@@ -59,6 +60,12 @@ class ScanCommandController extends Controller
         }
         if ($order->status !== 'PACKING') {
             return $this->open("Membuka order {$order->order_number}...", route('gudang.outbound.show', $order->id));
+        }
+        // Keranjang milik packing gabungan: buka layarnya dengan keranjang ini terpilih
+        if (($packing = $order->packingSession) && $packing->packing_batch_id && $packing->status === 'IN_PROGRESS') {
+            $packing->batch?->update(['active_session_id' => $packing->id]);
+
+            return $this->open("Membuka packing gabungan, keranjang {$packing->basket_no}...", route('gudang.packing-batch.show', $packing->packing_batch_id));
         }
 
         $session = DB::transaction(function () use ($order, $request) {
@@ -127,27 +134,34 @@ class ScanCommandController extends Controller
     }
 
     /**
-     * Packing yang sedang dikerjakan user ini dulu; bila tidak ada, ambil order selesai picking yang terlama.
+     * Packing yang sedang dikerjakan user ini dulu; bila tidak ada, kemas sekaligus keranjang yang menunggu
+     * (packing gabungan), atau ambil order selesai picking yang terlama bila hanya ada satu.
      */
     private function startPacking(Request $request): JsonResponse
     {
         $userId = auth()->id();
 
+        $batch = PackingBatch::where('user_id', $userId)->where('status', 'IN_PROGRESS')->oldest()->first();
+        if ($batch) {
+            return $this->open("Melanjutkan packing gabungan {$batch->batch_number}...", route('gudang.packing-batch.show', $batch));
+        }
+
         $session = DB::transaction(function () use ($userId, $request) {
             $session = PackingSession::where('user_id', $userId)
+                ->whereNull('packing_batch_id')
                 ->whereIn('status', ['PENDING', 'IN_PROGRESS'])
                 ->oldest()
                 ->lockForUpdate()
                 ->first();
 
             if (!$session) {
-                $order = Order::where('status', 'PACKING')
-                    ->whereDoesntHave('packingSession')
-                    ->orderBy('ship_by')
-                    ->orderBy('picked_at')
-                    ->orderBy('created_at')
-                    ->lockForUpdate()
-                    ->first();
+                $together = Order::whereIn('id', Packing::autoOrders()->pluck('id'))->lockForUpdate()->get()
+                    ->filter(fn ($order) => $order->status === 'PACKING' && !$order->packingSession()->exists());
+                if ($together->count() > 1) {
+                    return Packing::createBatch($together, $userId, $request->ip());
+                }
+
+                $order = Packing::waitingOrders()->lockForUpdate()->first();
                 if (!$order) {
                     return null;
                 }
@@ -163,6 +177,9 @@ class ScanCommandController extends Controller
 
         if (!$session) {
             return response()->json(['ok' => false, 'message' => 'Tidak ada order yang menunggu packing.'], 404);
+        }
+        if ($session instanceof PackingBatch) {
+            return $this->open("Packing gabungan {$session->sessions()->count()} keranjang...", route('gudang.packing-batch.show', $session));
         }
 
         return $this->open('Mulai packing ' . ($session->order?->order_number ?? $session->session_number) . '...', route('gudang.packing.show', $session->id));

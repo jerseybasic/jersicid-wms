@@ -63,8 +63,10 @@ class OrderReprocess
         } else {
             // Barang sudah kembali ke rak lewat retur: diambil dan dikemas lagi dari awal
             if ($packing = $order->packingSession) {
+                $packingBatch = $packing->batch;
                 $packing->items()->delete();
                 $packing->delete();
+                Packing::refreshBatch($packingBatch);
             }
             if ($picking = $order->pickingSession) {
                 $batch = $picking->batch;
