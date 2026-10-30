@@ -280,5 +280,6 @@
             </main>
         </div>
     </div>
+    <x-sidebar-scroll />
 </body>
 </html>
