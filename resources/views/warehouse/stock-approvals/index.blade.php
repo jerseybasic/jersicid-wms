@@ -40,7 +40,7 @@
                         @endif
                     </div>
                     <a href="{{ route('gudang.opname.show', $opname->id) }}"
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-lg text-center">Periksa & setujui</a>
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-on-accent text-sm font-semibold rounded-lg text-center">Periksa & setujui</a>
                 </div>
             @empty
                 <p class="px-4 py-6 text-sm text-slate-500 text-center">Tidak ada opname yang menunggu persetujuan.</p>
@@ -74,7 +74,7 @@
                         <form method="POST" action="{{ route('gudang.stock-approvals.missing.approve', $report->id) }}"
                             onsubmit="return confirm('Barang memang tidak ada? Stok {{ $report->sku }} di {{ $report->bin_code }} akan dikurangi.')">
                             @csrf
-                            <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-lg">Setujui, nolkan stok</button>
+                            <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-on-accent text-sm font-semibold rounded-lg">Setujui, nolkan stok</button>
                         </form>
                         <form method="POST" action="{{ route('gudang.stock-approvals.missing.reject', $report->id) }}" class="flex gap-2">
                             @csrf

@@ -53,7 +53,7 @@
                     <input type="checkbox" name="confirm_now" value="1" checked class="mt-0.5 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500">
                     <span>Langsung konfirmasi, jadi pesanan masuk ke daftar picking.<br><span class="text-xs text-slate-500">Hapus centang jika ingin memeriksanya dulu di Outbound.</span></span>
                 </label>
-                <button type="submit" class="shrink-0 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition-all">
+                <button type="submit" class="shrink-0 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-lg transition-all">
                     Import {{ $ready->count() }} pesanan
                 </button>
             </form>
@@ -107,7 +107,7 @@
                         </div>
                         <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
                             <p class="text-xs text-slate-500">Yang dikosongkan dilewati. Owner dan Supervisor bisa mengubahnya di Master Data → Pemetaan SKU.</p>
-                            <button type="submit" class="shrink-0 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">Simpan pemetaan dan periksa ulang</button>
+                            <button type="submit" class="shrink-0 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-lg transition-all">Simpan pemetaan dan periksa ulang</button>
                         </div>
                     </form>
                 @endif

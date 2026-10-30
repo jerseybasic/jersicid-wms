@@ -41,7 +41,7 @@
                                 </div>
                                 @if ($item->bin_code)
                                     <button type="button" onclick="scanTap(@js(route('gudang.restock.tap', $item->id)), {})"
-                                        class="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl">+1 Sudah ditaruh di {{ $item->bin_code }}</button>
+                                        class="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-bold rounded-xl">+1 Sudah ditaruh di {{ $item->bin_code }}</button>
                                 @endif
                             </div>
                         @endforeach

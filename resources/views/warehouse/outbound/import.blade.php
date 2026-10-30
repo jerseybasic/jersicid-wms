@@ -28,7 +28,7 @@
                 <input id="file" type="file" name="file" required accept=".xlsx,.xls,.csv"
                        class="block w-full text-sm text-slate-300 file:mr-4 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-cyan-600 file:text-white file:font-semibold hover:file:bg-cyan-500 bg-slate-800 border border-slate-700 rounded-lg">
             </div>
-            <button type="submit" class="w-full sm:w-auto px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg transition-all">Lihat Pratinjau</button>
+            <button type="submit" class="w-full sm:w-auto px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-lg transition-all">Lihat Pratinjau</button>
             <p class="text-xs text-slate-500">Belum ada yang disimpan di langkah ini. Anda akan melihat daftar pesanannya dulu.</p>
         </form>
 

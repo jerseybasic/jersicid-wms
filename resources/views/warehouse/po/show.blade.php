@@ -68,12 +68,12 @@
 
                 @if ($isManager && $po->status === 'DRAFT')
                     <a href="{{ route('po.edit', $po->id) }}"
-                        class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition-all">Edit PO</a>
+                        class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Edit PO</a>
                     <form method="POST" action="{{ route('po.update-status', $po->id) }}" class="inline">
                         @csrf @method('PATCH')
                         <input type="hidden" name="status" value="PENDING">
                         <button type="submit"
-                            class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl transition-all">Ajukan untuk Approval</button>
+                            class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Ajukan untuk Approval</button>
                     </form>
                 @endif
 
@@ -82,7 +82,7 @@
                         onsubmit="return confirm('Yakin hapus PO ini?')">
                         @csrf @method('DELETE')
                         <button type="submit"
-                            class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl transition-all">Hapus PO</button>
+                            class="px-4 py-2 bg-red-600 hover:bg-red-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Hapus PO</button>
                     </form>
                 @endif
 
@@ -91,13 +91,13 @@
                         @csrf @method('PATCH')
                         <input type="hidden" name="status" value="APPROVED">
                         <button type="submit"
-                            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-all"
+                            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-xl transition-all"
                             onclick="return confirm('Approve PO ini?')">Approve PO</button>
                     </form>
 
                     <div x-data="{ open: false }" class="contents">
                         <button type="button" @click="open = !open" x-show="!open"
-                            class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl transition-all">Tolak</button>
+                            class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Tolak</button>
                         <form x-show="open" x-cloak method="POST" action="{{ route('po.update-status', $po->id) }}"
                             class="flex flex-wrap items-center gap-2 w-full">
                             @csrf @method('PATCH')
@@ -105,7 +105,7 @@
                             <input type="text" name="reason" required maxlength="500" placeholder="Alasan ditolak (wajib)"
                                 class="flex-1 min-w-[12rem] px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-amber-400 focus:outline-none">
                             <button type="submit"
-                                class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl transition-all">Kembalikan ke Draft</button>
+                                class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Kembalikan ke Draft</button>
                             <button type="button" @click="open = false" class="text-sm text-slate-400 hover:text-white">Batal</button>
                         </form>
                     </div>
@@ -116,7 +116,7 @@
                         @csrf @method('PATCH')
                         <input type="hidden" name="status" value="IN_PRODUCTION">
                         <button type="submit"
-                            class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold rounded-xl transition-all">Mulai Produksi</button>
+                            class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Mulai Produksi</button>
                     </form>
                 @endif
 
@@ -129,13 +129,13 @@
                         <input type="number" name="defect_count" min="0" placeholder="Jumlah defect"
                             class="w-36 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none">
                         <button type="submit"
-                            class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-xl transition-all">Tandai Siap Diambil</button>
+                            class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Tandai Siap Diambil</button>
                     </form>
                 @endif
 
                 @if (in_array($po->status, ['APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'READY']))
                     <a href="{{ route('gudang.inbound.create', ['po_id' => $po->id]) }}"
-                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-xl transition-all">Terima Barang (Inbound)</a>
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Terima Barang (Inbound)</a>
                 @endif
 
                 @if ($isManager && in_array($po->status, ['DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION']))

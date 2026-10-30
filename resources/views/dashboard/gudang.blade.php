@@ -1,139 +1,57 @@
 <x-app-layout>
-    <x-slot name="header">
-        <div>
-            <h2 class="font-semibold text-xl text-white leading-tight">
-                {{ __('Dashboard Gudang') }}
-            </h2>
-            <p class="text-sm text-slate-400 mt-1">Overview operasional gudang hari ini</p>
-        </div>
-    </x-slot>
+    <x-slot name="header">Dashboard</x-slot>
+    <x-slot name="subheader">Operasional gudang hari ini</x-slot>
 
-    <div class="space-y-6">
+    @php
+        $icons = [
+            'box' => 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+            'alert' => 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+            'bolt' => 'M13 10V3L4 14h7v7l9-11h-7z',
+            'check' => 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+        ];
+    @endphp
+
+    <div class="space-y-5 lg:space-y-6">
+
+        <x-dashboard.hero :title="'Selamat datang, ' . auth()->user()->name" subtitle="Kerjakan yang paling mendesak dulu, lalu lanjutkan antrean."
+            :tiles="[
+                ['label' => 'Inbound Hari Ini', 'value' => '+' . number_format($inboundToday ?? 0), 'sub' => 'Unit masuk', 'href' => route('gudang.inbound')],
+                ['label' => 'Outbound Hari Ini', 'value' => '-' . number_format($outboundToday ?? 0), 'sub' => 'Unit keluar', 'href' => route('gudang.outbound')],
+                ['label' => 'Picking Pending', 'value' => number_format($pickingPending ?? 0), 'sub' => 'Sesi menunggu', 'href' => route('gudang.picking')],
+                ['label' => 'Packing Pending', 'value' => number_format($packingPending ?? 0), 'sub' => 'Sesi menunggu', 'href' => route('gudang.packing')],
+            ]">
+            <x-slot name="actions">
+                <a href="{{ route('gudang.tugas') }}"
+                    class="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-white text-[#0B3B66] text-sm font-bold shadow hover:bg-sky-50 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                    Tugas Saya
+                </a>
+            </x-slot>
+        </x-dashboard.hero>
+
+        <!-- Angka utama -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+            <x-dashboard.stat label="Total Stok" :value="number_format($totalStock ?? 0)" :sub="'Nilai Rp ' . number_format(($stockValue ?? 0) / 1000000, 1) . 'M'" color="cyan" :icon="$icons['box']" />
+            <x-dashboard.stat label="Stok Menipis" :value="number_format($lowStock ?? 0)" sub="SKU di bawah minimum" color="red" :icon="$icons['alert']" />
+            <x-dashboard.stat label="Sedang Dikerjakan" :value="number_format($inProgress ?? 0)" sub="Sesi picking/packing" color="blue" :icon="$icons['bolt']" />
+            <x-dashboard.stat label="Selesai Hari Ini" :value="number_format($completedToday ?? 0)" sub="Sesi" color="emerald" :icon="$icons['check']" />
+        </div>
+
+        {{-- Aksi Cepat hanya muncul di tablet & HP --}}
+        <x-dashboard.quick-actions />
 
         <x-work-queue :items="$workItems" />
 
-        <!-- Stats Cards Row 1 -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <!-- Total Stok -->
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                <div class="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center mb-2">
-                    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                </div>
-                <p class="text-xs text-slate-400 mb-0.5">Total Stok</p>
-                <p class="text-xl font-bold text-white">{{ number_format($totalStock ?? 0) }}</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">Unit</p>
-            </div>
-
-            <!-- Nilai Stok -->
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                <div class="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center mb-2">
-                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                </div>
-                <p class="text-xs text-emerald-400 mb-0.5">Nilai Stok</p>
-                <p class="text-xl font-bold text-emerald-400">
-                    Rp {{ number_format(($stockValue ?? 0) / 1000000, 1) }}M
-                </p>
-            </div>
-
-            <!-- Low Stock -->
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                <div class="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center mb-2">
-                    <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                </div>
-                <p class="text-xs text-red-400 mb-0.5">Low Stock</p>
-                <p class="text-xl font-bold text-red-400">{{ $lowStock ?? 0 }}</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">Alert</p>
-            </div>
-
-            <!-- Inbound Hari Ini -->
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                <div class="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center mb-2">
-                    <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                    </svg>
-                </div>
-                <p class="text-xs text-purple-400 mb-0.5">Inbound Hari Ini</p>
-                <p class="text-xl font-bold text-cyan-400">+{{ $inboundToday ?? 0 }}</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">Unit</p>
-            </div>
-        </div>
-
-        <!-- Stats Cards Row 2 -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Picking Pending -->
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                <div class="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center mb-2">
-                    <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                </div>
-                <p class="text-xs text-amber-400 mb-0.5">Picking Pending</p>
-                <p class="text-xl font-bold text-white">{{ $pickingPending ?? 0 }}</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">Session</p>
-            </div>
-
-            <!-- Packing Pending -->
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                <div class="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center mb-2">
-                    <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                </div>
-                <p class="text-xs text-indigo-400 mb-0.5">Packing Pending</p>
-                {{-- ✅ FIX: Ganti $pickingPending → $packingPending --}}
-                <p class="text-xl font-bold text-white">{{ $packingPending ?? 0 }}</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">Session</p>
-            </div>
-
-            <!-- In Progress -->
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                <div class="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center mb-2">
-                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                </div>
-                <p class="text-xs text-blue-400 mb-0.5">In Progress</p>
-                <p class="text-xl font-bold text-white">{{ $inProgress ?? 0 }}</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">Session</p>
-            </div>
-
-            <!-- Completed Today -->
-            <div class="bg-slate-900 border border-slate-800 rounded-lg p-4">
-                <div class="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center mb-2">
-                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                </div>
-                <p class="text-xs text-emerald-400 mb-0.5">Selesai Hari Ini</p>
-                <p class="text-xl font-bold text-white">{{ $completedToday ?? 0 }}</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">Session</p>
-            </div>
-        </div>
-
         <!-- Stok menipis & pergerakan terakhir -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6">
 
             <!-- Low Stock Alerts -->
-            <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
-                <h3 class="text-base font-semibold text-white mb-4">Peringatan Stok Menipis</h3>
+            <div class="card p-5 lg:p-6">
+                <h3 class="text-base font-bold text-white mb-4">Peringatan Stok Menipis</h3>
                 <div class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
                     {{-- ✅ FIX: $lowStockItems → $lowStockProducts --}}
                     @forelse($lowStockProducts ?? [] as $item)
-                        <div class="flex items-center justify-between p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+                        <div class="flex items-center justify-between p-3 bg-red-500/10 border border-red-500/25 rounded-xl">
                             <div class="min-w-0 flex-1">
                                 <p class="text-sm font-medium text-white font-mono truncate">{{ $item->sku }}</p>
                                 <p class="text-xs text-slate-400 truncate">{{ $item->product_name }}</p>
@@ -157,12 +75,12 @@
             </div>
 
             <!-- Recent Movements -->
-            <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
-                <h3 class="text-base font-semibold text-white mb-4">Pergerakan Terakhir</h3>
+            <div class="card p-5 lg:p-6">
+                <h3 class="text-base font-bold text-white mb-4">Pergerakan Terakhir</h3>
                 <div class="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
                     @forelse($recentMovements ?? [] as $movement)
                         @php $isIn = in_array($movement->type, ['INBOUND', 'ADJUSTMENT_IN']); @endphp
-                        <div class="flex items-center gap-3 p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg">
+                        <div class="flex items-center gap-3 p-3 bg-slate-800/40 border border-slate-800 rounded-xl">
                             <div class="flex-shrink-0">
                                 <div class="w-8 h-8 {{ $isIn ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400' }} rounded-lg flex items-center justify-center">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

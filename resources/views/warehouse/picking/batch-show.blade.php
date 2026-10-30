@@ -97,7 +97,7 @@
                             <button type="button" onclick="scanTap(@js(route('gudang.picking-batch.undo', $batch)), { sku: @js($row['sku']) })"
                                 class="py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold rounded-xl">−1</button>
                             <button type="button" onclick="scanTap(@js(route('gudang.picking-batch.scan', $batch)), { code: @js($row['sku']), via: 'ketuk' })"
-                                class="col-span-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl">+1 Ambil</button>
+                                class="col-span-2 py-3 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-bold rounded-xl">+1 Ambil</button>
                         </div>
                         @unless ($complete)
                             <form method="POST" action="{{ route('gudang.picking-batch.missing', $batch) }}"

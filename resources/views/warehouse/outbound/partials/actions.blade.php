@@ -3,20 +3,20 @@
     <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}">
         @csrf @method('PATCH')
         <input type="hidden" name="status" value="CONFIRMED">
-        <button class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded font-medium">{{ $order->isWaitingStock() ? 'Cek stok lagi' : 'Konfirmasi' }}</button>
+        <button class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-on-accent text-xs rounded font-medium">{{ $order->isWaitingStock() ? 'Cek stok lagi' : 'Konfirmasi' }}</button>
     </form>
 @elseif($order->status === 'CONFIRMED')
-    <a href="{{ route('gudang.picking.create') }}" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs rounded font-medium">Buat Picking</a>
+    <a href="{{ route('gudang.picking.create') }}" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-on-accent text-xs rounded font-medium">Buat Picking</a>
 @elseif($order->status === 'PICKING')
     <a href="{{ route('gudang.picking') }}" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Lihat Picking</a>
 @elseif($order->status === 'PACKING')
-    <a href="{{ route('gudang.packing') }}" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Ke Packing</a>
+    <a href="{{ route('gudang.packing') }}" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-xs rounded font-medium">Ke Packing</a>
 @elseif($order->status === 'READY_TO_SHIP')
     {{-- Dikirim hanya lewat serah terima kurir; di sini cukup lengkapi resinya --}}
     @if(blank($order->tracking_number))
-        <a href="{{ route('gudang.outbound.edit', $order->id) }}" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded font-medium">Isi resi</a>
+        <a href="{{ route('gudang.outbound.edit', $order->id) }}" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-on-accent text-xs rounded font-medium">Isi resi</a>
     @endif
-    <a href="{{ route('gudang.handover') }}" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-medium">Serah terima</a>
+    <a href="{{ route('gudang.handover') }}" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-xs rounded font-medium">Serah terima</a>
 @elseif($order->status === 'SHIPPED')
     <form method="POST" action="{{ route('gudang.outbound.update-status', $order->id) }}">
         @csrf @method('PATCH')
@@ -55,7 +55,7 @@
                 ? 'Kembalikan order ' . $order->order_number . ' ke Siap Kirim? Resinya tetap sama dan bisa di-scan lagi di Serah Terima.'
                 : 'Proses ulang order ' . $order->order_number . '? Barangnya sudah kembali lewat retur, jadi order masuk antrean picking lagi dengan resi yang sama.'))">
             @csrf
-            <button class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded font-medium">Proses ulang</button>
+            <button class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-on-accent text-xs rounded font-medium">Proses ulang</button>
         </form>
     @endif
 @endif
@@ -64,6 +64,6 @@
     <form method="POST" action="{{ route('gudang.outbound.reactivate', $order->id) }}"
         onsubmit="return confirm(@js('Aktifkan lagi order ' . $order->order_number . '? Order kembali Pending seperti order baru, lalu bisa dikonfirmasi dan diproses lagi.'))">
         @csrf
-        <button class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-medium">Aktifkan lagi</button>
+        <button class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-xs rounded font-medium">Aktifkan lagi</button>
     </form>
 @endif

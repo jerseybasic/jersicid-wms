@@ -63,7 +63,7 @@
                     <option value="COMPLETED" {{ request('status') == 'COMPLETED' ? 'selected' : '' }}>Selesai</option>
                 </select>
 
-                <button type="submit" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition-all text-sm">Filter</button>
+                <button type="submit" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-on-accent font-semibold rounded-lg transition-all text-sm">Filter</button>
                 <a href="{{ route('gudang.picking') }}" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg border border-slate-700 transition-all text-sm">Reset</a>
                 <a href="{{ route('gudang.picking-batch.create') }}" class="px-4 py-2 ml-auto bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold rounded-xl border border-cyan-500/40 transition-all text-sm">
                     Picking Gabungan
