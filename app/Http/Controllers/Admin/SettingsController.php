@@ -181,7 +181,9 @@ class SettingsController extends Controller
     public function profile()
     {
         $user = Auth::user();
-        return view('settings.profile', compact('user'));
+        // Hanya Owner yang punya halaman Settings, jadi tombol kembali selalu ke dashboard
+        $backUrl = route($user->role === 'OWNER' ? 'dashboard.owner' : 'dashboard.gudang');
+        return view('settings.profile', compact('user', 'backUrl'));
     }
 
     /** Tampilkan foto profil seorang anggota (semua yang login boleh melihat) */

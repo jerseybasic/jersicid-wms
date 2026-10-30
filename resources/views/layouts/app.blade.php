@@ -761,6 +761,7 @@
             </main>
         </div>
     </div>
+    <x-sidebar-scroll />
     <!-- ✅ FIX: Load JS dengan defer di footer -->
     @vite(['resources/js/app.js'])
 </body>

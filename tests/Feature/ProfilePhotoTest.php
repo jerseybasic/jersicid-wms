@@ -81,4 +81,13 @@ class ProfilePhotoTest extends TestCase
         auth()->logout();
         $this->get($url)->assertRedirect(route('login'));
     }
+
+    public function test_profile_back_button_goes_to_role_dashboard(): void
+    {
+        foreach (['OWNER' => 'dashboard.owner', 'SUPERVISOR' => 'dashboard.gudang', 'STAFF_GUDANG' => 'dashboard.gudang'] as $role => $dashboard) {
+            $this->actingAs($this->userWithRole($role))->get(route('settings.update-profile'))
+                ->assertOk()
+                ->assertViewHas('backUrl', route($dashboard));
+        }
+    }
 }
