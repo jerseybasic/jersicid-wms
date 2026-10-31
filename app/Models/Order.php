@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Services\OrderItemChange;
 use App\Services\ShipDeadline;
 use Illuminate\Support\Str;
 
@@ -150,10 +151,26 @@ class Order extends Model
         return !in_array($this->status, ['COMPLETED', 'CANCELLED'], true);
     }
 
-    /** Item order masih boleh diubah: belum ada sesi picking */
-    public function itemsEditable(): bool
+    /**
+     * Item order masih boleh diganti oleh user ini: sebelum picking semua yang bisa mengubah order,
+     * setelah picking dimulai (sampai sebelum dikirim) hanya Owner, Supervisor, atau Admin Gudang.
+     */
+    public function itemsEditable(?User $user = null): bool
     {
-        return in_array($this->status, ['PENDING', 'CONFIRMED'], true) && !$this->pickingSession;
+        if (!in_array($this->status, OrderItemChange::STATUSES, true)) {
+            return false;
+        }
+        if (!$this->itemsInProcess()) {
+            return true;
+        }
+
+        return $user !== null && in_array($user->role, OrderItemChange::ROLES, true);
+    }
+
+    /** Order sudah mulai di-picking, jadi mengganti item bisa membuat barang harus dikembalikan ke rak */
+    public function itemsInProcess(): bool
+    {
+        return !in_array($this->status, ['PENDING', 'CONFIRMED'], true) || $this->pickingSession !== null;
     }
 
     /** Order dengan nomor order atau nomor resi ini (huruf besar/kecil diabaikan) */

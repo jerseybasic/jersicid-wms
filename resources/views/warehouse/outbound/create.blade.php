@@ -1,7 +1,8 @@
 <x-app-layout>
     @php
         $editing = isset($order);
-        $itemsEditable = !$editing || $order->itemsEditable();
+        $itemsEditable = !$editing || $order->itemsEditable(auth()->user());
+        $itemsInProcess = $editing && $order->itemsInProcess();
         $initialItems = old('items', $editing ? $order->items->map(fn ($item) => ['sku' => $item->sku, 'qty' => $item->qty_ordered])->values()->all() : []);
         $value = fn ($field) => old($field, $editing ? $order->{$field} : null);
     @endphp
@@ -96,7 +97,9 @@
             @if (!$itemsEditable)
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
                     <h3 class="text-lg font-semibold text-white mb-2">Item Order</h3>
-                    <p class="text-sm text-amber-400 mb-4">Item tidak bisa diubah karena order sudah mulai di-picking.</p>
+                    <p class="text-sm text-amber-400 mb-4">{{ in_array($order->status, \App\Services\OrderItemChange::STATUSES, true)
+                        ? 'Order sudah mulai di-picking. Item hanya bisa diganti oleh Owner, Supervisor, atau Admin Gudang.'
+                        : 'Item tidak bisa diganti karena paket sudah dikirim. Pakai retur jika barangnya kembali.' }}</p>
                     <div class="divide-y divide-slate-800 text-sm">
                         @foreach ($order->items as $item)
                             <div class="py-2 flex items-center justify-between gap-3">
@@ -110,7 +113,7 @@
                     </div>
                 </div>
             @else
-            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+            <div id="item-order" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
                 <div class="flex items-center justify-between mb-5">
                     <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                         <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -125,6 +128,13 @@
                         Tambah Item
                     </button>
                 </div>
+
+                @if ($itemsInProcess)
+                    <div class="mb-5 p-4 bg-amber-900/20 border border-amber-500/40 rounded-xl text-sm text-amber-200 space-y-1">
+                        <p class="font-semibold text-amber-300">Order ini sudah mulai diproses ({{ $order->status_label }}).</p>
+                        <p>Jika item diganti: barang yang masih dipakai tetap di keranjang, barang yang tidak dipakai lagi masuk daftar <span class="font-semibold">Kembalikan ke Rak</span>, item baru ditambahkan ke sesi picking yang sama, dan paket dikemas ulang.</p>
+                    </div>
+                @endif
 
                 <!-- Summary -->
                 <div class="grid grid-cols-2 gap-3 mb-6">

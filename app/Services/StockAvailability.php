@@ -23,6 +23,18 @@ class StockAvailability
     public static function shortages(Order $order): array
     {
         $needs = $order->items()->groupBy('sku')->selectRaw('sku, SUM(qty_ordered) as need')->pluck('need', 'sku');
+
+        return self::shortagesFor($needs->all(), $order->id);
+    }
+
+    /**
+     * Sama seperti shortages, untuk kebutuhan [sku => qty] yang belum tersimpan di order
+     * (misalnya sisa yang masih harus diambil saat item order diganti). Order exceptOrderId tidak
+     * dihitung sebagai pemakai stok.
+     */
+    public static function shortagesFor(array $needs, ?string $exceptOrderId = null): array
+    {
+        $needs = collect($needs)->filter(fn ($qty) => (int) $qty > 0);
         if ($needs->isEmpty()) {
             return [];
         }
@@ -31,7 +43,7 @@ class StockAvailability
             ->selectRaw('sku, SUM(qty) as qty')->pluck('qty', 'sku');
 
         $committed = OrderItem::whereIn('sku', $needs->keys())
-            ->whereHas('order', fn ($q) => $q->whereIn('status', self::COMMITTED_STATUSES)->whereKeyNot($order->id))
+            ->whereHas('order', fn ($q) => $q->whereIn('status', self::COMMITTED_STATUSES)->when($exceptOrderId, fn ($q) => $q->whereKeyNot($exceptOrderId)))
             ->groupBy('sku')
             ->selectRaw('sku, SUM(qty_ordered - qty_picked) as qty')
             ->pluck('qty', 'sku');

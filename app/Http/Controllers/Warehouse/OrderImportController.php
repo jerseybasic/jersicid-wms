@@ -11,6 +11,8 @@ use App\Models\SkuAlias;
 use App\Models\UnregisteredSku;
 use App\Http\Controllers\Admin\BlockedSkuController;
 use App\Services\BigSellerOrderImport;
+use App\Services\OrderCancellation;
+use App\Services\OrderItemChange;
 use App\Services\ShipDeadline;
 use App\Services\StockAvailability;
 use Carbon\Carbon;
@@ -172,6 +174,7 @@ class OrderImportController extends Controller
             'unknown' => $unknown,
             'canMap' => in_array(auth()->user()->role, SkuAlias::MANAGER_ROLES, true),
             'canCreateSku' => in_array(auth()->user()->role, BlockedSkuController::CREATE_SKU_ROLES, true),
+            'canChangeInProcess' => in_array(auth()->user()->role, OrderItemChange::ROLES, true),
             'skuOptions' => $skuOptions,
         ]);
     }
@@ -181,6 +184,8 @@ class OrderImportController extends Controller
         $validated = $request->validate([
             'token' => ['required', 'string'],
             'confirm_now' => ['nullable', 'boolean'],
+            'apply' => ['nullable', 'array'],
+            'apply.*' => ['string'],
         ]);
 
         $orders = Cache::pull($this->cacheKey($validated['token']))['orders'] ?? null;
@@ -190,12 +195,53 @@ class OrderImportController extends Controller
         }
 
         $confirmNow = $request->boolean('confirm_now');
+        $apply = array_map('strtoupper', $validated['apply'] ?? []);
         $created = [];
         $confirmed = 0;
         $skipped = 0;
+        $changed = [];
+        $cancelled = [];
+        $failed = [];
+        $toReturn = 0;
 
-        DB::transaction(function () use ($orders, $confirmNow, $request, &$created, &$confirmed, &$skipped) {
+        DB::transaction(function () use ($orders, $confirmNow, $apply, $request, &$created, &$confirmed, &$skipped, &$changed, &$cancelled, &$failed, &$toReturn) {
             foreach ($orders as $data) {
+                // Pesanan yang sudah ada: hanya diubah jika dicentang di pratinjau
+                if (!empty($data['updatable'])) {
+                    if (!in_array($data['order_number'], $apply, true)) {
+                        $skipped++;
+                        continue;
+                    }
+                    try {
+                        DB::transaction(function () use ($data, $request, &$changed, &$cancelled, &$toReturn) {
+                            $order = Order::lockForUpdate()->findOrFail($data['existing']['id']);
+                            if ($data['action'] === 'cancel') {
+                                $this->cancelExisting($order, $request);
+                                $cancelled[] = $order->order_number;
+
+                                return;
+                            }
+
+                            if (!$order->itemsEditable(auth()->user())) {
+                                throw new \RuntimeException("Order {$order->order_number} sudah mulai di-picking; itemnya hanya bisa diganti oleh Owner, Supervisor, atau Admin Gudang.");
+                            }
+                            // Order bisa saja diubah orang lain setelah pratinjau dibuat
+                            if (!OrderItemChange::same(OrderItemChange::current($order), $data['change']['from'])) {
+                                throw new \RuntimeException("Order {$order->order_number} sudah berubah sejak pratinjau dibuat. Upload ulang filenya.");
+                            }
+                            $prices = collect($data['items'])->mapWithKeys(fn ($item) => [$item['sku'] => $item['price']])->all();
+                            $summary = OrderItemChange::apply($order, $data['change']['to'], $prices, auth()->id(), $request->ip(), 'import ulang BigSeller');
+                            if ($summary) {
+                                $changed[] = $order->order_number;
+                                $toReturn += collect($summary['to_return'])->sum('qty');
+                            }
+                        });
+                    } catch (\RuntimeException $e) {
+                        $failed[] = $e->getMessage();
+                    }
+                    continue;
+                }
+
                 // Cek ulang saat menyimpan: bisa saja sudah diimpor dari tab lain
                 if (!$data['importable'] || Order::withTrashed()->where('order_number', $data['order_number'])->exists()) {
                     $skipped++;
@@ -239,27 +285,87 @@ class OrderImportController extends Controller
                 'user_id' => auth()->id(),
                 'action' => 'IMPORT',
                 'module' => 'OUTBOUND',
-                'new_values' => json_encode(['source' => 'BigSeller', 'confirmed' => $confirmed, 'orders' => $created]),
+                'new_values' => json_encode(array_filter([
+                    'source' => 'BigSeller',
+                    'confirmed' => $confirmed,
+                    'orders' => $created,
+                    'changed' => $changed,
+                    'cancelled' => $cancelled,
+                ], fn ($value) => $value !== [])),
                 'ip_address' => $request->ip(),
             ]);
         });
 
-        $message = count($created) . ' pesanan berhasil diimpor';
-        if ($confirmNow && $confirmed === count($created)) {
-            $message .= ' dan langsung masuk daftar picking.';
-        } elseif ($confirmNow && $confirmed === 0) {
-            $message .= ', tetapi semuanya tetap Pending karena stoknya kurang.';
-        } elseif ($confirmNow) {
-            $pending = count($created) - $confirmed;
-            $message .= ". {$confirmed} langsung masuk daftar picking, {$pending} tetap Pending karena stoknya kurang.";
-        } else {
-            $message .= '.';
+        $parts = [];
+        if ($created || (!$changed && !$cancelled)) {
+            $message = count($created) . ' pesanan berhasil diimpor';
+            if ($confirmNow && $created && $confirmed === count($created)) {
+                $message .= ' dan langsung masuk daftar picking.';
+            } elseif ($confirmNow && $created && $confirmed === 0) {
+                $message .= ', tetapi semuanya tetap Pending karena stoknya kurang.';
+            } elseif ($confirmNow && $created) {
+                $pending = count($created) - $confirmed;
+                $message .= ". {$confirmed} langsung masuk daftar picking, {$pending} tetap Pending karena stoknya kurang.";
+            } else {
+                $message .= '.';
+            }
+            $parts[] = $message;
+        }
+        if ($changed) {
+            $parts[] = count($changed) . ' pesanan diganti itemnya (' . implode(', ', $changed) . ').';
+        }
+        if ($cancelled) {
+            $parts[] = count($cancelled) . ' pesanan dibatalkan (' . implode(', ', $cancelled) . ').';
+        }
+        if ($toReturn) {
+            $parts[] = "{$toReturn} pcs barang lama perlu dikeluarkan dari keranjang/paket dan dikembalikan lewat menu Kembalikan ke Rak.";
         }
         if ($skipped) {
-            $message .= " {$skipped} pesanan dilewati.";
+            $parts[] = "{$skipped} pesanan dilewati.";
         }
 
-        return redirect()->route('gudang.outbound')->with(count($created) ? 'success' : 'error', $message);
+        $redirect = redirect()->route('gudang.outbound');
+        if ($created || $changed || $cancelled) {
+            $redirect = $redirect->with('success', implode(' ', $parts));
+            if ($failed) {
+                $redirect = $redirect->with('error', 'Gagal: ' . implode(' ', $failed));
+            }
+        } else {
+            $redirect = $redirect->with('error', implode(' ', array_merge($parts, $failed)));
+        }
+
+        return $redirect;
+    }
+
+    /**
+     * Pesanan yang dibatalkan di marketplace ikut dibatalkan di WMS. Order yang sedang diproses
+     * memakai alur pembatalan biasa (barang yang sudah diambil masuk daftar Kembalikan ke Rak).
+     */
+    private function cancelExisting(Order $order, Request $request): void
+    {
+        $reason = 'Dibatalkan di marketplace (import ulang BigSeller)';
+        if (in_array($order->status, Order::IN_PROCESS_STATUSES, true)) {
+            if (!in_array(auth()->user()->role, OrderCancellation::ROLES, true)) {
+                throw new \RuntimeException("Order {$order->order_number} sedang diproses; hanya Owner, Supervisor, atau Admin Gudang yang bisa membatalkannya.");
+            }
+            OrderCancellation::cancel($order, $reason, auth()->id(), $request->ip());
+
+            return;
+        }
+        if (!in_array($order->status, ['PENDING', 'CONFIRMED'], true)) {
+            throw new \RuntimeException("Order {$order->order_number} ({$order->status_label}) tidak bisa dibatalkan.");
+        }
+
+        $oldStatus = $order->status;
+        $order->update(['status' => 'CANCELLED']);
+        AuditTrail::create([
+            'user_id' => auth()->id(),
+            'action' => 'UPDATE_STATUS',
+            'module' => 'OUTBOUND',
+            'old_values' => json_encode(['status' => $oldStatus]),
+            'new_values' => json_encode(['status' => 'CANCELLED', 'order_number' => $order->order_number, 'reason' => $reason]),
+            'ip_address' => $request->ip(),
+        ]);
     }
 
     /** Batas kirim dari file; jika tidak ada, dihitung dari waktu pesanan dibuat di marketplace */

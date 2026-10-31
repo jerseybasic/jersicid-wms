@@ -75,6 +75,7 @@ class AuditTrail extends Model
         'PACK_PROBLEM' => 'Masalah saat packing',
         'WAITING_STOCK' => 'Menunggu stok',
         'REACTIVATE' => 'Aktifkan lagi',
+        'CHANGE_ITEMS' => 'Ganti item order',
         'HANDOVER' => 'Serah terima',
         'TRANSFER' => 'Transfer stok',
         'INBOUND' => 'Barang masuk',

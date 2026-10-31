@@ -75,7 +75,7 @@
 
         @if ($toRestock > 0)
             <a href="{{ route('gudang.restock') }}" class="flex items-center justify-between gap-3 bg-slate-900 border border-red-500/40 rounded-2xl p-4">
-                <span class="text-sm text-slate-300"><span class="text-lg font-bold text-red-400">{{ $toRestock }}</span> pcs dari order batal belum dikembalikan ke rak</span>
+                <span class="text-sm text-slate-300"><span class="text-lg font-bold text-red-400">{{ $toRestock }}</span> pcs dari order batal/diganti belum dikembalikan ke rak</span>
                 <span class="text-sm font-bold text-red-400 shrink-0">Kembalikan</span>
             </a>
         @endif

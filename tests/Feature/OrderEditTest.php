@@ -118,28 +118,34 @@ class OrderEditTest extends TestCase
         $this->assertSame(0, AuditTrail::where('action', 'UPDATE')->count());
     }
 
-    public function test_items_are_locked_once_picking_started(): void
+    public function test_items_are_locked_for_staff_once_picking_started(): void
     {
         $admin = $this->userWithRole('ADMIN_GUDANG');
+        $staff = $this->userWithRole('STAFF_GUDANG');
         $this->makeSku('JSC-A-L');
         $this->putStock('JSC-A-L', 'A1-01', 10);
         $order = $this->createOrder($admin, [['sku' => 'JSC-A-L', 'qty' => 2]]);
         $this->patch(route('gudang.outbound.update-status', $order->id), ['status' => 'CONFIRMED']);
         $this->post(route('gudang.picking.store'), ['order_id' => $order->id])->assertSessionHas('success');
 
-        $this->get(route('gudang.outbound.edit', $order->id))
+        // Staf: item terkunci, data lain tetap bisa diubah
+        $this->actingAs($staff)->get(route('gudang.outbound.edit', $order->id))
             ->assertOk()
-            ->assertSee('Item tidak bisa diubah karena order sudah mulai di-picking.');
+            ->assertSee('Item hanya bisa diganti oleh Owner, Supervisor, atau Admin Gudang.');
 
         $this->put(route('gudang.outbound.update', $order->id), $this->payload($order, ['items' => [['sku' => 'JSC-A-L', 'qty' => 5]]]))
             ->assertSessionHasErrors('items');
 
-        // Tanpa item, data lain tetap bisa diubah
         $payload = $this->payload($order, ['customer_phone' => '0899']);
         unset($payload['items']);
         $this->put(route('gudang.outbound.update', $order->id), $payload)->assertSessionHas('success');
         $this->assertSame('0899', $order->fresh()->customer_phone);
         $this->assertSame(2, $order->fresh()->items->first()->qty_ordered);
+
+        // Admin Gudang tetap bisa mengganti item, dengan peringatan bahwa order sudah diproses
+        $this->actingAs($admin)->get(route('gudang.outbound.edit', $order->id))
+            ->assertOk()
+            ->assertSee('Order ini sudah mulai diproses');
     }
 
     public function test_completed_or_cancelled_order_cannot_be_changed(): void

@@ -115,7 +115,7 @@ class BigSellerImportTest extends TestCase
             ->assertRedirect(route('gudang.outbound.import'))->assertSessionHas('error');
 
         $again = $this->post(route('gudang.outbound.import.preview'), [
-            'file' => $this->upload([$this->row('261019191AR592', 'JER-GHOTIC-HITAM-M', '2')]),
+            'file' => $this->upload([$this->row('261019191AR592', 'JER-GHOTIC-HITAM-M', '3'), $this->row('261019191AR592', 'JER-RETRO-NAVY-M', '1')]),
         ])->assertSee('Sudah pernah diimpor')->assertDontSee('Import 1 pesanan');
         $this->post(route('gudang.outbound.import.store'), ['token' => $again->viewData('token')])
             ->assertSessionHas('error');
