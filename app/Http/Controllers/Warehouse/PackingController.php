@@ -215,39 +215,7 @@ class PackingController extends Controller
      */
     private function applyPack(PackingSession $session, PackingSessionItem $item, int $qtyPacked): void
     {
-        if ($session->status !== 'IN_PROGRESS') {
-            throw new \RuntimeException($session->status === 'CANCELLED' ? Picking::CANCELLED_MESSAGE : 'Mulai sesi packing dulu sebelum mengemas barang.');
-        }
-        // Setelah lapor masalah, order kembali ke picking sampai barang penggantinya diambil
-        if ($qtyPacked > $item->qty_packed && $session->order?->status === 'PICKING') {
-            throw new \RuntimeException('Tunggu barang pengganti diambil dulu, lalu lanjutkan packing.');
-        }
-
-        $qtyPacked = min($qtyPacked, $item->qty_ordered);
-
-        $item->update([
-            'qty_packed' => $qtyPacked,
-            'status' => $qtyPacked >= $item->qty_ordered ? 'COMPLETED' : ($qtyPacked > 0 ? 'PARTIAL' : 'PENDING'),
-        ]);
-
-        $item->orderItem?->update(['qty_packed' => $qtyPacked]);
-
-        $allPacked = $session->items()->whereColumn('qty_packed', '<', 'qty_ordered')->doesntExist();
-
-        if ($allPacked) {
-            $session->update([
-                'status' => 'COMPLETED',
-                'completed_at' => now(),
-            ]);
-
-            // Semua barang sudah dikemas: order siap diserahkan ke kurir
-            $session->order->update([
-                'status' => 'READY_TO_SHIP',
-                'packed_by' => auth()->id(),
-                'packed_at' => now(),
-                'courier' => $session->order->courier ?? $session->courier,
-            ]);
-        }
+        Packing::apply($session, $item, $qtyPacked, auth()->id());
     }
 
     /**
@@ -451,7 +419,9 @@ class PackingController extends Controller
         DB::transaction(function () use ($session, $user) {
             $session->order?->items()->update(['qty_packed' => 0]);
             $session->items()->delete();
+            $batch = $session->batch;
             $session->delete();
+            Packing::refreshBatch($batch);
 
             AuditTrail::create([
                 'user_id' => $user->id,

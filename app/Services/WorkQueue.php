@@ -92,9 +92,9 @@ class WorkQueue
 
         $items[] = [
             'key' => 'to_restock',
-            'label' => 'Barang order batal belum kembali ke rak',
+            'label' => 'Barang order batal/diganti belum kembali ke rak',
             'hint' => 'Scan barang ke raknya',
-            'count' => (int) OrderCancellation::pendingItems()->sum('qty_picked'),
+            'count' => OrderItemChange::pendingRestockQty(),
             'url' => route('gudang.restock'),
             'color' => 'red',
         ];

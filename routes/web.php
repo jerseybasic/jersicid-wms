@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\InsightReportController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\SkuAliasController;
+use App\Http\Controllers\Admin\BlockedSkuController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Warehouse\PurchaseOrderController;
 use App\Http\Controllers\Warehouse\CourierHandoverController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\Warehouse\OrderImportController;
 use App\Http\Controllers\Warehouse\OutboundController;
 use App\Http\Controllers\Warehouse\PickingBatchController;
 use App\Http\Controllers\Warehouse\PickingController;
+use App\Http\Controllers\Warehouse\PackingBatchController;
 use App\Http\Controllers\Warehouse\PackingController;
 use App\Http\Controllers\Warehouse\TransferController;
 use App\Http\Controllers\Warehouse\ReplenishmentController;
@@ -87,6 +89,16 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])
         Route::delete('/{skuAlias}', [SkuAliasController::class, 'destroy'])->name('destroy');
     });
 
+// SKU terhambat (belum terdaftar / belum punya rak): Admin Gudang juga, sama seperti pemetaan dari pratinjau import
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG'])
+    ->prefix('sku-terhambat')
+    ->name('blocked-skus.')
+    ->group(function () {
+        Route::get('/', [BlockedSkuController::class, 'index'])->name('index');
+        Route::post('/petakan', [BlockedSkuController::class, 'map'])->name('map');
+        Route::post('/{unregisteredSku}/abaikan', [BlockedSkuController::class, 'ignore'])->name('ignore');
+    });
+
 // ==================== SUPPLIER (OWNER & SUPERVISOR) ====================
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR'])->prefix('suppliers')->group(function () {
     Route::get('/', [SupplierController::class, 'index'])->name('suppliers.index');
@@ -112,6 +124,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG'])
         Route::put('/{id}', [PurchaseOrderController::class, 'update'])->name('update');
         Route::delete('/{id}', [PurchaseOrderController::class, 'destroy'])->name('destroy');
         Route::patch('/{id}/status', [PurchaseOrderController::class, 'updateStatus'])->name('update-status');
+        Route::patch('/{id}/koreksi-status', [PurchaseOrderController::class, 'correctStatus'])->name('correct-status');
         Route::get('/{id}/cetak', [PurchaseOrderController::class, 'print'])->name('print');
     });
 
@@ -130,9 +143,11 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::get('/import', [OrderImportController::class, 'create'])->name('outbound.import');
     Route::post('/import/preview', [OrderImportController::class, 'preview'])->name('outbound.import.preview');
     Route::post('/import/map', [OrderImportController::class, 'map'])->name('outbound.import.map');
+    Route::get('/import/pratinjau/{token}', [OrderImportController::class, 'show'])->name('outbound.import.show');
     Route::post('/import', [OrderImportController::class, 'store'])->name('outbound.import.store');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
     Route::post('/massal', [OutboundController::class, 'bulkStatus'])->name('outbound.bulk-status');
+    Route::post('/massal/picking-gabungan', [OutboundController::class, 'bulkPick'])->name('outbound.bulk-pick');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
     Route::post('/{id}/batalkan', [OutboundController::class, 'cancel'])->name('outbound.cancel');
     Route::post('/{id}/aktifkan', [OutboundController::class, 'reactivate'])->name('outbound.reactivate');
@@ -184,7 +199,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::delete('/{batch}', [PickingBatchController::class, 'destroy'])->name('destroy');
     });
 
-// ==================== KEMBALIKAN KE RAK (ORDER BATAL) ====================
+// ==================== KEMBALIKAN KE RAK (ORDER BATAL / ITEM DIGANTI) ====================
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/kembalikan-ke-rak')
     ->name('gudang.restock')
@@ -192,6 +207,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::get('/', [RestockController::class, 'index']);
         Route::post('/scan', [RestockController::class, 'scan'])->name('.scan');
         Route::post('/{item}/ketuk', [RestockController::class, 'tap'])->name('.tap');
+        Route::post('/ganti/{restockItem}/ketuk', [RestockController::class, 'tapChange'])->name('.tap-change');
     });
 
 // ==================== SERAH TERIMA KURIR (GUDANG) ====================
@@ -229,6 +245,18 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{sessionId}/items/{itemId}/masalah', [PackingController::class, 'problem'])->name('packing.problem');
         Route::post('/{id}/resi', [PackingController::class, 'resi'])->name('packing.resi');
         Route::delete('/{id}', [PackingController::class, 'destroy'])->name('packing.destroy');
+    });
+
+// ==================== PACKING GABUNGAN (GUDANG) ====================
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
+    ->prefix('gudang/packing-gabungan')
+    ->name('gudang.packing-batch.')
+    ->group(function () {
+        Route::post('/', [PackingBatchController::class, 'store'])->name('store');
+        Route::post('/otomatis', [PackingBatchController::class, 'auto'])->name('auto');
+        Route::post('/dari-picking/{pickingBatch}', [PackingBatchController::class, 'fromPicking'])->name('from-picking');
+        Route::get('/{batch}', [PackingBatchController::class, 'show'])->name('show');
+        Route::post('/{batch}/scan', [PackingBatchController::class, 'scan'])->name('scan');
     });
 
 // ==================== TRANSFER STOK (GUDANG) ====================

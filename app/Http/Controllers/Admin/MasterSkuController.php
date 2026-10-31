@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\MasterSku;
+use App\Models\SkuAlias;
+use App\Models\UnregisteredSku;
 use App\Models\StockActive;
 use App\Services\MasterSkuRemoval;
 use App\Services\MasterSkuSync;
@@ -185,9 +187,26 @@ class MasterSkuController extends Controller
         return response()->json($skus);
     }
 
-    public function create()
+    /**
+     * Form SKU baru. Dari alur cepat (pratinjau import, denah rak, SKU Terhambat) kodenya sudah terisi:
+     * ?kode=GOTHIC-BLK-M&nama=Gothic Hitam M&kembali=/halaman-asal
+     */
+    public function create(Request $request)
     {
-        return view('admin.master-skus.create');
+        $code = trim((string) $request->query('kode'));
+        $prefill = $code !== '' ? UnregisteredSku::guessFields($code, $request->query('nama') ?: UnregisteredSku::where('code', SkuAlias::normalize($code))->value('product_name')) : [];
+
+        return view('admin.master-skus.create', [
+            'prefill' => $prefill,
+            'fromCode' => $code !== '' ? SkuAlias::normalize($code) : null,
+            'returnTo' => $this->safeReturn($request->query('kembali')),
+        ]);
+    }
+
+    /** Hanya alamat di aplikasi ini ("/..."), bukan situs lain */
+    private function safeReturn(?string $url): ?string
+    {
+        return $url && str_starts_with($url, '/') && !str_starts_with($url, '//') && !str_contains($url, '\\') ? $url : null;
     }
 
     public function store(Request $request)
@@ -209,12 +228,22 @@ class MasterSkuController extends Controller
         ]);
 
         $validated['cost_price'] = (int) ($validated['cost_price'] ?? 0);
+        $request->validate(['from_code' => ['nullable', 'string', 'max:100'], 'return_to' => ['nullable', 'string', 'max:500']]);
 
         try {
             DB::transaction(function () use ($validated) {
                 MasterSku::create($validated);
             });
-            return redirect()->route('master-skus.index')->with('success', 'SKU berhasil ditambahkan!');
+
+            $message = "SKU {$validated['sku']} berhasil ditambahkan!";
+            // Dibuat dari kode marketplace yang berbeda: kode itu langsung dipetakan ke SKU baru
+            $fromCode = SkuAlias::normalize($request->input('from_code'));
+            if ($fromCode !== '' && $fromCode !== SkuAlias::normalize($validated['sku']) && !SkuAlias::map($fromCode, $validated['sku'], auth()->id())) {
+                $message .= " Kode {$fromCode} sekarang dibaca sebagai {$validated['sku']}.";
+            }
+
+            $returnTo = $this->safeReturn($request->input('return_to'));
+            return ($returnTo ? redirect($returnTo) : redirect()->route('master-skus.index'))->with('success', $message);
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Gagal menambah SKU: ' . safe_error_message($e)])->withInput();
         }

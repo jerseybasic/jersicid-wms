@@ -15,6 +15,8 @@ class PackingSession extends Model
         'session_number',
         'order_id',
         'picking_session_id',
+        'packing_batch_id',
+        'basket_no',
         'user_id',
         'status',
         'tracking_number',
@@ -51,6 +53,11 @@ class PackingSession extends Model
     public function pickingSession()
     {
         return $this->belongsTo(PickingSession::class, 'picking_session_id');
+    }
+
+    public function batch()
+    {
+        return $this->belongsTo(PackingBatch::class, 'packing_batch_id');
     }
 
     public function user()

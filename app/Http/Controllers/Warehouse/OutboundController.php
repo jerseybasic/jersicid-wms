@@ -6,11 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PickingBatch;
+use App\Models\RestockItem;
 use App\Models\MasterSku;
 use App\Models\StockActive;
 use App\Services\ShipDeadline;
 use App\Services\OrderCancellation;
+use App\Services\OrderItemChange;
 use App\Services\OrderReprocess;
+use App\Services\Picking;
 use App\Services\StockAvailability;
 use App\Services\WaitingStock;
 use Carbon\Carbon;
@@ -22,7 +26,7 @@ class OutboundController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Order::with('items.masterSku')->orderBy('created_at', 'desc');
+        $query = Order::with('items.masterSku', 'pickingSession:id,order_id,batch_id', 'packingSession:id,order_id,packing_batch_id')->orderBy('created_at', 'desc');
 
         // Filter Status; "Menunggu stok" adalah order Pending yang ditunda karena stoknya kurang
         if ($request->status === 'WAITING_STOCK') {
@@ -68,7 +72,10 @@ class OutboundController extends Controller
             'ready' => Order::where('status', 'READY_TO_SHIP')->count(),
         ];
 
-        return view('warehouse.outbound.index', compact('orders', 'stats', 'needs'));
+        // Order Pending yang stoknya cukup: bisa langsung dicentang lalu masuk picking gabungan
+        $stockReady = StockAvailability::readyMap($orders->getCollection());
+
+        return view('warehouse.outbound.index', compact('orders', 'stats', 'needs', 'stockReady'));
     }
 
     /**
@@ -91,6 +98,7 @@ class OutboundController extends Controller
         return view('warehouse.outbound.show', [
             'order' => $order,
             'bins' => $bins,
+            'changeReturns' => RestockItem::pending()->where('order_id', $order->id)->orderBy('created_at')->get(),
             'timeline' => $this->timeline($order),
         ]);
     }
@@ -109,7 +117,7 @@ class OutboundController extends Controller
         // Perubahan status manual (konfirmasi, batal, kirim, selesai) dari audit trail
         $labels = ['CONFIRMED' => ['Dikonfirmasi', 'blue'], 'CANCELLED' => ['Dibatalkan', 'red'], 'SHIPPED' => ['Dikirim', 'emerald'], 'COMPLETED' => ['Selesai', 'slate']];
         AuditTrail::with('user:id,name')
-            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE', 'WAITING_STOCK', 'REACTIVATE'])
+            ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE', 'WAITING_STOCK', 'REACTIVATE', 'CARRY_OVER', 'CHANGE_ITEMS'])
             ->where('new_values', 'like', '%' . $order->order_number . '%')
             ->orderBy('created_at')
             ->get()
@@ -120,6 +128,26 @@ class OutboundController extends Controller
                 }
                 if ($trail->action === 'REACTIVATE') {
                     $steps->push(['at' => $trail->created_at, 'title' => 'Diaktifkan lagi', 'detail' => 'Kembali Pending setelah dibatalkan', 'user' => $trail->user?->name, 'color' => 'cyan']);
+
+                    return;
+                }
+                if ($trail->action === 'CARRY_OVER') {
+                    $steps->push(['at' => $trail->created_at, 'title' => 'Kembali Pending', 'detail' => $values['reason'] ?? 'Belum diproses saat tutup kiriman', 'user' => $trail->user?->name, 'color' => 'amber']);
+
+                    return;
+                }
+                if ($trail->action === 'CHANGE_ITEMS') {
+                    $old = is_string($trail->old_values) ? json_decode($trail->old_values, true) : $trail->old_values;
+                    $returned = collect($values['to_return'] ?? [])->map(fn ($row) => "{$row['sku']} ×{$row['qty']}")->implode(', ');
+                    $steps->push([
+                        'at' => $trail->created_at,
+                        'title' => 'Item diganti',
+                        'detail' => OrderItemChange::diffText($old['items'] ?? [], $values['items'] ?? [])
+                            . (!empty($values['source']) ? " · {$values['source']}" : '')
+                            . ($returned ? " · kembalikan ke rak: {$returned}" : ''),
+                        'user' => $trail->user?->name,
+                        'color' => 'amber',
+                    ]);
 
                     return;
                 }
@@ -189,7 +217,7 @@ class OutboundController extends Controller
 
         // Urut waktu; langkah di detik yang sama mengikuti urutan alur order
         $rank = array_flip(['Order masuk', 'Menunggu stok', 'Dikonfirmasi', 'Dibatalkan', 'Mulai diambil (picking)', 'Selesai diambil', 'Mulai dikemas (packing)',
-            'Selesai dikemas', 'Discan untuk serah terima kurir', 'Dikirim', 'Selesai', 'Retur diterima', 'Data order diubah']);
+            'Selesai dikemas', 'Discan untuk serah terima kurir', 'Dikirim', 'Selesai', 'Retur diterima', 'Data order diubah', 'Item diganti']);
 
         return $steps->filter(fn ($step) => $step['at'])
             ->sortBy([fn ($a, $b) => [$a['at']->getTimestamp(), $rank[$a['title']] ?? 99] <=> [$b['at']->getTimestamp(), $rank[$b['title']] ?? 99]])
@@ -275,7 +303,7 @@ class OutboundController extends Controller
         $order = Order::with('items', 'pickingSession:id,order_id')->findOrFail($id);
         abort_unless($order->isEditable(), 403, 'Order yang sudah selesai atau dibatalkan tidak bisa diubah.');
 
-        $itemsEditable = $order->itemsEditable();
+        $itemsEditable = $order->itemsEditable(auth()->user());
         $validated = $request->validate([
             'customer_name' => ['required', 'string', 'max:255'],
             'customer_phone' => ['nullable', 'string', 'max:20'],
@@ -288,18 +316,17 @@ class OutboundController extends Controller
             'items.*.sku' => ['required', 'exists:master_skus,sku'],
             'items.*.qty' => ['required', 'integer', 'min:1'],
         ], [
-            'items.prohibited' => 'Item tidak bisa diubah karena order sudah mulai di-picking.',
+            'items.prohibited' => 'Item order yang sudah mulai di-picking hanya bisa diganti Owner, Supervisor, atau Admin Gudang.',
         ]);
 
         $fields = ['customer_name', 'customer_phone', 'shipping_address', 'courier', 'tracking_number', 'notes'];
         $data = collect($fields)->mapWithKeys(fn ($field) => [$field => $validated[$field] ?? null])->all();
         $data['ship_by'] = !empty($validated['ship_by']) ? Carbon::parse($validated['ship_by']) : $order->ship_by;
 
-        // Item digabung per SKU; harga lama dipakai untuk SKU yang sudah ada di order
+        // Item digabung per SKU; penggantian item (dan pengembalian barang ke rak jika sudah diambil) diurus OrderItemChange
         $newItems = $itemsEditable
-            ? collect($validated['items'])->groupBy(fn ($item) => strtoupper($item['sku']))->map(fn ($rows) => (int) $rows->sum('qty'))
+            ? collect($validated['items'])->groupBy(fn ($item) => strtoupper($item['sku']))->map(fn ($rows) => (int) $rows->sum('qty'))->all()
             : null;
-        $oldItems = $order->items->groupBy(fn ($item) => strtoupper($item->sku))->map(fn ($rows) => (int) $rows->sum('qty_ordered'));
 
         $changes = [];
         foreach ($data as $field => $value) {
@@ -309,51 +336,39 @@ class OutboundController extends Controller
                 $changes[$field] = [$field === 'ship_by' ? $old?->format('Y-m-d H:i') : $old, $field === 'ship_by' ? $value?->format('Y-m-d H:i') : $value];
             }
         }
-        $itemsChanged = $newItems !== null && $newItems->sortKeys()->all() !== $oldItems->sortKeys()->all();
-        if ($itemsChanged) {
-            $changes['items'] = [$oldItems->all(), $newItems->all()];
-        }
+        $itemsChanged = $newItems !== null && !OrderItemChange::same(OrderItemChange::current($order), $newItems);
 
-        if (!$changes) {
+        if (!$changes && !$itemsChanged) {
             return redirect()->route('gudang.outbound.show', $order->id)->with('success', 'Tidak ada perubahan.');
         }
 
         try {
-            DB::transaction(function () use ($order, $data, $itemsChanged, $newItems, $changes, $request) {
-                $order->update($data);
+            $summary = DB::transaction(function () use ($order, $data, $itemsChanged, $newItems, $changes, $request) {
+                $order = Order::lockForUpdate()->findOrFail($order->id);
+                if ($changes) {
+                    $order->update($data);
 
-                if ($itemsChanged) {
-                    $prices = $order->items->mapWithKeys(fn ($item) => [strtoupper($item->sku) => $item->price]);
-                    $catalog = MasterSku::whereIn('sku', $newItems->keys())->get(['sku', 'price'])->keyBy(fn ($sku) => strtoupper($sku->sku));
-                    $order->items()->delete();
-                    foreach ($newItems as $sku => $qty) {
-                        OrderItem::create([
-                            'order_id' => $order->id,
-                            'sku' => $catalog[$sku]->sku ?? $sku,
-                            'qty_ordered' => $qty,
-                            'qty_picked' => 0,
-                            'qty_packed' => 0,
-                            'price' => $prices[$sku] ?? $catalog[$sku]->price ?? 0,
-                        ]);
-                    }
-
-                    // Order yang sudah dikonfirmasi harus tetap bisa dipenuhi stoknya
-                    if ($order->status === 'CONFIRMED' && $shortages = StockAvailability::shortages($order)) {
-                        throw new \RuntimeException('Stok tidak cukup untuk item baru: ' . StockAvailability::describe($shortages) . '.');
-                    }
+                    AuditTrail::create([
+                        'user_id' => auth()->id(),
+                        'action' => 'UPDATE',
+                        'module' => 'OUTBOUND',
+                        'old_values' => json_encode(array_map(fn ($c) => $c[0], $changes)),
+                        'new_values' => json_encode(['order_number' => $order->order_number] + array_map(fn ($c) => $c[1], $changes)),
+                        'ip_address' => $request->ip(),
+                    ]);
                 }
 
-                AuditTrail::create([
-                    'user_id' => auth()->id(),
-                    'action' => 'UPDATE',
-                    'module' => 'OUTBOUND',
-                    'old_values' => json_encode(array_map(fn ($c) => $c[0], $changes)),
-                    'new_values' => json_encode(['order_number' => $order->order_number] + array_map(fn ($c) => $c[1], $changes)),
-                    'ip_address' => $request->ip(),
-                ]);
+                return $itemsChanged
+                    ? OrderItemChange::apply($order, $newItems, [], auth()->id(), $request->ip(), 'diubah manual')
+                    : null;
             });
         } catch (\RuntimeException $e) {
             return back()->withInput()->with('error', $e->getMessage());
+        }
+
+        if ($summary) {
+            return redirect()->route('gudang.outbound.show', $order->id)
+                ->with('success', "Item order {$order->order_number} berhasil diganti. " . OrderItemChange::describe($order, $summary));
         }
 
         return redirect()->route('gudang.outbound.show', $order->id)->with('success', "Order {$order->order_number} berhasil diubah.");
@@ -426,6 +441,70 @@ class OutboundController extends Controller
         }
 
         return $redirect;
+    }
+
+    /**
+     * Aksi massal "Picking gabungan": order Pending yang dicentang dikonfirmasi dulu (stoknya dicek seperti
+     * biasa), lalu semua order yang siap picking langsung digabung jadi satu picking gabungan.
+     * Satu order saja langsung jadi picking biasa. Order yang stoknya kurang ditunda (Menunggu stok).
+     */
+    public function bulkPick(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:500'],
+            'ids.*' => ['string'],
+        ], ['ids.required' => 'Pilih minimal satu order.']);
+
+        $orders = Order::whereIn('id', $validated['ids'])->orderBy('ship_by')->orderBy('created_at')->get();
+
+        // Yang paling mendesak dikonfirmasi dulu, supaya stok terbatas jatuh ke batas kirim terdekat
+        $skipped = [];
+        foreach ($orders->where('status', 'PENDING') as $order) {
+            if ($error = $this->changeStatus($order, 'CONFIRMED', $request)) {
+                $skipped[] = $error;
+            }
+        }
+        foreach ($orders->whereNotIn('status', ['PENDING', 'CONFIRMED']) as $order) {
+            $skipped[] = "Order {$order->order_number} sudah {$order->status_label}.";
+        }
+
+        [$started, $left] = DB::transaction(function () use ($validated, $request) {
+            $ready = PickingBatchController::waitingOrders()->whereIn('id', $validated['ids'])->with('items')->lockForUpdate()->get();
+            $left = max(0, $ready->count() - PickingBatch::MAX_ORDERS);
+            $ready = $ready->take(PickingBatch::MAX_ORDERS)->values();
+
+            if ($ready->count() === 1) {
+                $session = Picking::createForOrder($ready->first(), auth()->id(), ['status' => 'IN_PROGRESS', 'started_at' => now()]);
+                AuditTrail::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'CREATE',
+                    'module' => 'PICKING',
+                    'new_values' => json_encode(['session_number' => $session->session_number, 'order_id' => $session->order_id, 'via' => 'Outbound']),
+                    'ip_address' => $request->ip(),
+                ]);
+
+                return [$session, $left];
+            }
+
+            return [$ready->isEmpty() ? null : PickingBatchController::createBatch($ready, auth()->id(), $request->ip()), $left];
+        });
+
+        $skippedText = $skipped
+            ? count($skipped) . ' order dilewati: ' . implode(' ', array_slice($skipped, 0, 10)) . (count($skipped) > 10 ? ' (dan ' . (count($skipped) - 10) . ' lainnya)' : '')
+            : null;
+
+        if (!$started) {
+            return back()->with('error', $skippedText ?? 'Tidak ada order yang bisa dipicking.');
+        }
+
+        $leftText = $left ? " {$left} order lainnya tetap di antrean picking (maksimal " . PickingBatch::MAX_ORDERS . ' sekali jalan).' : '';
+        $redirect = $started instanceof PickingBatch
+            ? redirect()->route('gudang.picking-batch.show', $started)
+                ->with('success', 'Picking gabungan ' . $started->sessions()->count() . ' order dibuat. Siapkan keranjang bernomor 1 sampai ' . $started->sessions()->count() . ', lalu mulai scan.' . $leftText)
+            : redirect()->route('gudang.picking.show', $started->id)
+                ->with('success', 'Hanya 1 order yang siap, langsung picking biasa. Mulai scan barang.' . $leftText);
+
+        return $skippedText ? $redirect->with('error', $skippedText) : $redirect;
     }
 
     /**

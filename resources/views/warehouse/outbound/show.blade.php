@@ -62,6 +62,15 @@
         </div>
 
         @php $toReturn = $order->status === 'CANCELLED' ? (int) $order->items->sum('qty_picked') : 0; @endphp
+        @if ($changeReturns->isNotEmpty())
+            <a href="{{ route('gudang.restock') }}" class="block p-4 bg-red-900/20 border border-red-500/40 rounded-xl text-sm text-red-300">
+                <span class="flex items-center justify-between gap-3">
+                    <span>Item order ini diganti. Barang lama belum dikembalikan ke rak:</span>
+                    <span class="font-bold shrink-0">Kembalikan ke rak</span>
+                </span>
+                <span class="block mt-1 font-mono text-xs text-red-200">{{ $changeReturns->map(fn ($row) => $row->sku . ' ×' . $row->qty . ($row->bin_code ? ' (rak ' . $row->bin_code . ')' : ''))->implode(', ') }}</span>
+            </a>
+        @endif
         @if ($toReturn)
             <a href="{{ route('gudang.restock') }}" class="flex items-center justify-between gap-3 p-4 bg-red-900/20 border border-red-500/40 rounded-xl text-sm text-red-300">
                 <span>{{ $toReturn }} pcs barang order ini sudah keluar dari rak dan belum dikembalikan.</span>
@@ -109,7 +118,12 @@
                 <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
                     <div class="p-4 border-b border-slate-800 flex items-center justify-between">
                         <h3 class="text-base font-semibold text-white">Item</h3>
-                        <span class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">{{ $order->items->count() }} SKU · {{ $order->items->sum('qty_ordered') }} pcs</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">{{ $order->items->count() }} SKU · {{ $order->items->sum('qty_ordered') }} pcs</span>
+                            @if ($order->itemsEditable(auth()->user()))
+                                <a href="{{ route('gudang.outbound.edit', $order->id) }}#item-order" class="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-xs rounded font-semibold">Ganti item</a>
+                            @endif
+                        </div>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left [&_td]:whitespace-nowrap">

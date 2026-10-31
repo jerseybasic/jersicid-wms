@@ -33,7 +33,8 @@
                     <span class="block text-[11px] opacity-80">{{ $toPick->isEmpty() ? 'tidak ada order' : 'ambil berikutnya' }}</span>
                 </button>
             </form>
-            <form method="POST" action="{{ route('gudang.packing.store') }}">
+            {{-- Dua keranjang atau lebih: langsung packing gabungan --}}
+            <form method="POST" action="{{ $packTogether >= 2 ? route('gudang.packing-batch.auto') : route('gudang.packing.store') }}">
                 @csrf
                 <input type="hidden" name="order_id" value="{{ $nextPack?->id }}">
                 <input type="hidden" name="courier" value="{{ $nextPack?->courier }}">
@@ -41,7 +42,7 @@
                     class="w-full h-full rounded-2xl p-4 text-center bg-purple-500 text-on-accent disabled:bg-slate-800 disabled:text-slate-500 active:scale-[0.98] transition-all">
                     <span class="block text-3xl font-black">{{ $toPack->count() }}</span>
                     <span class="block text-sm font-bold mt-1">Packing</span>
-                    <span class="block text-[11px] opacity-80">{{ $nextPack ? 'kemas berikutnya' : 'tidak ada keranjang' }}</span>
+                    <span class="block text-[11px] opacity-80">{{ $packTogether >= 2 ? 'kemas ' . $packTogether . ' sekaligus' : ($nextPack ? 'kemas berikutnya' : 'tidak ada keranjang') }}</span>
                 </button>
             </form>
             <a href="{{ route('gudang.handover') }}"
@@ -74,7 +75,7 @@
 
         @if ($toRestock > 0)
             <a href="{{ route('gudang.restock') }}" class="flex items-center justify-between gap-3 bg-slate-900 border border-red-500/40 rounded-2xl p-4">
-                <span class="text-sm text-slate-300"><span class="text-lg font-bold text-red-400">{{ $toRestock }}</span> pcs dari order batal belum dikembalikan ke rak</span>
+                <span class="text-sm text-slate-300"><span class="text-lg font-bold text-red-400">{{ $toRestock }}</span> pcs dari order batal/diganti belum dikembalikan ke rak</span>
                 <span class="text-sm font-bold text-red-400 shrink-0">Kembalikan</span>
             </a>
         @endif
@@ -94,7 +95,7 @@
         @endif
 
         {{-- Sedang berjalan --}}
-        @if ($activePicking->isNotEmpty() || $activeBatches->isNotEmpty() || $activePacking->isNotEmpty())
+        @if ($activePicking->isNotEmpty() || $activeBatches->isNotEmpty() || $activePacking->isNotEmpty() || $activePackingBatches->isNotEmpty())
             <section class="space-y-3">
                 <h3 class="text-lg font-semibold text-white">Pekerjaan saya</h3>
                 @foreach ($activeBatches as $batch)
@@ -129,6 +130,22 @@
                         <a href="{{ route('gudang.picking.show', $session->id) }}" class="{{ $bigButton }} bg-amber-500 text-slate-900">
                             {{ $session->status === 'PENDING' ? 'Buka & mulai' : 'Lanjutkan picking' }}
                         </a>
+                    </div>
+                @endforeach
+                @foreach ($activePackingBatches as $batch)
+                    @php $batchItems = $batch->sessions->where('status', '!=', 'CANCELLED')->flatMap->items; @endphp
+                    <div class="{{ $card }} border-purple-500/40">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-xs font-bold text-purple-400">PACKING GABUNGAN</p>
+                                <p class="text-base font-bold text-white">{{ $batch->sessions->count() }} keranjang · {{ $batch->sessions->where('status', 'COMPLETED')->count() }} paket selesai</p>
+                                <p class="text-sm text-slate-400 font-mono">{{ $batch->batch_number }}</p>
+                            </div>
+                            <p class="text-right text-sm text-slate-300">
+                                <span class="text-xl font-bold text-white">{{ $batchItems->sum('qty_packed') }}</span>/{{ $batchItems->sum('qty_ordered') }} pcs
+                            </p>
+                        </div>
+                        <a href="{{ route('gudang.packing-batch.show', $batch) }}" class="{{ $bigButton }} bg-purple-500 text-white">Lanjutkan packing gabungan</a>
                     </div>
                 @endforeach
                 @foreach ($activePacking as $session)
@@ -206,6 +223,12 @@
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                 Perlu dikemas (packing) <span class="{{ $pill }} bg-purple-500/20 text-purple-400">{{ $toPack->count() }}</span>
             </h3>
+            @if ($packTogether >= 2)
+                <form method="POST" action="{{ route('gudang.packing-batch.auto') }}">
+                    @csrf
+                    <button type="submit" class="{{ $bigButton }} bg-purple-500 text-white">Kemas {{ $packTogether }} keranjang sekaligus</button>
+                </form>
+            @endif
             @forelse ($toPack as $order)
                 <div class="{{ $card }}">
                     <div class="flex items-start justify-between gap-3">

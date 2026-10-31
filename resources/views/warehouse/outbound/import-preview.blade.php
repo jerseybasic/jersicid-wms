@@ -14,7 +14,8 @@
 
     @php
         $ready = collect($orders)->where('importable', true);
-        $blocked = collect($orders)->where('importable', false);
+        $updates = collect($orders)->where('updatable', true);
+        $blocked = collect($orders)->where('importable', false)->where('updatable', false);
     @endphp
 
     <div class="space-y-6">
@@ -28,7 +29,7 @@
             <div class="p-3 bg-red-900/30 border border-red-500/50 text-red-400 rounded-lg text-sm">{{ $errors->first() }}</div>
         @endif
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-{{ $updates->isNotEmpty() ? 4 : 3 }} gap-3">
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                 <p class="text-xs text-slate-400 mb-1">Pesanan di file</p>
                 <p class="text-2xl font-bold text-white">{{ count($orders) }}</p>
@@ -38,24 +39,71 @@
                 <p class="text-2xl font-bold text-emerald-400">{{ $ready->count() }}</p>
                 <p class="text-xs text-slate-500">{{ number_format($ready->sum(fn ($o) => collect($o['items'])->sum('qty'))) }} pcs</p>
             </div>
+            @if ($updates->isNotEmpty())
+                <div class="bg-slate-900 border border-amber-500/40 rounded-xl p-4">
+                    <p class="text-xs text-amber-400 mb-1">Sudah ada, berubah</p>
+                    <p class="text-2xl font-bold text-amber-400">{{ $updates->count() }}</p>
+                    <p class="text-xs text-slate-500">ganti item / batal</p>
+                </div>
+            @endif
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                 <p class="text-xs text-red-400 mb-1">Dilewati</p>
                 <p class="text-2xl font-bold {{ $blocked->count() ? 'text-red-400' : 'text-white' }}">{{ $blocked->count() }}</p>
             </div>
         </div>
 
-        @if ($ready->isNotEmpty())
-            <form method="POST" action="{{ route('gudang.outbound.import.store') }}"
-                  class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
+        @if ($ready->isNotEmpty() || $updates->isNotEmpty())
+            <form method="POST" action="{{ route('gudang.outbound.import.store') }}" class="space-y-4">
                 @csrf
                 <input type="hidden" name="token" value="{{ $token }}">
-                <label class="flex items-start gap-3 text-sm text-slate-300">
-                    <input type="checkbox" name="confirm_now" value="1" checked class="mt-0.5 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500">
-                    <span>Langsung konfirmasi, jadi pesanan masuk ke daftar picking.<br><span class="text-xs text-slate-500">Hapus centang jika ingin memeriksanya dulu di Outbound.</span></span>
-                </label>
-                <button type="submit" class="shrink-0 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-lg transition-all">
-                    Import {{ $ready->count() }} pesanan
-                </button>
+
+                @if ($updates->isNotEmpty())
+                    <div class="bg-slate-900 border border-amber-500/40 rounded-xl p-4 sm:p-5 space-y-4">
+                        <div>
+                            <h3 class="text-base font-semibold text-white">Pesanan yang sudah ada tapi berubah ({{ $updates->count() }})</h3>
+                            <p class="text-sm text-slate-400 mt-1">Misalnya pembeli ganti produk setelah checkout, atau pesanan dibatalkan di marketplace. Centang yang ingin diterapkan; yang tidak dicentang dibiarkan seperti sekarang.</p>
+                        </div>
+                        <div class="divide-y divide-slate-800">
+                            @foreach ($updates as $order)
+                                @php $locked = $order['existing']['in_process'] && !$canChangeInProcess; @endphp
+                                <label class="py-3 flex items-start gap-3 {{ $locked ? 'opacity-60' : 'cursor-pointer' }}">
+                                    <input type="checkbox" name="apply[]" value="{{ $order['order_number'] }}" @disabled($locked)
+                                           class="mt-1 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500">
+                                    <span class="min-w-0 flex-1 text-sm space-y-1">
+                                        <span class="flex flex-wrap items-center gap-2">
+                                            <a href="{{ route('gudang.outbound.show', $order['existing']['id']) }}" target="_blank" class="font-mono font-bold text-cyan-400 hover:underline">{{ $order['order_number'] }}</a>
+                                            <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{{ $order['existing']['status_label'] }}</span>
+                                            <span class="text-xs font-semibold {{ $order['action'] === 'cancel' ? 'text-red-400' : 'text-amber-300' }}">{{ $order['action'] === 'cancel' ? 'Batalkan di WMS' : 'Ganti item' }}</span>
+                                        </span>
+                                        @if ($order['action'] === 'change')
+                                            <span class="block font-mono text-xs text-slate-300 break-all">{{ $order['change']['text'] }}</span>
+                                        @endif
+                                        @foreach ($order['warnings'] as $warning)
+                                            <span class="block text-xs text-amber-400">{{ $warning }}</span>
+                                        @endforeach
+                                        @if ($locked)
+                                            <span class="block text-xs text-red-400">Sudah mulai diproses: hanya Owner, Supervisor, atau Admin Gudang yang bisa menerapkannya.</span>
+                                        @endif
+                                    </span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
+                    @if ($ready->isNotEmpty())
+                        <label class="flex items-start gap-3 text-sm text-slate-300">
+                            <input type="checkbox" name="confirm_now" value="1" checked class="mt-0.5 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500">
+                            <span>Langsung konfirmasi, jadi pesanan masuk ke daftar picking.<br><span class="text-xs text-slate-500">Hapus centang jika ingin memeriksanya dulu di Outbound.</span></span>
+                        </label>
+                    @else
+                        <p class="text-sm text-slate-400">Tidak ada pesanan baru di file ini.</p>
+                    @endif
+                    <button type="submit" class="shrink-0 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-lg transition-all">
+                        {{ $ready->isNotEmpty() ? 'Import ' . $ready->count() . ' pesanan' . ($updates->isNotEmpty() ? ' + terapkan yang dicentang' : '') : 'Terapkan yang dicentang' }}
+                    </button>
+                </div>
             </form>
         @else
             <div class="p-4 bg-amber-900/20 border border-amber-500/40 text-amber-300 rounded-xl text-sm">
@@ -74,6 +122,9 @@
                             Minta Owner, Supervisor, atau Admin Gudang memetakan SKU ini ke SKU gudang, atau menambahkannya di Master SKU.
                         @endif
                     </p>
+                    @if ($canMap)
+                        <p class="text-xs text-slate-500 mt-1">Yang belum dipetakan tetap tercatat di <a href="{{ route('blocked-skus.index') }}" class="text-cyan-400 underline">SKU Terhambat</a>.</p>
+                    @endif
                 </div>
 
                 @if ($canMap)
@@ -100,6 +151,13 @@
                                                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:ring-cyan-500">
                                         @if ($item['suggest'])
                                             <p class="text-xs text-cyan-400 mt-1">Saran otomatis, periksa dulu sebelum menyimpan.</p>
+                                        @elseif ($canCreateSku)
+                                            <p class="text-xs text-slate-400 mt-1">Produk ini belum ada di gudang?
+                                                <a href="{{ route('master-skus.create', ['kode' => $item['sku'], 'nama' => $item['name'], 'kembali' => route('gudang.outbound.import.show', $token, false)]) }}"
+                                                   class="text-cyan-400 hover:text-cyan-300 font-semibold underline">Buat SKU baru</a>
+                                            </p>
+                                        @else
+                                            <p class="text-xs text-slate-500 mt-1">Belum ada di gudang? Minta Owner/Supervisor membuat SKU baru.</p>
                                         @endif
                                     </div>
                                 </div>
@@ -126,10 +184,11 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800">
-                        @foreach (collect($orders)->sortBy('importable') as $order)
-                            <tr class="align-top {{ $order['importable'] ? '' : 'bg-red-950/20' }}">
+                        @foreach (collect($orders)->sortBy(fn ($o) => $o['importable'] ? 2 : (!empty($o['updatable']) ? 1 : 0)) as $order)
+                            @php $ok = $order['importable'] || !empty($order['updatable']); @endphp
+                            <tr class="align-top {{ $ok ? '' : 'bg-red-950/20' }}">
                                 <td class="py-3 px-4 whitespace-nowrap">
-                                    <p class="font-mono font-bold {{ $order['importable'] ? 'text-cyan-400' : 'text-slate-400' }}">{{ $order['order_number'] }}</p>
+                                    <p class="font-mono font-bold {{ $ok ? 'text-cyan-400' : 'text-slate-400' }}">{{ $order['order_number'] }}</p>
                                     <p class="text-xs text-slate-500">{{ $order['marketplace'] }}</p>
                                     @if ($order['tracking_number'])
                                         <p class="text-xs text-slate-500">{{ $order['courier'] }} · {{ $order['tracking_number'] }}</p>
@@ -153,7 +212,13 @@
                                     @forelse ($order['problems'] as $problem)
                                         <p class="text-red-400">{{ $problem }}</p>
                                     @empty
-                                        <p class="text-emerald-400">Siap diimpor</p>
+                                        @if (($order['action'] ?? null) === 'change')
+                                            <p class="text-amber-300">Sudah ada, item berubah. Centang di atas untuk mengganti.</p>
+                                        @elseif (($order['action'] ?? null) === 'cancel')
+                                            <p class="text-amber-300">Sudah ada, dibatalkan di marketplace. Centang di atas untuk membatalkan.</p>
+                                        @else
+                                            <p class="text-emerald-400">Siap diimpor</p>
+                                        @endif
                                     @endforelse
                                     @foreach ($order['warnings'] as $warning)
                                         <p class="text-amber-400">{{ $warning }}</p>

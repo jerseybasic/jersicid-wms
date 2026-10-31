@@ -133,7 +133,7 @@ class PickingBatchController extends Controller
 
     public function show(PickingBatch $batch)
     {
-        $batch->load(['user:id,name', 'sessions.order:id,order_number,customer_name,courier', 'sessions.items.masterSku:sku,product_name,size']);
+        $batch->load(['user:id,name', 'sessions.order:id,order_number,customer_name,courier,status', 'sessions.order.packingSession:id,order_id', 'sessions.items.masterSku:sku,product_name,size']);
 
         // Daftar ambil: satu baris per SKU, diurutkan per bin supaya rutenya tidak bolak-balik
         $pickList = $batch->sessions->where('status', '!=', 'CANCELLED')->flatMap(fn ($session) => $session->items->map(fn ($item) => [$session, $item]))

@@ -43,10 +43,18 @@
 
         @if ($done)
             <div class="p-4 bg-emerald-900/30 border border-emerald-500/50 text-emerald-300 rounded-xl text-sm space-y-3">
-                <p>Semua keranjang lengkap. Bawa keranjang ke meja packing, lalu scan no. order/resi di keranjang untuk mulai packing.</p>
+                <p>Semua keranjang lengkap. Bawa keranjang ke meja packing, lalu kemas semuanya di satu layar.</p>
+                @php $toPackHere = $batch->sessions->filter(fn ($session) => $session->status === 'COMPLETED' && $session->order?->status === 'PACKING' && !$session->order->packingSession)->count(); @endphp
+                @if ($toPackHere)
+                    {{-- Packing gabungan: nomor keranjangnya sama dengan picking ini --}}
+                    <form method="POST" action="{{ route('gudang.packing-batch.from-picking', $batch) }}">
+                        @csrf
+                        <button type="submit" class="w-full py-4 bg-purple-500 hover:bg-purple-400 text-white font-bold rounded-xl">Kemas {{ $toPackHere }} keranjang sekaligus</button>
+                    </form>
+                @endif
                 <form method="POST" action="{{ route('gudang.picking-batch.auto') }}">
                     @csrf
-                    <button type="submit" class="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl">Ambil picking berikutnya</button>
+                    <button type="submit" class="w-full py-3 bg-slate-800 hover:bg-slate-700 border border-cyan-500/50 text-cyan-300 font-bold rounded-xl">Ambil picking berikutnya</button>
                 </form>
             </div>
         @else

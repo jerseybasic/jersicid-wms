@@ -1,6 +1,9 @@
 <x-app-layout>
     @php
         $isEdit = $po->exists;
+        // PO yang sudah diajukan tetap boleh diubah, tapi alasannya wajib dicatat
+        $needsReason = $isEdit && $po->status !== 'DRAFT';
+        $received = $isEdit ? $po->items->pluck('qty_received', 'sku')->filter() : collect();
         $rows = old('items') ?? ($isEdit
             ? $po->items->map(fn ($i) => ['sku' => $i->sku, 'qty' => $i->qty_ordered, 'price' => $i->price])->all()
             : (!empty($prefillRows) ? $prefillRows : [['sku' => '', 'qty' => 1, 'price' => 0]]));
@@ -26,6 +29,22 @@
                 @csrf
                 @if ($isEdit)
                     @method('PUT')
+                @endif
+
+                @if ($needsReason)
+                    <div class="p-4 rounded-xl border bg-amber-900/20 border-amber-500/40 text-amber-300 text-sm space-y-3">
+                        <p>PO ini berstatus <strong>{{ $po->status_label }}</strong>. Perubahan tetap bisa disimpan, statusnya tidak berubah, dan alasannya dicatat di catatan PO serta riwayat aktivitas.
+                            @if ($received->isNotEmpty())
+                                Item yang sudah diterima tidak bisa dihapus dan qty-nya tidak bisa di bawah jumlah yang sudah diterima.
+                            @endif
+                        </p>
+                        <div>
+                            <label for="change_reason" class="block text-sm font-medium text-amber-200 mb-1">Alasan perubahan *</label>
+                            <input type="text" id="change_reason" name="change_reason" required maxlength="500" value="{{ old('change_reason') }}"
+                                   placeholder="Mis. supplier konfirmasi ulang jumlah dan tanggal selesai"
+                                   class="w-full px-4 py-2.5 bg-slate-800 border border-amber-500/40 rounded-xl text-white placeholder-slate-500 focus:border-amber-400 focus:outline-none">
+                        </div>
+                    </div>
                 @endif
 
                 @isset($prefillRows)
@@ -56,7 +75,7 @@
                         <select name="supplier_id" required class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all">
                             <option value="">-- Pilih Supplier --</option>
                             @foreach($suppliers as $supplier)
-                                <option value="{{ $supplier->id }}" {{ old('supplier_id', $po->supplier_id) == $supplier->id ? 'selected' : '' }}>
+                                <option value="{{ $supplier->id }}" data-type="{{ $supplier->type }}" {{ old('supplier_id', $po->supplier_id) == $supplier->id ? 'selected' : '' }}>
                                     {{ $supplier->name }}
                                 </option>
                             @endforeach
@@ -130,11 +149,14 @@
                                        class="sku-input w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm font-mono uppercase focus:border-cyan-400 focus:outline-none transition-all"/>
                                 <p class="sku-label text-xs text-slate-400 mt-1 truncate"></p>
                                 @isset($row['note'])
-                                    <p class="text-xs text-red-400 mt-1">{{ $row['note'] }}</p>
+                                    <p class="row-note text-xs text-red-400 mt-1">{{ $row['note'] }}</p>
                                 @endisset
+                                @if ($got = $received[$row['sku'] ?? ''] ?? 0)
+                                    <p class="row-received text-xs text-emerald-400 mt-1">Sudah diterima {{ $got }} pcs</p>
+                                @endif
                             </div>
                             <div class="col-span-6 md:col-span-2">
-                                <input type="number" name="items[{{ $index }}][qty]" placeholder="Qty" required min="1" value="{{ $row['qty'] ?? 1 }}"
+                                <input type="number" name="items[{{ $index }}][qty]" placeholder="Qty" required min="{{ max(1, $got) }}" value="{{ $row['qty'] ?? 1 }}"
                                        class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>
                             </div>
                             <div class="col-span-6 md:col-span-3">
@@ -142,7 +164,7 @@
                                        class="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none transition-all"/>
                             </div>
                             <div class="col-span-12 md:col-span-1 flex items-center justify-center">
-                                <button type="button" class="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-2 rounded-lg transition-colors remove-btn" style="{{ $loop->first ? 'display:none;' : '' }}">
+                                <button type="button" class="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-2 rounded-lg transition-colors remove-btn" style="{{ $loop->first || $got ? 'display:none;' : '' }}">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                     </svg>
@@ -171,7 +193,7 @@
     </div>
 
     <script>
-        let itemCount = {{ max(array_keys($rows)) + 1 }};
+        let itemCount = {{ count($rows) ? max(array_keys($rows)) + 1 : 1 }};
 
         // Tambah Item
         document.getElementById('add-item').addEventListener('click', function() {
@@ -181,11 +203,14 @@
             // Reset values
             firstRow.querySelectorAll('input').forEach(el => {
                 if (el.name.includes('[sku]')) el.value = '';
-                else if (el.name.includes('qty')) el.value = '1';
+                else if (el.name.includes('qty')) { el.value = '1'; el.min = '1'; }
                 else if (el.name.includes('price')) el.value = '0';
             });
-            firstRow.querySelector('.sku-label').textContent = '';
-            firstRow.querySelectorAll('.text-red-400').forEach(el => el.remove());
+            const label = firstRow.querySelector('.sku-label');
+            label.textContent = '';
+            label.classList.remove('text-amber-400');
+            // Hanya keterangan baris yang dibuang; tombol hapus juga berwarna merah, jangan ikut terhapus
+            firstRow.querySelectorAll('.row-note, .row-received').forEach(el => el.remove());
             
             // Update name index
             firstRow.querySelectorAll('[name]').forEach(el => {
@@ -197,6 +222,13 @@
             container.appendChild(firstRow);
             itemCount++;
             updateTotal();
+            firstRow.querySelector('.sku-input').focus();
+        });
+
+        // Pilih supplier: tipe PO ikut tipe supplier (masih bisa diganti)
+        document.querySelector('[name="supplier_id"]').addEventListener('change', function () {
+            const type = this.selectedOptions[0]?.dataset.type;
+            if (type) document.querySelector('[name="supplier_type"]').value = type;
         });
 
         // Hapus Item
@@ -236,7 +268,8 @@
 
         // Update qty/price untuk hitung total
         document.addEventListener('input', function(e) {
-            if (e.target.name.includes('qty') || e.target.name.includes('price')) {
+            const name = e.target.name || '';
+            if (name.includes('[qty]') || name.includes('[price]')) {
                 updateTotal();
             }
         });

@@ -37,7 +37,11 @@ class OrderCancellation
                 Picking::refreshBatch($picking->batch);
             }
         }
-        $order->packingSession()->whereNotIn('status', ['COMPLETED', 'CANCELLED'])->update(['status' => 'CANCELLED']);
+        $packing = $order->packingSession()->whereNotIn('status', ['COMPLETED', 'CANCELLED'])->first();
+        if ($packing) {
+            $packing->update(['status' => 'CANCELLED']);
+            Packing::refreshBatch($packing->batch);
+        }
 
         // Paket yang sudah di-scan untuk kurir tapi belum diserahkan dikeluarkan dari daftarnya
         CourierHandoverItem::where('order_id', $order->id)
@@ -78,8 +82,10 @@ class OrderCancellation
 
         // Sesi lama yang sudah dibatalkan dihapus supaya order bisa diambil dan dikemas dari awal
         if ($packing = $order->packingSession) {
+            $packingBatch = $packing->batch;
             $packing->items()->delete();
             $packing->delete();
+            Packing::refreshBatch($packingBatch);
         }
         if ($picking = $order->pickingSession) {
             $batch = $picking->batch;
@@ -124,27 +130,33 @@ class OrderCancellation
             throw new \RuntimeException('Pilih rak tujuan dulu.');
         }
 
-        $stock = StockActive::where('sku', $item->sku)->where('bin_code', $bin)->lockForUpdate()->first()
-            ?? StockActive::create(['sku' => $item->sku, 'bin_code' => $bin, 'qty' => 0, 'reserved_qty' => 0]);
+        $order = $item->order;
+        self::returnToBin($item->sku, $bin, $qty, $order?->order_number, 'ORDER_CANCEL', "Order batal {$order?->order_number}, barang dikembalikan ke rak", $userId, $ip);
+
+        $left = $item->qty_picked - $qty;
+        $item->update(['qty_picked' => $left, 'qty_packed' => min((int) $item->qty_packed, $left)]);
+    }
+
+    /** Tambah stok qty pcs SKU di bin ini dan catat pergerakannya (barang ditaruh kembali ke rak) */
+    public static function returnToBin(string $sku, string $bin, int $qty, ?string $referenceNo, string $referenceType, string $notes, string $userId, ?string $ip): void
+    {
+        $stock = StockActive::where('sku', $sku)->where('bin_code', $bin)->lockForUpdate()->first()
+            ?? StockActive::create(['sku' => $sku, 'bin_code' => $bin, 'qty' => 0, 'reserved_qty' => 0]);
         $before = $stock->qty;
         $stock->update(['qty' => $before + $qty, 'last_movement_at' => now()]);
 
-        $order = $item->order;
         StockMovement::create([
             'user_id' => $userId,
-            'sku' => $item->sku,
+            'sku' => $sku,
             'bin_code' => $bin,
             'type' => 'RETURN',
             'qty' => $qty,
             'qty_before' => $before,
             'qty_after' => $before + $qty,
-            'reference_no' => $order?->order_number,
-            'reference_type' => 'ORDER_CANCEL',
-            'notes' => "Order batal {$order?->order_number}, barang dikembalikan ke rak",
+            'reference_no' => $referenceNo,
+            'reference_type' => $referenceType,
+            'notes' => $notes,
             'ip_address' => $ip,
         ]);
-
-        $left = $item->qty_picked - $qty;
-        $item->update(['qty_picked' => $left, 'qty_packed' => min((int) $item->qty_packed, $left)]);
     }
 }

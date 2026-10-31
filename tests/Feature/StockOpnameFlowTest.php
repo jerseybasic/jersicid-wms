@@ -189,4 +189,63 @@ class StockOpnameFlowTest extends TestCase
         $this->assertSame(3, $this->stockQty('JSC-A-L', 'A-01-01'));
         $this->assertSame(2, $this->stockQty('JSC-X-L', 'A-01-02'));
     }
+
+    public function test_opname_can_count_one_product_or_some_products_only(): void
+    {
+        $staff = $this->userWithRole('STAFF_GUDANG');
+        $warehouse = $this->makeWarehouse();
+        \App\Models\WarehouseRack::create(['code' => 'A']);
+        \App\Models\WarehouseRack::create(['code' => 'B']);
+        $this->makeSku('JSC-A-L');
+        $this->makeSku('JSC-A-XL');
+        $this->makeSku('JSC-C-M');
+        $this->putStock('JSC-A-L', 'A-01-01', 10);
+        $this->putStock('JSC-A-L', 'B-01-01', 2);
+        $this->putStock('JSC-A-XL', 'A-01-02', 5);
+        $this->putStock('JSC-C-M', 'B-01-02', 7);
+
+        $this->actingAs($staff)->get(route('gudang.opname.create'))->assertOk()
+            ->assertSee('Satu produk')->assertSee('Beberapa produk')->assertSee('Semua produk');
+
+        // Satu produk wajib dipilih, dan hanya satu
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id, 'scope' => 'ONE'])->assertSessionHas('error');
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id, 'scope' => 'ONE', 'skus' => ['JSC-A-L', 'JSC-C-M']])->assertSessionHas('error');
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id, 'scope' => 'ONE', 'skus' => ['TIDAK-ADA']])->assertSessionHas('error');
+
+        // Satu produk di semua rak: hanya lokasi produk itu yang dihitung
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id, 'scope' => 'ONE', 'skus' => ['jsc-a-l — Jersey L']])
+            ->assertSessionHas('success');
+        $one = StockOpname::with('items')->firstOrFail();
+        $this->assertSame('JSC-A-L', $one->sku_codes);
+        $this->assertSame([['JSC-A-L', 'A-01-01'], ['JSC-A-L', 'B-01-01']], $one->items->sortBy('bin_code')->map(fn ($i) => [$i->sku, $i->bin_code])->values()->all());
+        $this->assertSame('Produk JSC-A-L · semua rak', $one->scope_label);
+
+        // Produk yang sama tidak boleh dihitung dua kali, termasuk lewat opname rak atau seluruh gudang
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id, 'scope' => 'SOME', 'skus' => ['JSC-A-L', 'JSC-A-XL']])->assertSessionHas('error');
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id, 'racks' => ['B']])->assertSessionHas('error');
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id])->assertSessionHas('error');
+
+        // Rak tidak dikunci untuk produk lain: beberapa produk lain di rak A dan B masih boleh
+        $this->get(route('gudang.opname.create'))->assertDontSee('sedang diopname')->assertSee($one->opname_number);
+        $this->post(route('gudang.opname.store'), ['warehouse_id' => $warehouse->id, 'scope' => 'SOME', 'skus' => ['JSC-A-XL', 'JSC-C-M'], 'racks' => ['A']])
+            ->assertSessionHas('success');
+        $some = StockOpname::with('items')->where('id', '!=', $one->id)->firstOrFail();
+        $this->assertSame(['JSC-A-XL'], $some->items->pluck('sku')->all());
+        $this->assertSame('2 produk (JSC-A-XL, JSC-C-M) · Rak A', $some->scope_label);
+
+        // Barang lain yang ditemukan tidak boleh masuk opname satu produk
+        $this->post(route('gudang.opname.start', $one->id));
+        $this->post(route('gudang.opname.add-item', $one->id), ['sku' => 'JSC-C-M', 'bin_code' => 'A-01-03'])->assertSessionHas('error');
+        $this->post(route('gudang.opname.add-item', $one->id), ['sku' => 'JSC-A-L', 'bin_code' => 'A-01-03'])->assertSessionHas('success');
+
+        // Persetujuan tetap berlaku: staf mengirim, stok baru berubah setelah disetujui
+        $items = $one->items()->get();
+        $this->post(route('gudang.opname.update', $one->id), ['items' => $items->map(fn ($i) => ['id' => $i->id, 'physical_qty' => $i->bin_code === 'A-01-01' ? 9 : $i->system_qty])->all()]);
+        $this->post(route('gudang.opname.complete', $one->id))->assertSessionHas('success', fn ($m) => str_contains($m, 'dikirim untuk disetujui'));
+        $this->assertSame(10, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->actingAs($this->userWithRole('SUPERVISOR'))->get(route('gudang.stock-approvals'))->assertSee('Produk JSC-A-L');
+        $this->post(route('gudang.opname.approve', $one->id))->assertSessionHas('success');
+        $this->assertSame(9, $this->stockQty('JSC-A-L', 'A-01-01'));
+        $this->assertSame(7, $this->stockQty('JSC-C-M', 'B-01-02'));
+    }
 }

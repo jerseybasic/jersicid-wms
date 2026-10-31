@@ -127,34 +127,100 @@ class BigSellerOrderImport
         $known = MasterSku::whereIn('sku', $skus)->pluck('sku')->mapWithKeys(fn ($sku) => [strtoupper($sku) => true]);
         $stock = StockActive::whereIn('sku', $skus)->groupBy('sku')
             ->selectRaw('sku, SUM(qty - reserved_qty) as available')->pluck('available', 'sku');
-        $existing = Order::withTrashed()->whereIn('order_number', array_column($orders, 'order_number'))
-            ->pluck('order_number')->flip();
+        $existing = Order::withTrashed()->with('items:id,order_id,sku,qty_ordered', 'pickingSession:id,order_id')
+            ->whereIn('order_number', array_column($orders, 'order_number'))
+            ->get()->keyBy(fn ($order) => strtoupper($order->order_number));
 
         foreach ($orders as &$order) {
             $order['problems'] = [];
             $order['warnings'] = [];
+            // create = pesanan baru; change = item pesanan yang sudah ada diganti; cancel = batalkan di WMS
+            $order['action'] = null;
+            $order['existing'] = null;
+            $order['change'] = null;
 
-            if (isset($existing[$order['order_number']])) {
-                $order['problems'][] = 'Sudah pernah diimpor. Untuk mengirim ulang, buka order-nya lalu pakai Proses ulang';
-            }
-            if ($order['cancelled']) {
+            if ($current = $existing[$order['order_number']] ?? null) {
+                $this->compareExisting($order, $current);
+            } elseif ($order['cancelled']) {
                 $order['problems'][] = 'Pesanan dibatalkan';
+            } else {
+                $order['action'] = 'create';
             }
-            foreach ($order['items'] as &$item) {
-                $item['known'] = isset($known[$item['sku']]);
-                if ($item['qty'] < 1) {
-                    $order['problems'][] = "Jumlah {$item['sku']} tidak valid";
-                } elseif (!$item['known']) {
-                    $order['problems'][] = "SKU {$item['sku']} belum ada di Master SKU";
-                } elseif ((int) ($stock[$item['sku']] ?? 0) < $item['qty']) {
-                    $order['warnings'][] = "Stok {$item['sku']} tinggal " . (int) ($stock[$item['sku']] ?? 0) . " pcs";
+
+            if ($order['action'] !== 'cancel') {
+                foreach ($order['items'] as &$item) {
+                    $item['known'] = isset($known[$item['sku']]);
+                    if ($item['qty'] < 1) {
+                        $order['problems'][] = "Jumlah {$item['sku']} tidak valid";
+                    } elseif (!$item['known']) {
+                        $order['problems'][] = "SKU {$item['sku']} belum ada di Master SKU";
+                    } elseif ($order['action'] === 'create' && (int) ($stock[$item['sku']] ?? 0) < $item['qty']) {
+                        $order['warnings'][] = "Stok {$item['sku']} tinggal " . (int) ($stock[$item['sku']] ?? 0) . " pcs";
+                    }
                 }
+                unset($item);
             }
-            unset($item);
-            $order['importable'] = empty($order['problems']);
+
+            // Ganti item order yang sudah dikonfirmasi/diproses hanya jika stok item barunya cukup
+            if ($order['action'] === 'change' && !$order['problems'] && $current->status !== 'PENDING'
+                && $shortages = OrderItemChange::shortages($current, $order['change']['to'])) {
+                $order['problems'][] = 'Stok kurang untuk item baru: ' . StockAvailability::describe($shortages) . '. Item belum bisa diganti.';
+            }
+
+            $order['importable'] = $order['action'] === 'create' && empty($order['problems']);
+            $order['updatable'] = in_array($order['action'], ['change', 'cancel'], true) && empty($order['problems']);
         }
+        unset($order);
 
         return $orders;
+    }
+
+    /**
+     * Pesanan yang sudah pernah diimpor: dibatalkan di marketplace (bisa ikut dibatalkan di WMS),
+     * itemnya berubah (bisa diganti, juga saat sudah di-picking/packing), atau sama (dilewati).
+     */
+    private function compareExisting(array &$order, Order $current): void
+    {
+        $order['existing'] = [
+            'id' => $current->id,
+            'status' => $current->status,
+            'status_label' => $current->trashed() ? 'Dihapus' : $current->status_label,
+            'in_process' => $current->itemsInProcess(),
+        ];
+        $active = !$current->trashed() && in_array($current->status, Order::ACTIVE_STATUSES, true);
+
+        if ($order['cancelled']) {
+            if ($active) {
+                $order['action'] = 'cancel';
+                $order['warnings'][] = "Dibatalkan di marketplace, tapi di WMS masih {$order['existing']['status_label']}.";
+                if (in_array($current->status, Order::IN_PROCESS_STATUSES, true)) {
+                    $order['warnings'][] = 'Barang yang sudah diambil masuk daftar Kembalikan ke Rak.';
+                }
+            } else {
+                $order['problems'][] = 'Pesanan dibatalkan';
+            }
+
+            return;
+        }
+
+        $from = $current->items->groupBy(fn ($item) => strtoupper($item->sku))->map(fn ($rows) => (int) $rows->sum('qty_ordered'))->all();
+        $to = collect($order['items'])->mapWithKeys(fn ($item) => [$item['sku'] => (int) $item['qty']])->all();
+        if (OrderItemChange::same($from, $to)) {
+            $order['problems'][] = 'Sudah pernah diimpor. Untuk mengirim ulang, buka order-nya lalu pakai Proses ulang';
+
+            return;
+        }
+        if (!$active || !in_array($current->status, OrderItemChange::STATUSES, true)) {
+            $order['problems'][] = "Sudah pernah diimpor dan berstatus {$order['existing']['status_label']}, jadi itemnya tidak bisa diganti lagi.";
+
+            return;
+        }
+
+        $order['action'] = 'change';
+        $order['change'] = ['from' => $from, 'to' => $to, 'text' => OrderItemChange::diffText($from, $to)];
+        if ($order['existing']['in_process']) {
+            $order['warnings'][] = "Sudah {$order['existing']['status_label']}: barang lama yang tidak dipakai lagi masuk daftar Kembalikan ke Rak, item baru ditambahkan ke picking, dan paket dikemas ulang.";
+        }
     }
 
     private function firstOf(array $row, array $columns): ?string

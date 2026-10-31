@@ -28,6 +28,8 @@ Setiap anggota bisa memasang **foto profil** sendiri: klik nama di kanan atas, p
 3. Periksa daftarnya. Pesanan yang SKU-nya belum ada di Master SKU, sudah pernah diimpor, atau dibatalkan akan dilewati, lengkap dengan alasannya.
    - Jika kode SKU di marketplace berbeda dengan Master SKU (misalnya `GOTHIC-BLK-M` di Shopee untuk `JER-GOTHIC-HITAM-M`), isi SKU gudangnya di kotak **SKU belum dikenal**, lalu klik **Simpan pemetaan dan periksa ulang**. Tidak perlu upload ulang, dan import berikutnya otomatis memakai SKU gudang yang benar. Bisa dilakukan oleh Owner, Supervisor, dan Admin Gudang.
    - Owner dan Supervisor bisa melihat, menambah, dan menghapus semua pemetaan di **Master Data → Pemetaan SKU**.
+   - Jika produknya memang belum ada di gudang, Owner dan Supervisor bisa klik **Buat SKU baru** langsung di kotak itu. Formnya sudah terisi dari kode dan nama produk di file; setelah disimpan, kembali ke pratinjau yang sama. Jika kode SKU gudang dibuat berbeda, kode marketplace otomatis dipetakan.
+   - Semua kode yang belum terdaftar tercatat di **Pemetaan SKU → SKU Terhambat** (juga untuk Admin Gudang), beserta jumlah pesanan yang tertahan. Di halaman yang sama ada daftar SKU aktif yang belum punya lokasi rak.
 4. Klik **Import**. Jika **Langsung konfirmasi** dicentang, pesanan langsung masuk ke daftar picking. Nomor resi marketplace ikut tersimpan.
 
 ### Mengambil barang untuk order (Picking)
@@ -67,7 +69,7 @@ Jika tidak ada satu rak yang cukup, satu barang dibagi ke beberapa rak dan tampi
 Buka **Transfer Stok**, isi SKU, rak asal, rak tujuan, dan jumlahnya, lalu simpan. Pergerakannya tercatat di riwayat stok.
 
 ### Stock opname
-1. Buka **Stock Opname**, lalu klik **Buat Opname**. Pilih rak yang mau dihitung. Jika tidak ada rak yang dipilih, yang dihitung seluruh gudang.
+1. Buka **Stock Opname**, lalu klik **Buat Opname**. Pilih produk yang dihitung: **Semua produk**, **Satu produk**, atau **Beberapa produk** (ketik/scan SKU lalu Enter). Pilih rak jika perlu; jika tidak ada rak yang dipilih, produk itu dihitung di semua rak. Satu barang (produk di rak yang sama) hanya bisa ada di satu opname yang belum selesai.
 2. Klik **Mulai Opname**. Scan lokasi rak, lalu scan barangnya satu per satu.
 3. Jika ada barang yang tidak ada di daftar, form **Tambah barang** otomatis terisi saat barangnya di-scan.
 4. Klik **Simpan Sementara** sesering mungkin. Setelah semua lokasi dihitung, klik **Kirim untuk Disetujui**. Stok sistem belum berubah sampai Owner/Supervisor menyetujui.
