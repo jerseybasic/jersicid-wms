@@ -74,6 +74,9 @@
                             Minta Owner, Supervisor, atau Admin Gudang memetakan SKU ini ke SKU gudang, atau menambahkannya di Master SKU.
                         @endif
                     </p>
+                    @if ($canMap)
+                        <p class="text-xs text-slate-500 mt-1">Yang belum dipetakan tetap tercatat di <a href="{{ route('blocked-skus.index') }}" class="text-cyan-400 underline">SKU Terhambat</a>.</p>
+                    @endif
                 </div>
 
                 @if ($canMap)
@@ -100,6 +103,13 @@
                                                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:ring-cyan-500">
                                         @if ($item['suggest'])
                                             <p class="text-xs text-cyan-400 mt-1">Saran otomatis, periksa dulu sebelum menyimpan.</p>
+                                        @elseif ($canCreateSku)
+                                            <p class="text-xs text-slate-400 mt-1">Produk ini belum ada di gudang?
+                                                <a href="{{ route('master-skus.create', ['kode' => $item['sku'], 'nama' => $item['name'], 'kembali' => route('gudang.outbound.import.show', $token, false)]) }}"
+                                                   class="text-cyan-400 hover:text-cyan-300 font-semibold underline">Buat SKU baru</a>
+                                            </p>
+                                        @else
+                                            <p class="text-xs text-slate-500 mt-1">Belum ada di gudang? Minta Owner/Supervisor membuat SKU baru.</p>
                                         @endif
                                     </div>
                                 </div>

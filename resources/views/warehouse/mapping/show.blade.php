@@ -176,7 +176,15 @@
                                 d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <p class="text-sm text-slate-400">Tidak ada produk ditemukan</p>
-                        <p class="text-xs text-slate-500 mt-1">Coba kata kunci lain</p>
+                        @if (in_array(auth()->user()->role, \App\Http\Controllers\Admin\BlockedSkuController::CREATE_SKU_ROLES, true))
+                            <p class="text-xs text-slate-500 mt-1">Produknya belum terdaftar?</p>
+                            <a :href="@js(route('master-skus.create')) + '?' + new URLSearchParams({ kode: searchQuery.trim(), kembali: @js(route('gudang.mapping.show', $rack->code, false)) })"
+                               class="inline-block mt-3 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-semibold rounded-lg">
+                                Buat SKU baru "<span x-text="searchQuery.trim().toUpperCase()"></span>"
+                            </a>
+                        @else
+                            <p class="text-xs text-slate-500 mt-1">Coba kata kunci lain. Jika produknya belum terdaftar, minta Owner/Supervisor membuat SKU baru.</p>
+                        @endif
                     </div>
                 </div>
 
@@ -602,7 +610,8 @@
                         return skuMatch || nameMatch || articleMatch;
                     });
 
-                    this.showDropdown = this.filteredSkus.length > 0;
+                    // Tetap terbuka walau kosong, supaya saran "Buat SKU baru" terlihat
+                    this.showDropdown = true;
                     this.highlightedIndex = -1;
                 },
 

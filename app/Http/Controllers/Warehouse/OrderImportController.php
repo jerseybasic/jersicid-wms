@@ -8,6 +8,8 @@ use App\Models\Order;
 use App\Models\MasterSku;
 use App\Models\OrderItem;
 use App\Models\SkuAlias;
+use App\Models\UnregisteredSku;
+use App\Http\Controllers\Admin\BlockedSkuController;
 use App\Services\BigSellerOrderImport;
 use App\Services\ShipDeadline;
 use App\Services\StockAvailability;
@@ -52,6 +54,7 @@ class OrderImportController extends Controller
 
         $token = (string) Str::uuid();
         $fileName = $request->file('file')->getClientOriginalName();
+        $this->recordUnregistered($orders, $fileName);
         Cache::put($this->cacheKey($token), compact('orders', 'fileName'), now()->addMinutes(self::CACHE_MINUTES));
 
         return $this->previewView($orders, $token, $fileName);
@@ -111,6 +114,42 @@ class OrderImportController extends Controller
         ]);
     }
 
+    /**
+     * Kembali ke pratinjau yang sama (mis. setelah membuat SKU baru), diperiksa ulang tanpa upload ulang.
+     */
+    public function show(string $token, BigSellerOrderImport $import)
+    {
+        $cached = Cache::get($this->cacheKey($token));
+        if (!$cached) {
+            return redirect()->route('gudang.outbound.import')
+                ->with('error', 'Pratinjau sudah kedaluwarsa. Upload ulang filenya.');
+        }
+
+        $orders = $import->check($cached['orders']);
+        Cache::put($this->cacheKey($token), ['orders' => $orders, 'fileName' => $cached['fileName']], now()->addMinutes(self::CACHE_MINUTES));
+
+        return $this->previewView($orders, $token, $cached['fileName'], [
+            'success' => session('success'),
+            'error' => session('error'),
+        ]);
+    }
+
+    /** SKU yang belum ada di Master SKU dicatat supaya tampil di daftar SKU Terhambat */
+    private function recordUnregistered(array $orders, string $fileName): void
+    {
+        collect($orders)
+            ->flatMap(fn ($order) => collect($order['items'])->where('known', false)
+                ->map(fn ($item) => $item + ['order' => $order['order_number']]))
+            ->groupBy('sku')
+            ->each(fn ($items, $sku) => UnregisteredSku::record(
+                (string) $sku,
+                $items->first()['name'] ?? null,
+                'IMPORT_BIGSELLER',
+                $fileName,
+                $items->pluck('order')->unique()->count(),
+            ));
+    }
+
     private function previewView(array $orders, string $token, string $fileName, array $flash = [])
     {
         // SKU yang belum dikenal, dengan nama produknya dari file, untuk dipetakan di pratinjau
@@ -132,6 +171,7 @@ class OrderImportController extends Controller
             'flash' => $flash,
             'unknown' => $unknown,
             'canMap' => in_array(auth()->user()->role, SkuAlias::MANAGER_ROLES, true),
+            'canCreateSku' => in_array(auth()->user()->role, BlockedSkuController::CREATE_SKU_ROLES, true),
             'skuOptions' => $skuOptions,
         ]);
     }

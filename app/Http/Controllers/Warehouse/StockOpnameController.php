@@ -8,6 +8,7 @@ use App\Models\StockOpname;
 use App\Models\StockOpnameItem;
 use App\Models\StockMovement;
 use App\Models\AuditTrail;
+use App\Models\MasterSku;
 use App\Models\Warehouse;
 use App\Models\WarehouseRack;
 use Illuminate\Http\Request;
@@ -37,12 +38,20 @@ class StockOpnameController extends Controller
         return view('warehouse.opname.index', compact('opnames'));
     }
 
+    /** Cakupan produk saat membuat opname */
+    public const PRODUCT_SCOPES = [
+        'ALL' => 'Semua produk',
+        'ONE' => 'Satu produk',
+        'SOME' => 'Beberapa produk',
+    ];
+
     public function create()
     {
         $warehouses = Warehouse::where('status', 'AKTIF')->get();
-        $busyRacks = $this->racksInOpenOpname();
+        $openOpnames = $this->openOpnames();
 
-        // Rak dari denah + rak yang muncul di lokasi stok, beserta jumlah lokasi berisi barang
+        // Rak dari denah + rak yang muncul di lokasi stok, beserta jumlah lokasi berisi barang.
+        // Rak terkunci hanya jika sedang dihitung opname untuk semua produk.
         $binsPerRack = StockActive::where('qty', '>', 0)->pluck('bin_code')
             ->groupBy(fn ($bin) => WarehouseRack::codeFromBin($bin))
             ->map->count();
@@ -55,16 +64,32 @@ class StockOpnameController extends Controller
             ->map(fn ($code) => [
                 'code' => $code,
                 'bins' => $binsPerRack[$code] ?? 0,
-                'busy' => in_array($code, $busyRacks) || in_array('*', $busyRacks),
+                'busy' => $openOpnames->contains(fn ($o) => !$o->skus && $o->overlaps([$code], [])),
             ]);
 
-        return view('warehouse.opname.create', compact('warehouses', 'racks', 'busyRacks'));
+        // Pilihan produk: SKU aktif beserta total stok dan jumlah lokasinya
+        $products = MasterSku::where('master_skus.status', 'AKTIF')
+            ->leftJoin('stock_actives', fn ($join) => $join->on('stock_actives.sku', '=', 'master_skus.sku')->where('stock_actives.qty', '>', 0))
+            ->groupBy('master_skus.sku', 'master_skus.product_name', 'master_skus.size')
+            ->orderBy('master_skus.sku')
+            ->get([
+                'master_skus.sku',
+                'master_skus.product_name',
+                'master_skus.size',
+                DB::raw('COALESCE(SUM(stock_actives.qty), 0) as stock'),
+                DB::raw('COUNT(stock_actives.id) as bins'),
+            ]);
+
+        return view('warehouse.opname.create', compact('warehouses', 'racks', 'products', 'openOpnames'));
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'warehouse_id' => ['required', 'exists:warehouses,id'],
+            'scope' => ['nullable', 'in:' . implode(',', array_keys(self::PRODUCT_SCOPES))],
+            'skus' => ['nullable', 'array'],
+            'skus.*' => ['nullable', 'string', 'max:255'],
             'racks' => ['nullable', 'array'],
             'racks.*' => ['string', 'max:20'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -72,28 +97,49 @@ class StockOpnameController extends Controller
 
         $racks = collect($validated['racks'] ?? [])->map(fn ($r) => strtoupper(trim($r)))->filter()->unique()->sort()->values()->all();
 
-        // Satu rak hanya boleh dihitung oleh satu opname yang masih terbuka
-        $busy = $this->racksInOpenOpname();
-        $clash = in_array('*', $busy) ? ($racks ?: ['*']) : ($racks ? array_intersect($racks, $busy) : $busy);
-        if ($clash) {
-            $label = in_array('*', $clash) ? 'seluruh gudang' : 'rak ' . implode(', ', $clash);
-            return back()->withInput()->with('error', "Masih ada opname yang belum selesai untuk {$label}. Selesaikan atau hapus opname itu dulu.");
+        $scope = $validated['scope'] ?? 'ALL';
+        // Pilihan dari daftar berbentuk "SKU — nama produk"; ambil kodenya saja
+        $skus = $scope === 'ALL' ? [] : collect($validated['skus'] ?? [])
+            ->map(fn ($sku) => strtoupper(trim(explode(' — ', (string) $sku)[0])))
+            ->filter()->unique()->sort()->values()->all();
+
+        if ($scope !== 'ALL' && !$skus) {
+            return back()->withInput()->with('error', 'Pilih produk (SKU) yang mau dihitung.');
+        }
+        if ($scope === 'ONE' && count($skus) > 1) {
+            return back()->withInput()->with('error', 'Opname satu produk hanya boleh berisi satu SKU. Pilih "Beberapa produk" untuk lebih dari satu.');
+        }
+        $unknown = array_diff($skus, MasterSku::whereIn('sku', $skus)->pluck('sku')->all());
+        if ($unknown) {
+            return back()->withInput()->with('error', 'SKU tidak terdaftar di Master SKU: ' . implode(', ', $unknown) . '.');
         }
 
-        $stocks = StockActive::where('qty', '>', 0)->orderBy('bin_code')->orderBy('sku')->get();
+        // Barang yang sama (rak dan produk beririsan) hanya boleh dihitung oleh satu opname yang masih terbuka
+        $clash = $this->openOpnames()->first(fn ($o) => $o->overlaps($racks, $skus));
+        if ($clash) {
+            return back()->withInput()->with('error', "Masih ada opname yang belum selesai untuk barang yang sama ({$clash->opname_number}: {$clash->scope_label}). Selesaikan atau hapus opname itu dulu.");
+        }
+
+        $stocks = StockActive::where('qty', '>', 0)
+            ->when($skus, fn ($q) => $q->whereIn('sku', $skus))
+            ->orderBy('bin_code')->orderBy('sku')->get();
         if ($racks) {
             $stocks = $stocks->filter(fn ($stock) => in_array(WarehouseRack::codeFromBin($stock->bin_code), $racks));
         }
 
         if ($stocks->isEmpty()) {
-            return back()->withInput()->with('error', 'Tidak ada stok di rak yang dipilih.');
+            $where = $racks ? 'di rak yang dipilih' : 'di gudang';
+            return back()->withInput()->with('error', $skus
+                ? "Produk yang dipilih tidak punya stok {$where}. Barang yang ditemukan di rak bisa ditambahkan dari opname lain yang mencakup rak itu."
+                : 'Tidak ada stok di rak yang dipilih.');
         }
 
         try {
-            $opname = DB::transaction(function () use ($validated, $racks, $stocks) {
+            $opname = DB::transaction(function () use ($validated, $racks, $skus, $stocks) {
                 $opname = StockOpname::create([
                     'warehouse_id' => $validated['warehouse_id'],
                     'rack_codes' => $racks ? implode(',', $racks) : null,
+                    'sku_codes' => $skus ? implode(',', $skus) : null,
                     'status' => 'DRAFT',
                     'created_by' => auth()->id(),
                     'notes' => $validated['notes'] ?? null,
@@ -172,6 +218,9 @@ class StockOpnameController extends Controller
         if ($opname->racks && !in_array(WarehouseRack::codeFromBin($bin), $opname->racks)) {
             return back()->with('error', "Lokasi {$bin} di luar rak opname ini ({$opname->scope_label}).");
         }
+        if ($opname->skus && !in_array($validated['sku'], $opname->skus, true)) {
+            return back()->with('error', "{$validated['sku']} di luar produk opname ini ({$opname->scope_label}).");
+        }
 
         if ($opname->items()->where('sku', $validated['sku'])->where('bin_code', $bin)->exists()) {
             return back()->with('error', "{$validated['sku']} di {$bin} sudah ada di daftar.");
@@ -190,16 +239,11 @@ class StockOpnameController extends Controller
             ->with('success', "{$validated['sku']} di {$bin} ditambahkan. Isi stok fisiknya.");
     }
 
-    /**
-     * Rak yang sedang dihitung opname lain yang belum selesai. '*' = ada opname seluruh gudang.
-     */
-    private function racksInOpenOpname(): array
+    /** Opname yang belum selesai: barang di cakupannya tidak boleh ikut opname lain */
+    private function openOpnames()
     {
-        return StockOpname::whereIn('status', self::OPEN_STATUSES)->get(['rack_codes'])
-            ->flatMap(fn ($o) => $o->rack_codes ? explode(',', $o->rack_codes) : ['*'])
-            ->unique()
-            ->values()
-            ->all();
+        return StockOpname::whereIn('status', self::OPEN_STATUSES)->orderBy('created_at')
+            ->get(['id', 'opname_number', 'rack_codes', 'sku_codes', 'status']);
     }
 
     public function start($id)

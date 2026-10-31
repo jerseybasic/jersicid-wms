@@ -8,6 +8,12 @@
 
     <div class="max-w-7xl mx-auto space-y-6">
 
+        @if (in_array(auth()->user()->role, \App\Models\SkuAlias::MANAGER_ROLES, true))
+            <div class="flex justify-end">
+                <a href="{{ route('blocked-skus.index') }}#belum-ada-rak" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl border border-slate-700">Lihat SKU terhambat</a>
+            </div>
+        @endif
+
         @if ($unplaced['qty'] > 0)
             <div class="p-4 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-xl text-sm">
                 <strong>{{ number_format($unplaced['qty']) }} pcs</strong> stok ({{ $unplaced['skus'] }} SKU) belum punya lokasi rak, jadi belum terlihat di denah.
