@@ -31,6 +31,12 @@ class PurchaseOrder extends Model
         'CANCELLED' => 'Dibatalkan',
     ];
 
+    /** Status yang isi PO-nya masih boleh diubah (belum diterima lengkap dan tidak dibatalkan) */
+    public const EDITABLE_STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'READY'];
+
+    /** Status tujuan saat Owner/Supervisor mengoreksi status yang salah karena miskom */
+    public const CORRECTABLE_STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP'];
+
     protected $casts = [
         'expected_date' => 'date',
         'ready_at' => 'datetime',
@@ -84,11 +90,26 @@ class PurchaseOrder extends Model
             'PENDING' => ['APPROVED', 'DRAFT', 'CANCELLED'], // DRAFT = ditolak, dikembalikan untuk diperbaiki
             'APPROVED' => ['IN_PRODUCTION', 'CANCELLED'],
             'IN_PRODUCTION' => ['READY_FOR_PICKUP', 'CANCELLED'],
+            'READY_FOR_PICKUP' => ['CANCELLED'],
+            'READY' => ['CANCELLED'],
             // RECEIVED diisi otomatis oleh Inbound saat semua item sudah diterima
         ];
 
         return isset($allowedTransitions[$this->status]) 
             && in_array($newStatus, $allowedTransitions[$this->status]);
+    }
+
+    public function isEditable(): bool
+    {
+        return in_array($this->status, self::EDITABLE_STATUSES, true);
+    }
+
+    /** Koreksi status boleh dari status mana saja kecuali Sudah Diterima (diisi otomatis oleh Inbound) */
+    public function canCorrectTo(string $newStatus): bool
+    {
+        return $this->status !== 'RECEIVED'
+            && $this->status !== $newStatus
+            && in_array($newStatus, self::CORRECTABLE_STATUSES, true);
     }
 
     // ✅ Helper: Get status badge color
