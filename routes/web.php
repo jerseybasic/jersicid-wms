@@ -184,7 +184,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::delete('/{batch}', [PickingBatchController::class, 'destroy'])->name('destroy');
     });
 
-// ==================== KEMBALIKAN KE RAK (ORDER BATAL) ====================
+// ==================== KEMBALIKAN KE RAK (ORDER BATAL / ITEM DIGANTI) ====================
 Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
     ->prefix('gudang/kembalikan-ke-rak')
     ->name('gudang.restock')
@@ -192,6 +192,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::get('/', [RestockController::class, 'index']);
         Route::post('/scan', [RestockController::class, 'scan'])->name('.scan');
         Route::post('/{item}/ketuk', [RestockController::class, 'tap'])->name('.tap');
+        Route::post('/ganti/{restockItem}/ketuk', [RestockController::class, 'tapChange'])->name('.tap-change');
     });
 
 // ==================== SERAH TERIMA KURIR (GUDANG) ====================

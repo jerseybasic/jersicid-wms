@@ -7,7 +7,7 @@ use App\Models\Order;
 use App\Models\PackingSession;
 use App\Models\PickingBatch;
 use App\Models\PickingSession;
-use App\Services\OrderCancellation;
+use App\Services\OrderItemChange;
 use App\Services\ShipDeadline;
 
 /**
@@ -63,7 +63,7 @@ class TaskController extends Controller
             ->countBy(fn ($order) => $order->shipStatus());
 
         $toRefill = ReplenishmentController::pendingCount();
-        $toRestock = (int) OrderCancellation::pendingItems()->sum('qty_picked');
+        $toRestock = OrderItemChange::pendingRestockQty();
         $waitingStock = Order::waitingStock()->count();
 
         // Tiap staf punya akun sendiri: pekerjaan orang lain hanya ditampilkan sebagai info
