@@ -76,7 +76,7 @@ class StaffStationsTest extends TestCase
         $later = $this->confirmedOrder('ORD-2');
         $later->update(['status' => 'PACKING', 'ship_by' => now()->addDays(3)]);
 
-        $tugas = $this->actingAs($this->userWithRole('STAFF_GUDANG'))->get(route('gudang.tugas'))->assertOk()->assertSee('kemas berikutnya');
+        $tugas = $this->actingAs($this->userWithRole('STAFF_GUDANG'))->get(route('gudang.tugas'))->assertOk()->assertSee('kemas 2 sekaligus');
         $this->assertSame('ORD-1', $tugas->viewData('toPack')->first()->order_number);
     }
 

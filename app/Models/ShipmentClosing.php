@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ShipmentClosing extends Model
 {
-    protected $fillable = ['closing_date', 'user_id', 'closed_at', 'shipped_count', 'left_count', 'couriers', 'notes'];
+    protected $fillable = ['closing_date', 'user_id', 'closed_at', 'shipped_count', 'left_count', 'pending_count', 'couriers', 'notes'];
 
     protected $casts = [
         'closing_date' => 'date',

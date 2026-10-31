@@ -37,7 +37,11 @@ class OrderCancellation
                 Picking::refreshBatch($picking->batch);
             }
         }
-        $order->packingSession()->whereNotIn('status', ['COMPLETED', 'CANCELLED'])->update(['status' => 'CANCELLED']);
+        $packing = $order->packingSession()->whereNotIn('status', ['COMPLETED', 'CANCELLED'])->first();
+        if ($packing) {
+            $packing->update(['status' => 'CANCELLED']);
+            Packing::refreshBatch($packing->batch);
+        }
 
         // Paket yang sudah di-scan untuk kurir tapi belum diserahkan dikeluarkan dari daftarnya
         CourierHandoverItem::where('order_id', $order->id)
@@ -78,8 +82,10 @@ class OrderCancellation
 
         // Sesi lama yang sudah dibatalkan dihapus supaya order bisa diambil dan dikemas dari awal
         if ($packing = $order->packingSession) {
+            $packingBatch = $packing->batch;
             $packing->items()->delete();
             $packing->delete();
+            Packing::refreshBatch($packingBatch);
         }
         if ($picking = $order->pickingSession) {
             $batch = $picking->batch;

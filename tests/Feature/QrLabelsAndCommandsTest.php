@@ -99,14 +99,23 @@ class QrLabelsAndCommandsTest extends TestCase
         $this->actingAs($this->userWithRole('STAFF_GUDANG'))->postJson(route('gudang.command'), ['code' => 'CMD-PICKING'])
             ->assertNotFound()->assertJson(['ok' => false, 'message' => 'Tidak ada order yang menunggu picking.']);
 
-        // Packing: order selesai picking yang terlama
+        // Packing: satu order menunggu langsung dikemas
         $this->postJson(route('gudang.command'), ['code' => 'CMD-PACKING'])->assertNotFound();
         $picked = $this->order('SP-3', 'PACKING', ['picked_at' => now()->subHour()]);
-        $this->order('SP-4', 'PACKING', ['picked_at' => now()]);
         $response = $this->actingAs($staff)->postJson(route('gudang.command'), ['code' => 'CMD-PACKING'])->assertOk();
         $packing = PackingSession::where('order_id', $picked->id)->firstOrFail();
         $this->assertSame(['IN_PROGRESS', $staff->id], [$packing->status, $packing->user_id]);
         $this->assertSame(route('gudang.packing.show', $packing->id), $response->json('redirect'));
+
+        // Beberapa keranjang menunggu: QR Mulai Packing membuat packing gabungan
+        $this->order('SP-4', 'PACKING', ['picked_at' => now()]);
+        $this->order('SP-6', 'PACKING', ['picked_at' => now()]);
+        $packer = $this->userWithRole('STAFF_GUDANG');
+        $response = $this->actingAs($packer)->postJson(route('gudang.command'), ['code' => 'CMD-PACKING'])->assertOk();
+        $packingBatch = \App\Models\PackingBatch::where('user_id', $packer->id)->firstOrFail();
+        $this->assertSame(route('gudang.packing-batch.show', $packingBatch), $response->json('redirect'));
+        $this->assertSame(2, $packingBatch->sessions()->count());
+        $this->postJson(route('gudang.command'), ['code' => 'CMD-PACKING'])->assertJsonPath('redirect', route('gudang.packing-batch.show', $packingBatch));
 
         // Packer scan no. order/resi dari keranjang: order itu yang langsung dikemas
         $basket = $this->order('SP-5', 'PACKING', ['picked_at' => now(), 'tracking_number' => 'SPXID555']);

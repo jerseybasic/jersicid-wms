@@ -17,6 +17,7 @@ use App\Http\Controllers\Warehouse\OrderImportController;
 use App\Http\Controllers\Warehouse\OutboundController;
 use App\Http\Controllers\Warehouse\PickingBatchController;
 use App\Http\Controllers\Warehouse\PickingController;
+use App\Http\Controllers\Warehouse\PackingBatchController;
 use App\Http\Controllers\Warehouse\PackingController;
 use App\Http\Controllers\Warehouse\TransferController;
 use App\Http\Controllers\Warehouse\ReplenishmentController;
@@ -133,6 +134,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/import', [OrderImportController::class, 'store'])->name('outbound.import.store');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
     Route::post('/massal', [OutboundController::class, 'bulkStatus'])->name('outbound.bulk-status');
+    Route::post('/massal/picking-gabungan', [OutboundController::class, 'bulkPick'])->name('outbound.bulk-pick');
     Route::patch('/{id}/status', [OutboundController::class, 'updateStatus'])->name('outbound.update-status');
     Route::post('/{id}/batalkan', [OutboundController::class, 'cancel'])->name('outbound.cancel');
     Route::post('/{id}/aktifkan', [OutboundController::class, 'reactivate'])->name('outbound.reactivate');
@@ -229,6 +231,18 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{sessionId}/items/{itemId}/masalah', [PackingController::class, 'problem'])->name('packing.problem');
         Route::post('/{id}/resi', [PackingController::class, 'resi'])->name('packing.resi');
         Route::delete('/{id}', [PackingController::class, 'destroy'])->name('packing.destroy');
+    });
+
+// ==================== PACKING GABUNGAN (GUDANG) ====================
+Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
+    ->prefix('gudang/packing-gabungan')
+    ->name('gudang.packing-batch.')
+    ->group(function () {
+        Route::post('/', [PackingBatchController::class, 'store'])->name('store');
+        Route::post('/otomatis', [PackingBatchController::class, 'auto'])->name('auto');
+        Route::post('/dari-picking/{pickingBatch}', [PackingBatchController::class, 'fromPicking'])->name('from-picking');
+        Route::get('/{batch}', [PackingBatchController::class, 'show'])->name('show');
+        Route::post('/{batch}/scan', [PackingBatchController::class, 'scan'])->name('scan');
     });
 
 // ==================== TRANSFER STOK (GUDANG) ====================
