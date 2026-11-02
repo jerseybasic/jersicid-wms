@@ -94,13 +94,25 @@
                             @endif
                         </div>
                         @if ($c['waiting'] + $c['scanned'])
-                            <form method="POST" action="{{ route('gudang.handover.store') }}" class="shrink-0">
-                                @csrf
-                                <input type="hidden" name="courier" value="{{ $group['courier'] }}">
-                                <button type="submit" class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 text-sm font-bold rounded-xl">
-                                    Serahkan
-                                </button>
-                            </form>
+                            {{-- Normalnya dipickup kurir; kalau kurir tidak datang, pilih Drop sendiri --}}
+                            <div class="shrink-0 flex flex-col items-end gap-1">
+                                <form method="POST" action="{{ route('gudang.handover.store') }}">
+                                    @csrf
+                                    <input type="hidden" name="courier" value="{{ $group['courier'] }}">
+                                    <input type="hidden" name="method" value="PICKUP">
+                                    <button type="submit" class="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-900 text-sm font-bold rounded-xl">
+                                        Serahkan
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ route('gudang.handover.store') }}">
+                                    @csrf
+                                    <input type="hidden" name="courier" value="{{ $group['courier'] }}">
+                                    <input type="hidden" name="method" value="DROP">
+                                    <button type="submit" class="text-xs text-amber-300 hover:text-amber-200 underline" title="Kurir tidak menjemput, paket diantar sendiri ke agen">
+                                        Tidak dipickup? Drop sendiri
+                                    </button>
+                                </form>
+                            </div>
                         @endif
                     </div>
 
@@ -171,7 +183,11 @@
                     @foreach ($history as $handover)
                         <a href="{{ route('gudang.handover.print', $handover) }}" class="flex items-center gap-3 p-4 hover:bg-slate-800/40">
                             <div class="flex-1 min-w-0">
-                                <p class="font-semibold text-white">{{ $handover->courier }} · {{ $handover->items_count }} paket</p>
+                                <p class="font-semibold text-white">{{ $handover->courier }} · {{ $handover->items_count }} paket
+                                    @if ($handover->isDrop())
+                                        <span class="ml-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[11px] font-semibold">Drop sendiri{{ $handover->drop_point ? ' · ' . $handover->drop_point : '' }}</span>
+                                    @endif
+                                </p>
                                 <p class="text-xs text-slate-400 truncate">
                                     {{ $handover->completed_at?->format('d/m/Y H:i') }} · {{ $handover->user?->name }}{{ $handover->driver_name ? ' → ' . $handover->driver_name : '' }}
                                 </p>

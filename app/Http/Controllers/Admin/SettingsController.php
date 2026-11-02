@@ -10,6 +10,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\WhatsAppMessage;
 use App\Console\Commands\SendLowStockAlert;
+use App\Services\DailyShipmentReport;
 use App\Services\LowStock;
 use App\Services\ShipDeadline;
 use App\Services\PoNotifier;
@@ -55,7 +56,16 @@ class SettingsController extends Controller
             'recent' => WhatsAppMessage::latest('id')->limit(10)->get(),
         ];
 
-        return view('settings.index', compact('stats', 'company', 'whatsapp'));
+        $report = [
+            'enabled' => DailyShipmentReport::enabled(),
+            'time' => DailyShipmentReport::time(),
+            'targets' => DailyShipmentReport::rawTargets(),
+            'parsed' => DailyShipmentReport::targets(),
+            'log' => DailyShipmentReport::log(),
+            'preview' => DailyShipmentReport::message(),
+        ];
+
+        return view('settings.index', compact('stats', 'company', 'whatsapp', 'report'));
     }
 
     /**
@@ -136,6 +146,53 @@ class SettingsController extends Controller
         }
 
         return back()->with('success', 'Pesan tes masuk antrean. Makro akan mengirimnya saat mengambil antrean berikutnya.');
+    }
+
+    /** Laporan kiriman harian: aktif/mati, jam kirim, dan penerima (nomor pribadi atau nama grup WhatsApp) */
+    public function updateDailyReport(Request $request)
+    {
+        $validated = $request->validate([
+            'daily_report_time' => ['required', 'date_format:H:i'],
+            'daily_report_targets' => ['nullable', 'string', 'max:2000'],
+        ], [
+            'daily_report_time.date_format' => 'Jam kirim harus berformat JJ:MM, contoh 17:00.',
+        ]);
+
+        $targets = DailyShipmentReport::targets($validated['daily_report_targets'] ?? '');
+        if (count($targets) > DailyShipmentReport::MAX_TARGETS) {
+            return back()->withInput()->withErrors(['daily_report_targets' => 'Maksimal ' . DailyShipmentReport::MAX_TARGETS . ' penerima.']);
+        }
+        foreach ($targets as $target) {
+            if (mb_strlen($target['to']) > 100) {
+                return back()->withInput()->withErrors(['daily_report_targets' => 'Nama grup maksimal 100 huruf: ' . \Illuminate\Support\Str::limit($target['to'], 40)]);
+            }
+        }
+        $enabled = $request->boolean('daily_report_enabled');
+        if ($enabled && $targets === []) {
+            return back()->withInput()->withErrors(['daily_report_targets' => 'Isi minimal satu nomor atau nama grup WhatsApp untuk mengaktifkan laporan.']);
+        }
+
+        $before = ['aktif' => DailyShipmentReport::enabled() ? 'Ya' : 'Tidak', 'jam' => DailyShipmentReport::time(), 'penerima' => DailyShipmentReport::rawTargets()];
+        DailyShipmentReport::save($enabled, $validated['daily_report_time'], $validated['daily_report_targets'] ?? '');
+        $after = ['aktif' => DailyShipmentReport::enabled() ? 'Ya' : 'Tidak', 'jam' => DailyShipmentReport::time(), 'penerima' => DailyShipmentReport::rawTargets()];
+
+        [$old, $new] = AuditTrail::changes($before, $after);
+        if ($new) {
+            AuditTrail::record('UPDATE_DAILY_REPORT', 'SETTINGS', $new, $old);
+        }
+
+        return back()->with('success', 'Pengaturan laporan kiriman harian disimpan.');
+    }
+
+    /** Kirim uji: laporan hari ini langsung masuk antrean, tanpa mengubah jadwal harian */
+    public function testDailyReport()
+    {
+        if ($error = DailyShipmentReport::queue(markSent: false)) {
+            return back()->withErrors(['daily_report' => $error]);
+        }
+        AuditTrail::record('TEST_DAILY_REPORT', 'SETTINGS', ['penerima' => count(DailyShipmentReport::targets())]);
+
+        return back()->with('success', 'Laporan kiriman hari ini masuk antrean. Makro akan mengirimnya saat mengambil antrean berikutnya.');
     }
 
     public function updateProfile(Request $request)

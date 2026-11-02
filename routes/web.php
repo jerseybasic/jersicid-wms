@@ -382,6 +382,8 @@ Route::middleware(['auth', 'role:OWNER'])->prefix('settings')->name('settings.')
     Route::put('/whatsapp', [SettingsController::class, 'updateWhatsApp'])->name('whatsapp');
     Route::post('/whatsapp/tes', [SettingsController::class, 'testWhatsApp'])->name('whatsapp.test');
     Route::post('/whatsapp/token', [SettingsController::class, 'whatsAppToken'])->name('whatsapp.token');
+    Route::put('/laporan-harian', [SettingsController::class, 'updateDailyReport'])->name('daily-report');
+    Route::post('/laporan-harian/tes', [SettingsController::class, 'testDailyReport'])->name('daily-report.test');
     Route::post('/clear-cache', function () {
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
         \Illuminate\Support\Facades\Artisan::call('view:clear');

@@ -8,7 +8,7 @@ class WhatsAppMessage extends Model
 {
     protected $table = 'whatsapp_messages';
 
-    protected $fillable = ['recipient', 'body', 'status', 'attempts', 'error', 'claimed_at', 'sent_at'];
+    protected $fillable = ['recipient', 'topic', 'body', 'status', 'attempts', 'error', 'claimed_at', 'sent_at'];
 
     protected $casts = [
         'attempts' => 'integer',

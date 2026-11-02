@@ -233,6 +233,99 @@
             @endif
         </div>
 
+        <!-- Laporan Kiriman Harian -->
+        <div id="laporan-harian" class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h3 class="text-lg font-semibold text-white">Laporan Kiriman Harian</h3>
+                @if ($report['enabled'])
+                    <span class="px-2 py-1 text-xs font-semibold rounded-lg bg-emerald-500/15 text-emerald-300">Aktif · tiap hari {{ $report['time'] }}</span>
+                @else
+                    <span class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-700 text-slate-300">Belum aktif</span>
+                @endif
+            </div>
+            <p class="text-sm text-slate-400 mb-4">Ringkasan paket yang dikirim hari ini per ekspedisi (dipickup kurir atau drop sendiri), paket siap kirim yang belum diserahkan, dan order yang tertunda. Dikirim lewat makro WhatsApp yang sama, ke nomor pribadi atau grup WhatsApp.</p>
+
+            @error('daily_report')
+                <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-300">{{ $message }}</div>
+            @enderror
+            @unless ($whatsapp['has_token'])
+                <div class="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-sm text-amber-300">Buat token makro di bagian Notifikasi WhatsApp dulu, supaya laporan bisa dikirim.</div>
+            @endunless
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <form method="POST" action="{{ route('settings.daily-report') }}" class="space-y-4">
+                    @csrf
+                    @method('PUT')
+                    <label class="flex items-start gap-3 text-sm text-slate-300">
+                        <input type="checkbox" name="daily_report_enabled" value="1" @checked(old('daily_report_enabled', $report['enabled']))
+                            class="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"/>
+                        <span>Kirim laporan otomatis setiap hari</span>
+                    </label>
+                    <div>
+                        <label for="daily_report_time" class="block text-sm font-medium text-slate-300 mb-2">Jam kirim</label>
+                        <input type="time" id="daily_report_time" name="daily_report_time" value="{{ old('daily_report_time', $report['time']) }}" required
+                            class="px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"/>
+                        <p class="text-xs text-slate-500 mt-1">Sebaiknya setelah kurir terakhir menjemput, misalnya 17:00.</p>
+                        @error('daily_report_time')<p class="text-xs text-red-400 mt-1">{{ $message }}</p>@enderror
+                    </div>
+                    <div>
+                        <label for="daily_report_targets" class="block text-sm font-medium text-slate-300 mb-2">Penerima (satu per baris)</label>
+                        <textarea id="daily_report_targets" name="daily_report_targets" rows="4"
+                            placeholder="081234567890&#10;Gudang Jersic"
+                            class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none font-mono text-sm">{{ old('daily_report_targets', $report['targets']) }}</textarea>
+                        <p class="text-xs text-slate-500 mt-1">Nomor pribadi (08xx), atau nama grup WhatsApp persis seperti di aplikasi. Nomor pengirim di makro harus sudah jadi anggota grup itu.</p>
+                        @error('daily_report_targets')<p class="text-xs text-red-400 mt-1">{{ $message }}</p>@enderror
+                        @if ($report['parsed'])
+                            <div class="flex flex-wrap gap-1 mt-2">
+                                @foreach ($report['parsed'] as $target)
+                                    <span class="px-2 py-0.5 rounded text-xs {{ $target['type'] === 'grup' ? 'bg-violet-500/15 text-violet-300' : 'bg-cyan-500/15 text-cyan-300' }}">{{ $target['type'] === 'grup' ? 'Grup' : 'Nomor' }}: {{ $target['to'] }}</span>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                    <div class="flex flex-wrap justify-end gap-3">
+                        @if ($report['parsed'])
+                            <button type="submit" form="daily-report-test" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-sm font-semibold rounded-xl border border-cyan-500/40 transition-all">Kirim uji sekarang</button>
+                        @endif
+                        <button type="submit" class="px-6 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">Simpan</button>
+                    </div>
+                </form>
+
+                <div class="p-4 bg-slate-900/60 border border-slate-700 rounded-xl min-w-0">
+                    <p class="text-sm font-semibold text-white mb-2">Contoh isi laporan (data saat ini)</p>
+                    <pre class="text-xs text-slate-300 whitespace-pre-wrap break-words font-sans">{{ $report['preview'] }}</pre>
+                </div>
+            </div>
+
+            <form id="daily-report-test" method="POST" action="{{ route('settings.daily-report.test') }}">@csrf</form>
+
+            <div class="mt-5 pt-5 border-t border-slate-700/50">
+                <p class="text-sm font-semibold text-white mb-2">Log pengiriman laporan</p>
+                @if ($report['log']->isEmpty())
+                    <p class="text-sm text-slate-500">Belum pernah dikirim.</p>
+                @else
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left [&_td]:whitespace-nowrap">
+                            <tbody class="divide-y divide-slate-800">
+                                @foreach ($report['log'] as $msg)
+                                    <tr>
+                                        <td class="py-2 pr-3 text-slate-400">{{ $msg->created_at->format('d/m H:i') }}</td>
+                                        <td class="py-2 pr-3 text-slate-200">{{ $msg->recipient }}</td>
+                                        <td class="py-2 pr-3">
+                                            <span class="px-2 py-0.5 rounded text-xs font-semibold {{ ['SENT' => 'bg-emerald-500/15 text-emerald-300', 'FAILED' => 'bg-red-500/15 text-red-300'][$msg->status] ?? 'bg-amber-500/15 text-amber-300' }}">
+                                                {{ ['SENT' => 'Terkirim', 'FAILED' => 'Gagal', 'PENDING' => 'Menunggu'][$msg->status] ?? $msg->status }}
+                                            </span>
+                                        </td>
+                                        <td class="py-2 text-slate-400">{{ $msg->sent_at?->format('d/m H:i') ?? ($msg->error ? \Illuminate\Support\Str::limit($msg->error, 60) : '') }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
+            </div>
+        </div>
+
         <!-- System Maintenance -->
         <div class="bg-gradient-to-br from-red-900/20 to-slate-900 border border-red-500/30 rounded-2xl p-6 shadow-xl">
             <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">

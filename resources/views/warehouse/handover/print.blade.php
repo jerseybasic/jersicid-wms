@@ -51,6 +51,7 @@
         <h1>Manifest Serah Terima Paket</h1>
         <div class="meta">
             <div><span>Kurir</span><strong>{{ $handover->courier }}</strong></div>
+            <div><span>Cara serah terima</span><strong>{{ $handover->method_label }}{{ $handover->isDrop() && $handover->drop_point ? ' ke ' . $handover->drop_point : '' }}</strong></div>
             <div><span>No. serah terima</span><strong>{{ $handover->handover_number }}</strong></div>
             <div><span>Waktu diserahkan</span><strong>{{ $handover->completed_at?->format('d/m/Y H:i') ?? 'Belum diserahkan' }}</strong></div>
             <div><span>Jumlah paket</span><strong>{{ $handover->orders->count() }} paket · {{ (int) $handover->orders->sum('items_sum_qty_ordered') }} pcs</strong></div>
@@ -85,7 +86,7 @@
 
         <div class="sign">
             <div>Diserahkan oleh (gudang)<div class="line">{{ $handover->user?->name }}</div></div>
-            <div>Diterima oleh (kurir {{ $handover->courier }})
+            <div>Diterima oleh ({{ $handover->isDrop() ? 'agen' : 'kurir' }} {{ $handover->courier }})
                 @if ($handover->signature_path)
                     <img src="{{ route('gudang.handover.proof', [$handover, 'tanda-tangan']) }}" alt="Tanda tangan kurir" class="signature">
                 @endif
@@ -93,7 +94,7 @@
             </div>
         </div>
         @if ($handover->photo_path)
-            <p class="notice"><a href="{{ route('gudang.handover.proof', [$handover, 'foto']) }}" target="_blank">Lihat foto tumpukan paket</a></p>
+            <p class="notice"><a href="{{ route('gudang.handover.proof', [$handover, 'foto']) }}" target="_blank">{{ $handover->isDrop() ? 'Lihat foto bukti drop' : 'Lihat foto tumpukan paket' }}</a></p>
         @endif
     </div>
 

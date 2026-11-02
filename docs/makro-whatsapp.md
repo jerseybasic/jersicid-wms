@@ -21,6 +21,17 @@ Makro memakai Chromium/Chrome, atau Firefox jika Chrome tidak ada. Untuk memaksa
 
 Untuk menjalankan berikutnya cukup `./wa-login.sh --wms`. Cara menjalankannya terus-menerus di server ada di README makro.
 
+## Laporan kiriman harian (nomor pribadi atau grup)
+
+Di **Pengaturan → Laporan Kiriman Harian**, centang **Kirim laporan otomatis setiap hari**, isi jam kirim (bawaan 17:00), lalu isi penerima satu per baris:
+
+- nomor pribadi, misalnya `081234567890`;
+- nama grup WhatsApp, persis seperti tertulis di aplikasi, misalnya `Gudang Jersic`.
+
+Untuk grup, nomor pengirim yang dipakai makro harus sudah menjadi anggota grup itu. Makro membuka grup lewat kotak pencarian WhatsApp Web dan hanya mengirim jika namanya sama persis (huruf besar/kecil tidak berpengaruh). Jika tidak ketemu, pesan berstatus gagal dengan alasan "grup/kontak tidak ditemukan".
+
+Tombol **Kirim uji sekarang** langsung mengantrekan laporan hari ini tanpa mengubah jadwal. Riwayatnya tampil di **Log pengiriman laporan**. Jadwal butuh cron `schedule:run` yang sama dengan backup harian.
+
 ## API antrean (untuk referensi)
 
 Setiap permintaan wajib memakai header `Authorization: Bearer <token>`.
@@ -31,7 +42,7 @@ Setiap permintaan wajib memakai header `Authorization: Bearer <token>`.
 | `POST /api/whatsapp/antrean/{id}/terkirim` | Menandai pesan terkirim. |
 | `POST /api/whatsapp/antrean/{id}/gagal` dengan `{"error": "alasan"}` | Menandai pesan gagal. Pesan diberikan lagi sampai 3 kali percobaan, lalu statusnya menjadi **Gagal** dan alasannya tampil di Pengaturan. |
 
-- Nomor `to` sudah dalam format `62…`.
+- `to` berisi nomor dalam format `62…`, atau nama grup WhatsApp untuk laporan kiriman harian.
 - Pesan yang sudah diambil tidak diberikan lagi. Kecuali jika dalam 10 menit belum dilaporkan terkirim atau gagal, pesan itu diberikan lagi.
 - Batas permintaan adalah 120 kali per menit.
 

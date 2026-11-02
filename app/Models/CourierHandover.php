@@ -17,7 +17,17 @@ class CourierHandover extends Model
 
     public const NO_COURIER = 'TANPA KURIR';
 
-    protected $fillable = ['handover_number', 'courier', 'driver_name', 'signature_path', 'photo_path', 'user_id', 'status', 'completed_at'];
+    /** Cara paket berpindah ke ekspedisi: dijemput kurir di gudang, atau kita antar (drop) sendiri ke agen/counter */
+    public const PICKUP = 'PICKUP';
+    public const DROP = 'DROP';
+    public const METHODS = [
+        self::PICKUP => 'Dipickup kurir',
+        self::DROP => 'Drop sendiri',
+    ];
+
+    protected $fillable = ['handover_number', 'courier', 'method', 'drop_point', 'driver_name', 'signature_path', 'photo_path', 'user_id', 'status', 'completed_at'];
+
+    protected $attributes = ['method' => self::PICKUP];
 
     protected $casts = ['completed_at' => 'datetime'];
 
@@ -26,6 +36,16 @@ class CourierHandover extends Model
         static::creating(function (CourierHandover $handover) {
             $handover->handover_number ??= 'STK-' . now()->format('Ymd') . '-' . strtoupper(Str::random(4));
         });
+    }
+
+    public function getMethodLabelAttribute(): string
+    {
+        return self::METHODS[$this->method] ?? self::METHODS[self::PICKUP];
+    }
+
+    public function isDrop(): bool
+    {
+        return $this->method === self::DROP;
     }
 
     public function items()
