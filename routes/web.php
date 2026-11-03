@@ -54,7 +54,8 @@ Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
 // ==================== DASHBOARD ====================
 Route::middleware(['auth'])->group(function () {
-    Route::get('/dashboard/owner', [DashboardController::class, 'owner'])->name('dashboard.owner');
+    // Dashboard owner memuat nilai stok (harga modal): hanya OWNER, sesuai matriks akses PRD
+    Route::get('/dashboard/owner', [DashboardController::class, 'owner'])->middleware('role:OWNER')->name('dashboard.owner');
     Route::get('/dashboard/gudang', [DashboardController::class, 'gudang'])->name('dashboard.gudang');
 });
 
@@ -326,9 +327,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/print-sku', [PrinterController::class, 'printSkuLabel'])->name('printer.print-sku');
         Route::post('/preview-zpl', [PrinterController::class, 'previewZpl'])->name('printer.preview');
         Route::post('/print-shipping', [PrinterController::class, 'printShippingLabel'])->name('printer.print-shipping');
-        Route::post('/save-template', [PrinterController::class, 'saveTemplate'])->name('printer.save-template');
-        Route::put('/template/{id}', [PrinterController::class, 'updateTemplate'])->name('printer.update-template');
-        Route::delete('/template/{id}', [PrinterController::class, 'deleteTemplate'])->name('printer.delete-template');
+        Route::post('/save-template', [PrinterController::class, 'saveTemplate'])->middleware('role:OWNER,SUPERVISOR,ADMIN_GUDANG')->name('printer.save-template');
+        Route::put('/template/{id}', [PrinterController::class, 'updateTemplate'])->middleware('role:OWNER,SUPERVISOR,ADMIN_GUDANG')->name('printer.update-template');
+        Route::delete('/template/{id}', [PrinterController::class, 'deleteTemplate'])->middleware('role:OWNER,SUPERVISOR,ADMIN_GUDANG')->name('printer.delete-template');
         Route::post('/test-connection', [PrinterController::class, 'testConnection'])->name('printer.test');
     });
 

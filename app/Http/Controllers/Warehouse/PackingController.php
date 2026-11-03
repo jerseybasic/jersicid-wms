@@ -412,6 +412,7 @@ class PackingController extends Controller
     {
         $session = PackingSession::findOrFail($id);
         $user = auth()->user();
+        abort_unless($user->canCancelWorkOf($session->user_id), 403, 'Hanya pembuatnya, Admin Gudang, Supervisor, atau Owner yang bisa membatalkan pekerjaan ini.');
 
         if (in_array($session->status, ['COMPLETED', 'CANCELLED'], true)) {
             return back()->with('error', 'Tidak dapat menghapus session yang sudah selesai atau dibatalkan.');
