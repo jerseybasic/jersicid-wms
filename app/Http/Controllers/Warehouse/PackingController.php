@@ -37,10 +37,11 @@ class PackingController extends Controller
 
         $sessions = $query->paginate(20);
 
+        $counts = PackingSession::selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status');
         $stats = [
-            'pending' => PackingSession::where('status', 'PENDING')->count(),
-            'in_progress' => PackingSession::where('status', 'IN_PROGRESS')->count(),
-            'completed' => PackingSession::where('status', 'COMPLETED')->count(),
+            'pending' => (int) ($counts['PENDING'] ?? 0),
+            'in_progress' => (int) ($counts['IN_PROGRESS'] ?? 0),
+            'completed' => (int) ($counts['COMPLETED'] ?? 0),
         ];
 
         return view('warehouse.packing.index', compact('sessions', 'stats'));
@@ -411,6 +412,7 @@ class PackingController extends Controller
     {
         $session = PackingSession::findOrFail($id);
         $user = auth()->user();
+        abort_unless($user->canCancelWorkOf($session->user_id), 403, 'Hanya pembuatnya, Admin Gudang, Supervisor, atau Owner yang bisa membatalkan pekerjaan ini.');
 
         if (in_array($session->status, ['COMPLETED', 'CANCELLED'], true)) {
             return back()->with('error', 'Tidak dapat menghapus session yang sudah selesai atau dibatalkan.');

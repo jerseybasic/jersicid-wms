@@ -28,17 +28,20 @@ class WhatsAppQueueController extends Controller
         ]);
     }
 
-    public function sent(Request $request, WhatsAppMessage $message)
+    // Id pesan dicari SETELAH token dicek: tanpa token, id yang ada dan tidak ada sama-sama dijawab 401
+    public function sent(Request $request, string $message)
     {
         $this->authorizeMacro($request);
+        $message = WhatsAppMessage::findOrFail($message);
         WhatsApp::markSent($message);
 
         return response()->json(['ok' => true]);
     }
 
-    public function failed(Request $request, WhatsAppMessage $message)
+    public function failed(Request $request, string $message)
     {
         $this->authorizeMacro($request);
+        $message = WhatsAppMessage::findOrFail($message);
         $error = (string) $request->input('error', 'tidak diketahui');
         WhatsApp::markFailed($message, $error);
 

@@ -12,13 +12,34 @@ class SystemSetting extends Model
         'value' => 'string',
     ];
 
+    /** Nama instance di container: semua setting, dibaca sekali per request (atau per job antrean) */
+    public const MEMO = 'system_settings.all';
+
+    protected static function booted(): void
+    {
+        // Setting berubah: baca ulang dari database pada pemanggilan berikutnya
+        static::saved(fn () => app()->forgetInstance(self::MEMO));
+        static::deleted(fn () => app()->forgetInstance(self::MEMO));
+    }
+
     /**
-     * Get setting value by key
+     * Get setting value by key.
+     *
+     * Semua setting diambil dengan satu query lalu disimpan selama request berjalan, jadi
+     * halaman yang memanggil setting() berkali-kali (label, pengaturan, dashboard) tidak lagi
+     * menjalankan satu query per pemanggilan.
      */
     public static function get(string $key, $default = null)
     {
-        $setting = self::where('key', $key)->first();
-        return $setting ? $setting->value : $default;
+        $all = self::allValues();
+
+        return array_key_exists($key, $all) ? $all[$key] : $default;
+    }
+
+    /** @return array<string, string|null> */
+    public static function allValues(): array
+    {
+        return app(self::MEMO);
     }
 
     /**

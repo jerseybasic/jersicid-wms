@@ -44,11 +44,12 @@ class PurchaseOrderController extends Controller
 
         $purchaseOrders = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
 
+        $counts = PurchaseOrder::selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status');
         $stats = [
-            'total' => PurchaseOrder::count(),
-            'pending' => PurchaseOrder::whereIn('status', ['DRAFT', 'PENDING'])->count(),
-            'approved' => PurchaseOrder::where('status', 'APPROVED')->count(),
-            'in_production' => PurchaseOrder::where('status', 'IN_PRODUCTION')->count(),
+            'total' => (int) $counts->sum(),
+            'pending' => (int) (($counts['DRAFT'] ?? 0) + ($counts['PENDING'] ?? 0)),
+            'approved' => (int) ($counts['APPROVED'] ?? 0),
+            'in_production' => (int) ($counts['IN_PRODUCTION'] ?? 0),
         ];
 
         $statusOptions = PurchaseOrder::STATUS_LABELS;

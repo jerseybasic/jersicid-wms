@@ -151,7 +151,7 @@
             </div>
         </section>
 
-        @unless ($done)
+        @if (!$done && auth()->user()->canCancelWorkOf($batch->user_id))
             <form method="POST" action="{{ route('gudang.picking-batch.destroy', $batch) }}" class="text-center"
                   onsubmit="return confirm('Batalkan keranjang yang belum lengkap? Barang yang sudah diambil untuk keranjang itu harus dikembalikan ke raknya.')">
                 @csrf
@@ -159,6 +159,6 @@
                 <button type="submit" class="text-sm text-red-400 hover:text-red-300 underline">Batalkan keranjang yang belum lengkap</button>
                 <p class="text-xs text-slate-500 mt-1">Order-nya kembali ke antrean picking. Keranjang yang sudah lengkap tetap lanjut ke packing.</p>
             </form>
-        @endunless
+        @endif
     </div>
 </x-app-layout>

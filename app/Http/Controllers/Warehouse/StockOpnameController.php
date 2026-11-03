@@ -430,6 +430,7 @@ class StockOpnameController extends Controller
     public function destroy($id)
     {
         $opname = StockOpname::findOrFail($id);
+        abort_unless(auth()->user()->canCancelWorkOf($opname->created_by), 403, 'Hanya pembuatnya, Admin Gudang, Supervisor, atau Owner yang bisa membatalkan pekerjaan ini.');
         if ($opname->status !== 'DRAFT') {
             return back()->with('error', 'Hanya DRAFT yang bisa dihapus.');
         }

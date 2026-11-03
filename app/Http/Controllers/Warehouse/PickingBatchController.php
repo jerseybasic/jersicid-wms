@@ -367,6 +367,8 @@ class PickingBatchController extends Controller
      */
     public function destroy(Request $request, PickingBatch $batch)
     {
+        abort_unless($request->user()->canCancelWorkOf($batch->user_id), 403, 'Hanya pembuatnya, Admin Gudang, Supervisor, atau Owner yang bisa membatalkan pekerjaan ini.');
+
         $cancelled = DB::transaction(function () use ($batch, $request) {
             $sessions = $batch->sessions()->whereNotIn('status', ['COMPLETED', 'CANCELLED'])->lockForUpdate()->get();
             foreach ($sessions as $session) {

@@ -38,6 +38,15 @@ class User extends Authenticatable
         'notify_whatsapp' => 'boolean',
     ];
 
+    /**
+     * Boleh membatalkan/menghapus pekerjaan (sesi picking/packing, picking gabungan, opname draft)?
+     * Staf gudang hanya miliknya sendiri; Owner, Supervisor, dan Admin Gudang boleh milik siapa pun.
+     */
+    public function canCancelWorkOf(?string $ownerId): bool
+    {
+        return $this->role !== 'STAFF_GUDANG' || ($ownerId !== null && (string) $ownerId === (string) $this->id);
+    }
+
     /** URL foto profil, atau null jika belum ada (tampilkan inisial) */
     public function getProfilePhotoUrlAttribute(): ?string
     {
