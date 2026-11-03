@@ -26,6 +26,9 @@ class OpnameReportExport implements FromQuery, WithHeadings, WithMapping, WithSt
     {
         $query = StockOpname::query()
             ->with(['creator:id,name', 'warehouse:id,name', 'approver:id,name'])
+            // Jumlah item dan total selisih dihitung sekaligus, bukan 2 query per baris
+            ->withCount('items')
+            ->withSum('items', 'difference')
             ->orderBy('created_at', 'desc');
 
         if ($this->request->filled('status')) {
@@ -60,8 +63,8 @@ class OpnameReportExport implements FromQuery, WithHeadings, WithMapping, WithSt
 
     public function map($opname): array
     {
-        $totalItems = $opname->items()->count();
-        $totalDiff = $opname->items()->sum('difference');
+        $totalItems = (int) $opname->items_count;
+        $totalDiff = (int) $opname->items_sum_difference;
 
         return [
             $opname->opname_number,

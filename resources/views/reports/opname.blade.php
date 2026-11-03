@@ -17,7 +17,7 @@
     <div class="space-y-6">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
             <div class="bg-slate-900 rounded-xl p-4 flex justify-end">
-                <a href="{{ route('reports.stock', array_merge(request()->query(), ['export' => 'excel'])) }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent font-semibold rounded-lg shadow-lg shadow-emerald-500/25 transition-all text-sm flex items-center gap-2">
+                <a href="{{ route('reports.opname', array_merge(request()->query(), ['export' => 'excel'])) }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent font-semibold rounded-lg shadow-lg shadow-emerald-500/25 transition-all text-sm flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                     Export Excel
                 </a>
@@ -57,15 +57,15 @@
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                 <p class="text-xs text-emerald-400 mb-1">Selesai</p>
-                <p class="text-xl font-bold text-white">{{ \App\Models\StockOpname::where('status', 'COMPLETED')->count() }}</p>
+                <p class="text-xl font-bold text-white">{{ (int) ($statusCounts['COMPLETED'] ?? 0) }}</p>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                 <p class="text-xs text-amber-400 mb-1">Sedang Berjalan</p>
-                <p class="text-xl font-bold text-white">{{ \App\Models\StockOpname::where('status', 'IN_PROGRESS')->count() }}</p>
+                <p class="text-xl font-bold text-white">{{ (int) ($statusCounts['IN_PROGRESS'] ?? 0) }}</p>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                 <p class="text-xs text-slate-400 mb-1">Draft</p>
-                <p class="text-xl font-bold text-white">{{ \App\Models\StockOpname::where('status', 'DRAFT')->count() }}</p>
+                <p class="text-xl font-bold text-white">{{ (int) ($statusCounts['DRAFT'] ?? 0) }}</p>
             </div>
         </div>
 
@@ -102,7 +102,7 @@
                             <td class="py-3 px-4 text-slate-300">{{ $opname->creator?->name ?? '-' }}</td>
                             <td class="py-3 px-4 text-slate-300">{{ $opname->approver?->name ?? '-' }}</td>
                             <td class="py-3 px-4 text-xs text-slate-300">{{ $opname->created_at->format('d M Y H:i') }}</td>
-                            <td class="py-3 px-4 text-right font-bold text-white">{{ $opname->items()->count() }}</td>
+                            <td class="py-3 px-4 text-right font-bold text-white">{{ $opname->items_count }}</td>
                         </tr>
                         @empty
                         <tr>

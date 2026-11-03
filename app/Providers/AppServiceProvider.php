@@ -16,7 +16,8 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // Semua system setting dibaca sekali per request / per job antrean (lihat SystemSetting::get)
+        $this->app->scoped(\App\Models\SystemSetting::MEMO, fn () => \App\Models\SystemSetting::query()->pluck('value', 'key')->all());
     }
 
     public function boot(): void
