@@ -108,7 +108,8 @@ class QueryBudgetTest extends TestCase
             ['admin', 'gudang.retur.show', OrderReturn::latest('id')->value('id')],
             ['admin', 'gudang.picking'],
             ['admin', 'gudang.picking.create'],
-            ['admin', 'gudang.picking.show', PickingSession::latest('id')->value('id')],
+            // id-nya UUID, jadi latest('id') memilih sesi acak; ambil sesi dari order yang sudah dikirim supaya bentuk halamannya selalu sama
+            ['admin', 'gudang.picking.show', PickingSession::whereHas('order', fn ($q) => $q->where('status', 'SHIPPED'))->orderBy('id')->value('id')],
             ['admin', 'gudang.picking-batch.create'],
             ['admin', 'gudang.packing'],
             ['admin', 'gudang.packing.create'],
