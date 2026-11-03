@@ -16,6 +16,7 @@ use App\Services\ShipDeadline;
 use App\Services\PoNotifier;
 use App\Services\ProfilePhoto;
 use App\Services\WhatsApp;
+use App\Services\WhatsAppAgent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -54,6 +55,7 @@ class SettingsController extends Controller
             'seen_at' => WhatsApp::macroSeenAt(),
             'counts' => WhatsAppMessage::selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status'),
             'recent' => WhatsAppMessage::latest('id')->limit(10)->get(),
+            'agent' => self::agentView(WhatsAppAgent::status()),
         ];
 
         $report = [
@@ -63,6 +65,7 @@ class SettingsController extends Controller
             'parsed' => DailyShipmentReport::targets(),
             'log' => DailyShipmentReport::log(),
             'preview' => DailyShipmentReport::message(),
+            'groups' => WhatsAppAgent::groupNames(),
         ];
 
         return view('settings.index', compact('stats', 'company', 'whatsapp', 'report'));
@@ -134,6 +137,55 @@ class SettingsController extends Controller
 
         return back()->with('success', 'Token makro baru dibuat. Salin sekarang, token ini tidak ditampilkan lagi.')
             ->with('whatsapp_token', WhatsApp::generateToken());
+    }
+
+    /** Status koneksi agen WhatsApp untuk kartu "Koneksi WhatsApp" (diperbarui tiap beberapa detik) */
+    public function whatsAppAgentStatus()
+    {
+        return response()->json(self::agentView(WhatsAppAgent::status()));
+    }
+
+    /** Perintah owner ke agen: putuskan nomor (scan ulang), sambung ulang, atau muat ulang daftar grup */
+    public function whatsAppAgentCommand(Request $request)
+    {
+        $validated = $request->validate(['command' => ['required', 'in:' . implode(',', WhatsAppAgent::COMMANDS)]]);
+        WhatsAppAgent::command($validated['command']);
+        AuditTrail::record('WHATSAPP_AGENT', 'SETTINGS', ['perintah' => $validated['command']]);
+
+        $message = [
+            'logout' => 'Nomor akan diputuskan. QR baru muncul di sini dalam beberapa detik untuk scan nomor pengirim.',
+            'restart' => 'Agen akan menyambung ulang dalam beberapa detik.',
+            'refresh_groups' => 'Daftar grup akan diperbarui dalam beberapa detik.',
+        ][$validated['command']];
+
+        return $request->expectsJson()
+            ? response()->json(['ok' => true, 'message' => $message])
+            : back()->with('success', $message);
+    }
+
+    /** Data agen untuk tampilan: label status, QR sebagai SVG, waktu terakhir terlihat */
+    public static function agentView(array $agent): array
+    {
+        $labels = [
+            'connected' => 'Tersambung',
+            'qr' => 'Menunggu scan QR',
+            'connecting' => 'Menyambung…',
+            'logged_out' => 'Nomor diputuskan',
+            'offline' => 'Agen tidak berjalan',
+        ];
+
+        return [
+            'state' => $agent['state'],
+            'label' => $labels[$agent['state']] ?? $agent['state'],
+            'qr_svg' => $agent['qr'] ? (string) \SimpleSoftwareIO\QrCode\Facades\QrCode::size(240)->margin(1)->generate($agent['qr']) : null,
+            'phone' => $agent['phone'] ? '+' . $agent['phone'] : null,
+            'name' => $agent['name'],
+            'groups' => count($agent['groups']),
+            'memory_mb' => $agent['memory_mb'],
+            'version' => $agent['version'],
+            'seen' => $agent['seen_at'] ? $agent['seen_at']->diffForHumans() . ' (' . $agent['seen_at']->format('d/m H:i') . ')' : 'belum pernah',
+            'pending' => $agent['pending'],
+        ];
     }
 
     /** Kirim pesan percobaan berisi ringkasan stok menipis saat ini. */

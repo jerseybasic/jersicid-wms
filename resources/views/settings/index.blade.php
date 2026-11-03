@@ -120,11 +120,92 @@
                     <span class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-700 text-slate-300">Belum aktif</span>
                 @endif
             </div>
-            <p class="text-sm text-slate-400 mb-4">Setiap pagi pukul 08:00, daftar SKU yang stoknya menipis masuk ke antrean WhatsApp. Pukul {{ sprintf('%02d:00', \App\Console\Commands\SendShipReminder::hour()) }} (2 jam sebelum jam potong), daftar order yang terlambat atau harus dikirim hari ini juga dikirim. Makro WhatsApp toko (<code>./wa-login.sh --wms</code>) mengambil antrean ini lalu mengirimnya lewat WhatsApp Web.</p>
+            <p class="text-sm text-slate-400 mb-4">Setiap pagi pukul 08:00, daftar SKU yang stoknya menipis masuk ke antrean WhatsApp. Pukul {{ sprintf('%02d:00', \App\Console\Commands\SendShipReminder::hour()) }} (2 jam sebelum jam potong), daftar order yang terlambat atau harus dikirim hari ini juga dikirim. Agen WhatsApp toko mengambil antrean ini lalu mengirimnya. Sambungkan nomor pengirim di kotak <b>Koneksi WhatsApp</b> di bawah.</p>
 
             @error('whatsapp')
                 <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-300">{{ $message }}</div>
             @enderror
+
+            <!-- Koneksi WhatsApp: agen ringan dikendalikan dari sini (QR, status, putuskan/sambung ulang) -->
+            <div id="koneksi-whatsapp" class="mb-5 p-4 bg-slate-900/60 border border-slate-700 rounded-xl"
+                 x-data="whatsAppAgent(@js($whatsapp['agent']), @js(route('settings.whatsapp.agent')))" x-init="start()">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <p class="text-sm font-semibold text-white">Koneksi WhatsApp</p>
+                    <span class="px-2 py-1 text-xs font-semibold rounded-lg"
+                          :class="{
+                              'bg-emerald-500/15 text-emerald-300': agent.state === 'connected',
+                              'bg-amber-500/15 text-amber-300': agent.state === 'qr' || agent.state === 'connecting',
+                              'bg-red-500/15 text-red-300': agent.state === 'offline' || agent.state === 'logged_out',
+                          }" x-text="agent.label">{{ $whatsapp['agent']['label'] }}</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-[auto,1fr] gap-4 items-start">
+                    {{-- QR untuk dipindai dari HP nomor pengirim --}}
+                    <div x-show="agent.qr_svg" x-cloak class="bg-white p-2 rounded-lg w-max mx-auto md:mx-0" x-html="agent.qr_svg"></div>
+
+                    <div class="space-y-2 text-sm min-w-0">
+                        <template x-if="agent.state === 'qr'">
+                            <div class="text-slate-300 space-y-1">
+                                <p class="font-semibold text-white">Scan QR ini dari HP nomor pengirim</p>
+                                <p>Buka WhatsApp → <b>Perangkat tertaut</b> → <b>Tautkan perangkat</b>, lalu arahkan kamera ke QR. QR berganti otomatis tiap beberapa detik.</p>
+                            </div>
+                        </template>
+                        <template x-if="agent.state === 'connected'">
+                            <p class="text-slate-300">Mengirim dari <b class="text-white" x-text="agent.phone"></b><span x-show="agent.name"> (<span x-text="agent.name"></span>)</span> · <span x-text="agent.groups"></span> grup</p>
+                        </template>
+                        <template x-if="agent.state === 'offline'">
+                            <div class="text-slate-300 space-y-1">
+                                <p>Agen WhatsApp belum berjalan atau tidak bisa menghubungi WMS. Jalankan sekali di server/PC toko (folder <code class="text-cyan-300">whatsapp-agent</code>):</p>
+                                <code class="block text-xs text-cyan-300 bg-slate-950/60 rounded p-2 break-all">npm install &amp;&amp; npm run setup &amp;&amp; npm start</code>
+                                <p class="text-xs text-slate-500">Setelah itu QR muncul di sini. Panduan lengkap: <code>whatsapp-agent/README.md</code>.</p>
+                            </div>
+                        </template>
+                        <template x-if="agent.state === 'connecting' || agent.state === 'logged_out'">
+                            <p class="text-slate-300">Menyiapkan koneksi. QR akan muncul di sini dalam beberapa detik.</p>
+                        </template>
+                        <p class="text-xs text-slate-500">
+                            Terakhir melapor: <span x-text="agent.seen"></span>
+                            <span x-show="agent.memory_mb"> · memori agen <span x-text="agent.memory_mb"></span> MB</span>
+                            <span x-show="agent.pending"> · perintah <b x-text="agent.pending"></b> menunggu diambil agen</span>
+                        </p>
+                        <div class="flex flex-wrap gap-2 pt-1">
+                            <form method="POST" action="{{ route('settings.whatsapp.agent.command') }}" x-show="agent.state === 'connected'"
+                                  onsubmit="return confirm('Putuskan nomor pengirim ini? Setelah itu scan QR baru, bisa dengan nomor lain.')">
+                                @csrf
+                                <input type="hidden" name="command" value="logout">
+                                <button type="submit" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-red-300 text-xs font-semibold rounded-lg border border-slate-700">Putuskan / ganti nomor</button>
+                            </form>
+                            <form method="POST" action="{{ route('settings.whatsapp.agent.command') }}" x-show="agent.state === 'connected'">
+                                @csrf
+                                <input type="hidden" name="command" value="refresh_groups">
+                                <button type="submit" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg border border-slate-700">Muat ulang grup</button>
+                            </form>
+                            <form method="POST" action="{{ route('settings.whatsapp.agent.command') }}" x-show="agent.state !== 'offline'">
+                                @csrf
+                                <input type="hidden" name="command" value="restart">
+                                <button type="submit" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg border border-slate-700">Sambung ulang</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <script>
+                /** Status agen WhatsApp diperbarui tiap 4 detik selama halaman terbuka */
+                function whatsAppAgent(initial, url) {
+                    return {
+                        agent: initial,
+                        start() {
+                            setInterval(async () => {
+                                if (document.hidden) return;
+                                try {
+                                    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+                                    if (res.ok) this.agent = await res.json();
+                                } catch (e) {}
+                            }, 4000);
+                        },
+                    };
+                }
+            </script>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
                 <div class="p-4 bg-slate-900/60 border border-slate-700 rounded-xl">
@@ -146,7 +227,7 @@
                         <div><p class="text-xl font-bold text-red-300">{{ $whatsapp['counts']['FAILED'] ?? 0 }}</p><p class="text-xs text-slate-400">Gagal</p></div>
                     </div>
                     <p class="text-xs text-slate-400">
-                        Makro terakhir mengambil antrean:
+                        Agen terakhir menghubungi WMS:
                         <span class="text-slate-200">{{ $whatsapp['seen_at'] ? $whatsapp['seen_at']->diffForHumans() . ' (' . $whatsapp['seen_at']->format('d/m H:i') . ')' : 'belum pernah' }}</span>
                     </p>
                 </div>
@@ -154,7 +235,7 @@
 
             <div class="mb-5 p-4 bg-slate-900/60 border border-slate-700 rounded-xl space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-sm font-semibold text-white">Token makro</p>
+                    <p class="text-sm font-semibold text-white">Token agen WhatsApp</p>
                     <form method="POST" action="{{ route('settings.whatsapp.token') }}"
                           @if ($whatsapp['has_token']) onsubmit="return confirm('Buat token baru? Token lama di makro tidak berlaku lagi.')" @endif>
                         @csrf
@@ -165,13 +246,13 @@
                 </div>
                 @if (session('whatsapp_token'))
                     <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-                        <p class="text-xs text-emerald-300 mb-1">Salin token ini ke makro sekarang. Token tidak ditampilkan lagi.</p>
+                        <p class="text-xs text-emerald-300 mb-1">Salin token ini ke agen sekarang. Token tidak ditampilkan lagi.</p>
                         <code class="block text-sm text-white break-all select-all">{{ session('whatsapp_token') }}</code>
                     </div>
                 @elseif ($whatsapp['has_token'])
-                    <p class="text-sm text-slate-400">Token sudah dibuat. Jika lupa, buat token baru lalu ganti di makro.</p>
+                    <p class="text-sm text-slate-400">Token sudah dibuat. Jika lupa, buat token baru lalu ganti di agen (npm run setup).</p>
                 @else
-                    <p class="text-sm text-slate-400">Belum ada token. Makro tidak bisa mengambil antrean sebelum token dibuat.</p>
+                    <p class="text-sm text-slate-400">Belum ada token. Agen tidak bisa tersambung ke WMS sebelum token dibuat.</p>
                 @endif
                 <div class="text-xs text-slate-400 space-y-1">
                     <p>Header: <code class="text-cyan-300">Authorization: Bearer &lt;token&gt;</code></p>
@@ -243,7 +324,7 @@
                     <span class="px-2 py-1 text-xs font-semibold rounded-lg bg-slate-700 text-slate-300">Belum aktif</span>
                 @endif
             </div>
-            <p class="text-sm text-slate-400 mb-4">Ringkasan paket yang dikirim hari ini per ekspedisi (dipickup kurir atau drop sendiri), paket siap kirim yang belum diserahkan, dan order yang tertunda. Dikirim lewat makro WhatsApp yang sama, ke nomor pribadi atau grup WhatsApp.</p>
+            <p class="text-sm text-slate-400 mb-4">Ringkasan paket yang dikirim hari ini per ekspedisi (dipickup kurir atau drop sendiri), paket siap kirim yang belum diserahkan, dan order yang tertunda. Dikirim lewat agen WhatsApp yang sama, ke nomor pribadi atau grup WhatsApp.</p>
 
             @error('daily_report')
                 <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-sm text-red-300">{{ $message }}</div>
@@ -273,7 +354,21 @@
                         <textarea id="daily_report_targets" name="daily_report_targets" rows="4"
                             placeholder="081234567890&#10;Gudang Jersic"
                             class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-400 focus:outline-none font-mono text-sm">{{ old('daily_report_targets', $report['targets']) }}</textarea>
-                        <p class="text-xs text-slate-500 mt-1">Nomor pribadi (08xx), atau nama grup WhatsApp persis seperti di aplikasi. Nomor pengirim di makro harus sudah jadi anggota grup itu.</p>
+                        <p class="text-xs text-slate-500 mt-1">Nomor pribadi (08xx), atau nama grup WhatsApp persis seperti di aplikasi. Nomor pengirim harus sudah jadi anggota grup itu.</p>
+                        @if ($report['groups'])
+                            <div class="flex gap-2 mt-2" x-data="{ group: '' }">
+                                <select x-model="group" aria-label="Pilih grup WhatsApp"
+                                    class="flex-1 min-w-0 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:border-cyan-400 focus:outline-none">
+                                    <option value="">Pilih grup dari nomor pengirim…</option>
+                                    @foreach ($report['groups'] as $group)
+                                        <option value="{{ $group }}">{{ $group }}</option>
+                                    @endforeach
+                                </select>
+                                <button type="button" :disabled="!group"
+                                    @click="const t = document.getElementById('daily_report_targets'); const lines = t.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean); if (!lines.includes(group)) lines.push(group); t.value = lines.join('\n'); group = ''"
+                                    class="px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-cyan-300 text-sm font-semibold rounded-lg border border-slate-700">Tambah</button>
+                            </div>
+                        @endif
                         @error('daily_report_targets')<p class="text-xs text-red-400 mt-1">{{ $message }}</p>@enderror
                         @if ($report['parsed'])
                             <div class="flex flex-wrap gap-1 mt-2">

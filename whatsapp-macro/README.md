@@ -5,6 +5,8 @@ terminal, semua diatur lewat menu angka. Mendukung **banyak tujuan** (nama & nom
 **banyak akun WhatsApp**.
 
 ## Mode WMS (notifikasi JERSIC.ID WMS)
+> Untuk notifikasi harian, lebih ringan memakai [agen WhatsApp](../whatsapp-agent/README.md) tanpa browser yang dikendalikan dari WMS. Mode WMS di bawah tetap berfungsi; jalankan salah satu saja.
+
 Makro ini juga mengirim notifikasi dari WMS, misalnya daftar stok menipis setiap pukul 08:00.
 WMS menaruh pesan di antrean. Mode WMS mengambil antrean itu tiap menit, mengirimnya lewat akun
 yang dipilih, lalu melapor ke WMS (terkirim atau gagal).
