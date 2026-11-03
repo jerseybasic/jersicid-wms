@@ -68,8 +68,101 @@
             </div>
         </div>
 
+        <!-- Aturan Baris Rak: satu baris = satu artikel + satu size -->
+        @php
+            $ruleRows = $rowRules->map(fn ($r) => ['row' => $r->row_index, 'article' => $r->article, 'size' => $r->size])->values();
+            $rowCount = max((int) $rack->rows_count, (int) $rowRules->max('row_index'), 1);
+        @endphp
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl"
+            x-data="rowRulesForm(@js($ruleRows), {{ $rowCount }}, @js($rack->code), @js($rowSummary))">
+            <button type="button" @click="open = !open" class="w-full flex items-center justify-between gap-3 text-left">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Aturan Baris Rak</h3>
+                    <p class="text-xs text-slate-400 mt-1">
+                        @if ($rowRules->isEmpty())
+                            Belum ada aturan. Tetapkan artikel dan size per baris supaya SKU yang cocok langsung muncul saat mengisi rak.
+                        @else
+                            {{ $rowRules->count() }} baris punya aturan. SKU yang cocok tersaring otomatis di Keranjang Produk.
+                        @endif
+                    </p>
+                </div>
+                <svg class="w-5 h-5 text-slate-400 shrink-0 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            <div x-show="open" x-transition class="mt-4 space-y-4" @if ($rowRules->isNotEmpty()) style="display: none;" @endif>
+                {{-- Isi cepat: satu artikel, beberapa size berurutan mulai dari baris tertentu --}}
+                <div class="p-3 bg-slate-800/40 border border-slate-700/50 rounded-xl">
+                    <p class="text-sm font-semibold text-white mb-2">Isi cepat</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                        <label class="text-xs text-slate-400 sm:col-span-2">Artikel
+                            <input type="text" x-model="quickArticle" list="rule-articles" placeholder="contoh: ONE PIECE"
+                                class="mt-1 block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm uppercase">
+                        </label>
+                        <label class="text-xs text-slate-400">Size berurutan
+                            <input type="text" x-model="quickSizes" placeholder="M, L, XL, XXL"
+                                class="mt-1 block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm uppercase">
+                        </label>
+                        <label class="text-xs text-slate-400">Mulai baris
+                            <input type="number" min="1" max="99" x-model.number="quickStart"
+                                class="mt-1 block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm">
+                        </label>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 mt-2">
+                        <button type="button" @click="applyQuick()"
+                            class="px-3 py-2 text-sm font-semibold rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">Terapkan ke baris</button>
+                        <p class="text-xs text-slate-500" x-text="quickPreview()"></p>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ route('gudang.mapping.row-rules', $rack->code) }}" class="space-y-2">
+                    @csrf
+                    <template x-for="(row, index) in rows" :key="row.row">
+                        <div class="grid grid-cols-[3.5rem_1fr_5rem] sm:grid-cols-[4rem_1fr_7rem_10rem] gap-2 items-center p-2 bg-slate-800/30 border border-slate-800 rounded-lg">
+                            <div>
+                                <p class="text-[10px] text-slate-500">Baris</p>
+                                <p class="text-lg font-bold text-white" x-text="row.row"></p>
+                                <input type="hidden" :name="'rows[' + index + '][row]'" :value="row.row">
+                            </div>
+                            <input type="text" :name="'rows[' + index + '][article]'" x-model="row.article" list="rule-articles" placeholder="Artikel (bebas)"
+                                class="min-w-0 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm uppercase">
+                            <input type="text" :name="'rows[' + index + '][size]'" x-model="row.size" list="rule-sizes" placeholder="Size"
+                                class="min-w-0 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm uppercase">
+                            <p class="col-span-3 sm:col-span-1 text-[11px] text-slate-400 font-mono">
+                                <span x-text="bin(row.row)"></span>
+                                <template x-if="summary[row.row]">
+                                    <span class="block font-sans text-slate-500" x-text="summary[row.row].matches + ' SKU cocok · ' + summary[row.row].qty + ' pcs di baris'"></span>
+                                </template>
+                            </p>
+                        </div>
+                    </template>
+                    <div class="flex flex-wrap items-center gap-2 pt-2">
+                        <button type="button" @click="addRow()" x-show="rows.length < 99"
+                            class="px-3 py-2 text-sm font-semibold rounded-lg bg-slate-700 text-white">+ Tambah baris</button>
+                        <button type="button" @click="clearAll()"
+                            class="px-3 py-2 text-sm font-semibold rounded-lg bg-slate-700 text-red-300">Kosongkan semua</button>
+                        <button type="submit"
+                            class="ml-auto px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">Simpan Aturan</button>
+                    </div>
+                    <p class="text-xs text-slate-500">Artikel dicocokkan dengan kolom artikel atau nama produk di Master SKU. Size harus sama persis. Baris yang dikosongkan tidak punya aturan. Menyimpan aturan tidak memindahkan stok.</p>
+                </form>
+
+                <datalist id="rule-articles">
+                    @foreach ($articleOptions as $article)
+                        <option value="{{ $article }}"></option>
+                    @endforeach
+                </datalist>
+                <datalist id="rule-sizes">
+                    @foreach ($sizeOptions as $size)
+                        <option value="{{ $size }}"></option>
+                    @endforeach
+                </datalist>
+            </div>
+        </div>
+
         <!-- Keranjang Produk (Shopping Cart) -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" x-data="assignProductForm(@js($allSkus))">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl" x-data="assignProductForm(@js($allSkus), @js($ruleRows))">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold text-white flex items-center gap-2">
                     <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,6 +183,34 @@
                 </div>
             </div>
 
+            @if ($rowRules->isNotEmpty())
+                {{-- Isi per baris: semua SKU yang cocok aturan baris masuk keranjang sekaligus, lengkap dengan bin barisnya --}}
+                <div class="mb-4 p-3 bg-cyan-500/5 border border-cyan-500/20 rounded-xl">
+                    <div class="flex flex-wrap items-center gap-2 mb-2">
+                        <p class="text-sm font-semibold text-white mr-auto">Isi sesuai aturan baris</p>
+                        <button type="button" @click="addRuleRows(null)" :disabled="!ruleSkus(null).length"
+                            class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-40">
+                            Masukkan semua (<span x-text="ruleSkus(null).length"></span> SKU)
+                        </button>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <template x-for="rule in rules" :key="rule.row">
+                            <button type="button" @click="addRuleRows(rule.row)" :disabled="!ruleSkus(rule.row).length"
+                                class="px-3 py-1.5 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-200 hover:border-cyan-500/50 disabled:opacity-40 text-left">
+                                <span class="font-bold text-white" x-text="'Baris ' + rule.row"></span>
+                                <span x-text="[rule.article, rule.size].filter(Boolean).join(' · ')"></span>
+                                <span class="text-cyan-300" x-text="'(' + ruleSkus(rule.row).length + ')'"></span>
+                            </button>
+                        </template>
+                    </div>
+                    <label class="flex items-center gap-2 mt-3 text-xs text-slate-300">
+                        <input type="checkbox" x-model="onlyRuled" @change="onSearchInput()"
+                            class="rounded border-slate-600 bg-slate-900 text-cyan-500">
+                        Pencarian hanya menampilkan SKU yang cocok aturan rak ini
+                    </label>
+                </div>
+            @endif
+
             <!-- Search & Add Section -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div class="md:col-span-2 relative">
@@ -98,7 +219,7 @@
                     </label>
 
                     <div class="relative">
-                        <input type="text" x-model="searchQuery" @input="onSearchInput" @focus="showDropdown = true"
+                        <input type="text" x-model="searchQuery" @input="onSearchInput" @focus="onSearchInput()"
                             @click.away="showDropdown = false" @keydown.enter.prevent="selectHighlighted"
                             @keydown.arrow-down.prevent="highlightNext" @keydown.arrow-up.prevent="highlightPrevious"
                             @keydown.escape="showDropdown = false"
@@ -141,7 +262,10 @@
                                 </div>
 
                                 <div class="flex-1 min-w-0">
-                                    <p class="text-sm text-white font-medium truncate" x-text="sku.product_name"></p>
+                                    <p class="text-sm text-white font-medium truncate">
+                                        <span x-text="sku.product_name"></span>
+                                        <span x-show="sku.rule_row" class="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-cyan-500/20 text-cyan-300" x-text="'Baris ' + sku.rule_row"></span>
+                                    </p>
                                     <p class="text-xs text-slate-400">
                                         <span x-text="sku.article"></span> •
                                         <span x-text="sku.size"></span> •
@@ -210,18 +334,19 @@
                 <div class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
                     <template x-for="(item, index) in cart" :key="item.sku">
                         <div
-                            class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                            <div class="flex items-center gap-3 flex-1 min-w-0">
+                            class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                            <div class="flex items-center gap-3 flex-1 min-w-0 basis-full sm:basis-auto">
                                 <div
                                     class="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
                                     <span class="text-xs font-bold text-cyan-400" x-text="index + 1"></span>
                                 </div>
                                 <div class="flex-1 min-w-0">
                                     <p class="text-sm font-mono font-bold text-white truncate" x-text="item.sku"></p>
-                                    <p class="text-xs text-slate-400 truncate" x-text="item.product_name"></p>
+                                    <p class="text-xs text-slate-400 truncate" x-text="item.product_name + (item.size ? ' · ' + item.size : '')"></p>
+                                    <p class="text-[10px] font-mono text-cyan-300" x-show="item.bin_code" x-text="'Ke bin ' + item.bin_code"></p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-3 ml-auto">
                                 <div class="text-right">
                                     <p class="text-xs text-slate-400">Stok total</p>
                                     <p class="w-20 px-2 py-1 text-emerald-400 text-sm font-semibold" x-text="item.current_stock"></p>
@@ -253,6 +378,7 @@
                             <input type="hidden" :name="'products[' + index + '][sku]'" :value="item.sku">
                             <input type="hidden" :name="'products[' + index + '][max_capacity]'"
                                 :value="item.max_capacity">
+                            <input type="hidden" :name="'products[' + index + '][bin_code]'" :value="item.bin_code || ''">
                         </div>
                     </template>
                     <div class="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-3"
@@ -262,7 +388,8 @@
                                 class="mt-0.5 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500">
                             <span>Pindahkan stok yang belum punya rak ke rak ini
                                 (<span x-text="cart.reduce((n, item) => n + (item.unplaced_stock || 0), 0)"></span> pcs).
-                                <span class="block text-xs text-slate-400">Stok ini tercatat di lokasi seperti DEFAULT-01 atau GUDANG-UTAMA, jadi belum muncul di denah.</span></span>
+                                <span class="block text-xs text-slate-400">Stok ini tercatat di lokasi seperti DEFAULT-01 atau GUDANG-UTAMA, jadi belum muncul di denah.</span>
+                                <span class="block text-xs text-cyan-300" x-show="cart.some(item => item.bin_code)">SKU yang punya bin baris dipindah ke bin barisnya. Lokasi di bawah dipakai untuk SKU lainnya.</span></span>
                         </label>
                         <div class="flex items-center gap-2">
                             <label for="bin_code" class="text-xs text-slate-400 shrink-0">Ke lokasi</label>
@@ -581,9 +708,69 @@
             };
         }
 
-        function assignProductForm(allSkus) {
+        function rowRulesForm(saved, rowCount, rackCode, summary) {
+            const byRow = Object.fromEntries(saved.map((r) => [r.row, r]));
+            const count = Math.max(rowCount, ...saved.map((r) => r.row), 1);
+            return {
+                open: saved.length === 0,
+                summary: summary || {},
+                rows: Array.from({ length: count }, (_, i) => ({
+                    row: i + 1,
+                    article: byRow[i + 1]?.article || '',
+                    size: byRow[i + 1]?.size || '',
+                })),
+                quickArticle: '',
+                quickSizes: '',
+                quickStart: 1,
+
+                bin(row) {
+                    return rackCode + '-' + String(row).padStart(2, '0') + '-01';
+                },
+
+                sizes() {
+                    return this.quickSizes.split(/[,;]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
+                },
+
+                quickPreview() {
+                    const sizes = this.sizes();
+                    if (!sizes.length) return 'Contoh: artikel ONE PIECE, size M, L, XL mulai baris 1 → baris 1 = M, baris 2 = L, baris 3 = XL.';
+                    const start = Math.max(1, parseInt(this.quickStart) || 1);
+                    return sizes.map((s, i) => 'Baris ' + (start + i) + ' = ' + s).join(', ');
+                },
+
+                applyQuick() {
+                    const sizes = this.sizes();
+                    const start = Math.max(1, parseInt(this.quickStart) || 1);
+                    const article = this.quickArticle.trim().toUpperCase();
+                    if (!sizes.length && !article) return;
+                    const list = sizes.length ? sizes : [''];
+                    list.forEach((size, i) => {
+                        const n = start + i;
+                        if (n > 99) return;
+                        while (this.rows.length < n) this.addRow();
+                        const row = this.rows[n - 1];
+                        row.article = article;
+                        row.size = size;
+                    });
+                },
+
+                addRow() {
+                    if (this.rows.length < 99) this.rows.push({ row: this.rows.length + 1, article: '', size: '' });
+                },
+
+                clearAll() {
+                    if (confirm('Kosongkan semua aturan baris? Klik Simpan Aturan untuk menyimpan.')) {
+                        this.rows.forEach((row) => { row.article = ''; row.size = ''; });
+                    }
+                },
+            };
+        }
+
+        function assignProductForm(allSkus, rules) {
             return {
                 allSkus: allSkus,
+                rules: rules || [],
+                onlyRuled: (rules || []).length > 0,
                 searchQuery: '',
                 filteredSkus: [],
                 showDropdown: false,
@@ -591,8 +778,18 @@
                 cart: [],
                 defaultCapacity: 100,
 
+                ruleSkus(row) {
+                    return this.allSkus.filter((sku) => sku.rule_row && (row === null || sku.rule_row === row)
+                        && !this.cart.some((item) => item.sku === sku.sku));
+                },
+
+                addRuleRows(row) {
+                    this.ruleSkus(row).forEach((sku) => this.addToCart(sku));
+                },
+
                 onSearchInput() {
-                    if (!this.searchQuery) {
+                    const filtering = this.onlyRuled && this.rules.length > 0;
+                    if (!this.searchQuery && !filtering) {
                         this.filteredSkus = [];
                         this.showDropdown = false;
                         return;
@@ -603,12 +800,17 @@
                     this.filteredSkus = this.allSkus.filter(sku => {
                         const alreadyInCart = this.cart.some(item => item.sku === sku.sku);
                         if (alreadyInCart) return false;
+                        if (filtering && !sku.rule_row) return false;
+                        if (!query) return true;
 
                         const skuMatch = sku.sku.toLowerCase().includes(query);
                         const nameMatch = sku.product_name.toLowerCase().includes(query);
                         const articleMatch = sku.article.toLowerCase().includes(query);
                         return skuMatch || nameMatch || articleMatch;
                     });
+
+                    // SKU yang cocok aturan baris tampil duluan, urut nomor baris
+                    this.filteredSkus.sort((a, b) => (a.rule_row || 999) - (b.rule_row || 999));
 
                     // Tetap terbuka walau kosong, supaya saran "Buat SKU baru" terlihat
                     this.showDropdown = true;
@@ -629,6 +831,7 @@
                         size: sku.size,
                         current_stock: sku.current_stock,
                         unplaced_stock: sku.unplaced_stock,
+                        bin_code: sku.rule_bin || '',
                         max_capacity: this.defaultCapacity
                     });
 

@@ -42,6 +42,11 @@ class WarehouseRack extends Model
         });
     }
 
+    public function rowRules()
+    {
+        return $this->hasMany(RackRowRule::class, 'warehouse_rack_id')->orderBy('row_index');
+    }
+
     /**
      * Kode rak dari kode bin: "A-01-01" dan "RAK-A-01" masuk ke rak "A".
      */
