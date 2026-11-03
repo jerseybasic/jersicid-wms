@@ -92,14 +92,14 @@ class InboundController extends Controller
     {
         $bins = [];
 
-        // Paling lemah: baris rak yang aturannya cocok dengan artikel + size SKU
+        // Paling lemah: baris rak yang aturannya cocok dengan kata kunci produk + size SKU
         $rules = RackRowRule::join('warehouse_racks', 'warehouse_racks.id', '=', 'rack_row_rules.warehouse_rack_id')
             ->orderByDesc('warehouse_racks.code')
             ->orderByDesc('rack_row_rules.row_index')
             ->get(['rack_row_rules.*', 'warehouse_racks.code as rack_code']);
         if ($rules->isNotEmpty()) {
             MasterSku::where('status', 'AKTIF')
-                ->get(['sku', 'article', 'product_name', 'size'])
+                ->get(['sku', 'article', 'product_name', 'version', 'sub_version', 'size'])
                 ->each(function ($sku) use ($rules, &$bins) {
                     // diurutkan turun, jadi rak dan baris paling awal yang menang
                     foreach ($rules as $rule) {

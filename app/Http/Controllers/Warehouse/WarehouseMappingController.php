@@ -116,7 +116,7 @@ class WarehouseMappingController extends Controller
             $sku->rule_bin = $row ? RackRowRule::binFor($rack->code, $row->row_index) : null;
         });
         $rowSummary = $this->rowSummary($rack, $rowRules, $allSkus);
-        $articleOptions = $allSkus->pluck('article')->filter()->unique()->sort()->values();
+        $articleOptions = $allSkus->pluck('article')->merge($allSkus->pluck('product_name'))->filter()->unique()->sort()->values();
         $sizeOptions = $allSkus->pluck('size')->filter()->unique()->values();
 
         $rackProducts = $this->rackProducts($rack);
@@ -143,7 +143,7 @@ class WarehouseMappingController extends Controller
     }
 
     /**
-     * Simpan aturan per baris rak (artikel + size). Baris yang dikosongkan dihapus aturannya.
+     * Simpan aturan per baris rak (kata kunci produk + size). Baris yang dikosongkan dihapus aturannya.
      * Tidak mengubah stok maupun penetapan SKU yang sudah ada.
      */
     public function saveRowRules(Request $request, $rackCode)

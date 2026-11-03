@@ -68,7 +68,7 @@
             </div>
         </div>
 
-        <!-- Aturan Baris Rak: satu baris = satu artikel + satu size -->
+        <!-- Aturan Baris Rak: satu baris = satu kata kunci produk + satu size -->
         @php
             $ruleRows = $rowRules->map(fn ($r) => ['row' => $r->row_index, 'article' => $r->article, 'size' => $r->size])->values();
             $rowCount = max((int) $rack->rows_count, (int) $rowRules->max('row_index'), 1);
@@ -80,7 +80,7 @@
                     <h3 class="text-lg font-semibold text-white">Aturan Baris Rak</h3>
                     <p class="text-xs text-slate-400 mt-1">
                         @if ($rowRules->isEmpty())
-                            Belum ada aturan. Tetapkan artikel dan size per baris supaya SKU yang cocok langsung muncul saat mengisi rak.
+                            Belum ada aturan. Tetapkan kata kunci produk (misalnya ONE PIECE, NARUTO) dan size per baris supaya SKU yang cocok langsung muncul saat mengisi rak.
                         @else
                             {{ $rowRules->count() }} baris punya aturan. SKU yang cocok tersaring otomatis di Keranjang Produk.
                         @endif
@@ -92,11 +92,11 @@
             </button>
 
             <div x-show="open" x-transition class="mt-4 space-y-4" @if ($rowRules->isNotEmpty()) style="display: none;" @endif>
-                {{-- Isi cepat: satu artikel, beberapa size berurutan mulai dari baris tertentu --}}
+                {{-- Isi cepat: satu kata kunci, beberapa size berurutan mulai dari baris tertentu --}}
                 <div class="p-3 bg-slate-800/40 border border-slate-700/50 rounded-xl">
                     <p class="text-sm font-semibold text-white mb-2">Isi cepat</p>
                     <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
-                        <label class="text-xs text-slate-400 sm:col-span-2">Artikel
+                        <label class="text-xs text-slate-400 sm:col-span-2">Kata kunci produk
                             <input type="text" x-model="quickArticle" list="rule-articles" placeholder="contoh: ONE PIECE"
                                 class="mt-1 block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm uppercase">
                         </label>
@@ -125,7 +125,7 @@
                                 <p class="text-lg font-bold text-white" x-text="row.row"></p>
                                 <input type="hidden" :name="'rows[' + index + '][row]'" :value="row.row">
                             </div>
-                            <input type="text" :name="'rows[' + index + '][article]'" x-model="row.article" list="rule-articles" placeholder="Artikel (bebas)"
+                            <input type="text" :name="'rows[' + index + '][article]'" x-model="row.article" list="rule-articles" placeholder="Kata kunci, mis. NARUTO"
                                 class="min-w-0 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm uppercase">
                             <input type="text" :name="'rows[' + index + '][size]'" x-model="row.size" list="rule-sizes" placeholder="Size"
                                 class="min-w-0 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm uppercase">
@@ -145,7 +145,7 @@
                         <button type="submit"
                             class="ml-auto px-4 py-2 text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white">Simpan Aturan</button>
                     </div>
-                    <p class="text-xs text-slate-500">Artikel dicocokkan dengan kolom artikel atau nama produk di Master SKU. Size harus sama persis. Baris yang dikosongkan tidak punya aturan. Menyimpan aturan tidak memindahkan stok.</p>
+                    <p class="text-xs text-slate-500">Kata kunci dicari di nama produk, artikel, versi, dan kode SKU di Master SKU. Semua kata harus ada, urutan dan tanda baca bebas (JUJUTSU KAISEN cocok dengan Jujutsu-Kaisen Gojo). Size harus sama persis. Baris yang dikosongkan tidak punya aturan. Menyimpan aturan tidak memindahkan stok.</p>
                 </form>
 
                 <datalist id="rule-articles">
@@ -733,7 +733,7 @@
 
                 quickPreview() {
                     const sizes = this.sizes();
-                    if (!sizes.length) return 'Contoh: artikel ONE PIECE, size M, L, XL mulai baris 1 → baris 1 = M, baris 2 = L, baris 3 = XL.';
+                    if (!sizes.length) return 'Contoh: kata kunci ONE PIECE, size M, L, XL mulai baris 1 → baris 1 = M, baris 2 = L, baris 3 = XL.';
                     const start = Math.max(1, parseInt(this.quickStart) || 1);
                     return sizes.map((s, i) => 'Baris ' + (start + i) + ' = ' + s).join(', ');
                 },

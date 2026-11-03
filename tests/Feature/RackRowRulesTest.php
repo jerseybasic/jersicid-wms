@@ -41,6 +41,17 @@ class RackRowRulesTest extends TestCase
         $this->assertFalse(RackRowRule::matchesValues('NARUTO', 'M', $sku));
         $this->assertFalse(RackRowRule::matchesValues('', '', $sku));
         $this->assertSame('A-02-01', RackRowRule::binFor('a', 2));
+
+        // Kata kunci produk: semua kata harus ada di nama/artikel/versi/SKU, urutan dan tanda baca bebas
+        $gojo = (object) ['sku' => 'JJK-GOJO-L', 'article' => 'JJK', 'product_name' => 'Jersey Anime Jujutsu-Kaisen Gojo', 'version' => 'V2', 'size' => 'L'];
+        $this->assertTrue(RackRowRule::matchesValues('jujutsu kaisen', 'L', $gojo));
+        $this->assertTrue(RackRowRule::matchesValues('kaisen jujutsu', 'L', $gojo));
+        $this->assertTrue(RackRowRule::matchesValues('jjk', 'L', $gojo));
+        $this->assertTrue(RackRowRule::matchesValues('jujutsu v2', null, $gojo));
+        $this->assertFalse(RackRowRule::matchesValues('jujutsu naruto', 'L', $gojo));
+        $this->assertFalse(RackRowRule::matchesValues('one piece', 'L', $gojo));
+        $this->assertTrue(RackRowRule::matchesValues('jujut', 'L', $gojo));
+        $this->assertFalse(RackRowRule::matchesValues('ojo', 'L', $gojo));
     }
 
     public function test_saving_row_rules_replaces_old_rules_and_skips_empty_rows(): void
