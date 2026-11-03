@@ -28,7 +28,7 @@
                 @csrf
                 <button type="submit" @disabled($toPick->isEmpty())
                     class="w-full h-full rounded-2xl p-4 text-center bg-amber-500 text-slate-900 disabled:bg-slate-800 disabled:text-slate-500 active:scale-[0.98] transition-all">
-                    <span class="block text-3xl font-black">{{ $toPick->count() }}</span>
+                    <span class="block text-3xl font-black">{{ $totals['pick'] }}</span>
                     <span class="block text-sm font-bold mt-1">Picking</span>
                     <span class="block text-[11px] opacity-80">{{ $toPick->isEmpty() ? 'tidak ada order' : 'ambil berikutnya' }}</span>
                 </button>
@@ -40,14 +40,14 @@
                 <input type="hidden" name="courier" value="{{ $nextPack?->courier }}">
                 <button type="submit" @disabled(!$nextPack)
                     class="w-full h-full rounded-2xl p-4 text-center bg-purple-500 text-on-accent disabled:bg-slate-800 disabled:text-slate-500 active:scale-[0.98] transition-all">
-                    <span class="block text-3xl font-black">{{ $toPack->count() }}</span>
+                    <span class="block text-3xl font-black">{{ $totals['pack'] }}</span>
                     <span class="block text-sm font-bold mt-1">Packing</span>
                     <span class="block text-[11px] opacity-80">{{ $packTogether >= 2 ? 'kemas ' . $packTogether . ' sekaligus' : ($nextPack ? 'kemas berikutnya' : 'tidak ada keranjang') }}</span>
                 </button>
             </form>
             <a href="{{ route('gudang.handover') }}"
                 class="rounded-2xl p-4 text-center bg-emerald-500 text-slate-900 active:scale-[0.98] transition-all {{ $toShip->isEmpty() ? '!bg-slate-800 !text-slate-500' : '' }}">
-                <span class="block text-3xl font-black">{{ $toShip->count() }}</span>
+                <span class="block text-3xl font-black">{{ $totals['ship'] }}</span>
                 <span class="block text-sm font-bold mt-1">Serah Terima</span>
                 <span class="block text-[11px] opacity-80">scan resi ke kurir</span>
             </a>
@@ -185,14 +185,14 @@
         {{-- Perlu diambil --}}
         <section id="ambil" class="space-y-3">
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
-                Perlu diambil (picking) <span class="{{ $pill }} bg-amber-500/20 text-amber-400">{{ $toPick->count() }}</span>
+                Perlu diambil (picking) <span class="{{ $pill }} bg-amber-500/20 text-amber-400">{{ $totals['pick'] }}</span>
             </h3>
-            @if ($toPick->count() >= 2)
+            @if ($totals['pick'] >= 2)
                 {{-- Gabung otomatis: order dengan batas kirim terdekat, tanpa centang satu per satu --}}
                 <form method="POST" action="{{ route('gudang.picking-batch.auto') }}">
                     @csrf
                     <button type="submit" class="{{ $bigButton }} bg-cyan-500 text-slate-900">
-                        Ambil {{ min($toPick->count(), \App\Models\PickingBatch::AUTO_ORDERS) }} order sekaligus
+                        Ambil {{ min($totals['pick'], \App\Models\PickingBatch::AUTO_ORDERS) }} order sekaligus
                     </button>
                 </form>
                 <a href="{{ route('gudang.picking-batch.create') }}" class="block text-center text-sm text-cyan-400 hover:text-cyan-300">Pilih sendiri order yang digabung</a>
@@ -216,12 +216,15 @@
             @empty
                 <p class="text-sm text-slate-500">Tidak ada order yang menunggu picking.</p>
             @endforelse
+            @if ($totals['pick'] > $toPick->count())
+                <a href="{{ route('gudang.outbound', ['status' => 'CONFIRMED']) }}" class="block text-center text-sm text-cyan-400 hover:text-cyan-300">Menampilkan {{ $toPick->count() }} paling mendesak dari {{ $totals['pick'] }}. Lihat semua di Outbound</a>
+            @endif
         </section>
 
         {{-- Perlu dikemas --}}
         <section id="kemas" class="space-y-3">
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
-                Perlu dikemas (packing) <span class="{{ $pill }} bg-purple-500/20 text-purple-400">{{ $toPack->count() }}</span>
+                Perlu dikemas (packing) <span class="{{ $pill }} bg-purple-500/20 text-purple-400">{{ $totals['pack'] }}</span>
             </h3>
             @if ($packTogether >= 2)
                 <form method="POST" action="{{ route('gudang.packing-batch.auto') }}">
@@ -252,12 +255,15 @@
             @empty
                 <p class="text-sm text-slate-500">Tidak ada order yang menunggu packing.</p>
             @endforelse
+            @if ($totals['pack'] > $toPack->count())
+                <a href="{{ route('gudang.outbound', ['status' => 'PACKING']) }}" class="block text-center text-sm text-cyan-400 hover:text-cyan-300">Menampilkan {{ $toPack->count() }} paling mendesak dari {{ $totals['pack'] }}. Lihat semua di Outbound</a>
+            @endif
         </section>
 
         {{-- Siap kirim --}}
         <section id="kirim" class="space-y-3">
             <h3 class="text-lg font-semibold text-white flex items-center gap-2">
-                Siap kirim <span class="{{ $pill }} bg-emerald-500/20 text-emerald-400">{{ $toShip->count() }}</span>
+                Siap kirim <span class="{{ $pill }} bg-emerald-500/20 text-emerald-400">{{ $totals['ship'] }}</span>
             </h3>
             @if ($toShip->isNotEmpty())
                 <a href="{{ route('gudang.handover') }}" class="{{ $bigButton }} block bg-slate-800 border border-emerald-500/50 text-emerald-300">
@@ -282,6 +288,9 @@
             @empty
                 <p class="text-sm text-slate-500">Belum ada paket yang siap dikirim.</p>
             @endforelse
+            @if ($totals['ship'] > $toShip->count())
+                <a href="{{ route('gudang.outbound', ['status' => 'READY_TO_SHIP']) }}" class="block text-center text-sm text-cyan-400 hover:text-cyan-300">Menampilkan {{ $toShip->count() }} paling mendesak dari {{ $totals['ship'] }}. Lihat semua di Outbound</a>
+            @endif
         </section>
     </div>
 </x-app-layout>
