@@ -21,26 +21,100 @@ use Illuminate\Validation\ValidationException;
 
 class InboundController extends Controller
 {
+    /** Status daftar Inbound: dihitung dari PO terkait */
+    public const RECEIPT_STATUS_LABELS = [
+        'BELUM_KOMPLIT' => 'Belum Komplit',
+        'KOMPLIT' => 'Komplit',
+    ];
+
+    /**
+     * Riwayat penerimaan: satu baris per nomor receipt (surat jalan), walaupun isinya banyak SKU.
+     * Penerimaan dari PO yang sisanya masih ditunggu berstatus Belum Komplit.
+     */
     public function index(Request $request)
     {
         $query = StockMovement::where('type', 'INBOUND')
-            ->with(['user:id,name', 'masterSku:sku,product_name']);
+            ->whereNotNull('reference_no')
+            ->selectRaw('reference_no, MIN(id) as first_id, MAX(created_at) as last_at, SUM(qty) as total_qty, COUNT(DISTINCT sku) as sku_count')
+            ->groupBy('reference_no');
 
         if ($request->filled('search')) {
             $search = $request->search;
-            $query->where(function ($q) use ($search) {
+            $poReceipts = PurchaseOrderReceipt::select('receipt_number')
+                ->whereIn('purchase_order_id', PurchaseOrder::select('id')
+                    ->where('po_number', 'like', "%{$search}%")
+                    ->orWhere('supplier_name', 'like', "%{$search}%"));
+            $query->where(function ($q) use ($search, $poReceipts) {
                 $q->where('reference_no', 'like', "%{$search}%")
-                    ->orWhere('notes', 'like', "%{$search}%");
+                    ->orWhere('notes', 'like', "%{$search}%")
+                    ->orWhere('sku', 'like', "%{$search}%")
+                    ->orWhereIn('reference_no', $poReceipts);
             });
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+        // Belum Komplit = penerimaan dari PO yang sisa barangnya masih ditunggu
+        $openReceipts = PurchaseOrderReceipt::select('receipt_number')
+            ->whereIn('purchase_order_id', PurchaseOrder::select('id')->whereIn('status', PurchaseOrder::RECEIVABLE_STATUSES));
+        if ($request->status === 'BELUM_KOMPLIT') {
+            $query->whereIn('reference_no', $openReceipts);
+        } elseif ($request->status === 'KOMPLIT') {
+            $query->whereNotIn('reference_no', $openReceipts);
         }
 
-        $inbounds = $query->orderBy('created_at', 'desc')->paginate(20);
+        $inbounds = $query->orderByDesc('last_at')->paginate(20)->withQueryString();
+        $refs = $inbounds->pluck('reference_no');
 
-        return view('warehouse.inbound.index', compact('inbounds'));
+        // Data pendukung untuk satu halaman sekaligus (tanpa query per baris)
+        $firstMovements = StockMovement::with('user:id,name')
+            ->whereIn('id', $inbounds->pluck('first_id'))
+            ->get()
+            ->keyBy('id');
+        $pos = PurchaseOrderReceipt::whereIn('receipt_number', $refs)
+            ->with('purchaseOrder.items')
+            ->get()
+            ->groupBy('receipt_number')
+            ->map(fn ($rows) => $rows->first()->purchaseOrder);
+        $suppliers = $this->suppliersFor($refs->all());
+
+        $inbounds->getCollection()->transform(function ($row) use ($firstMovements, $pos, $suppliers) {
+            $first = $firstMovements[$row->first_id] ?? null;
+            $po = $pos[$row->reference_no] ?? null;
+            $row->first = $first;
+            $row->po = $po;
+            $row->supplier = $po?->supplier_name ?? $suppliers[$row->reference_no] ?? null;
+            $row->receipt_status = $po && $po->isReceivable() && $po->qty_remaining_total > 0 ? 'BELUM_KOMPLIT' : 'KOMPLIT';
+
+            return $row;
+        });
+
+        $statusOptions = self::RECEIPT_STATUS_LABELS;
+
+        return view('warehouse.inbound.index', compact('inbounds', 'statusOptions'));
+    }
+
+    /**
+     * Nama supplier per nomor receipt, diambil dari audit trail penerimaan (penerimaan tanpa PO tidak menyimpan supplier di tempat lain).
+     *
+     * @return array<string, string>
+     */
+    private function suppliersFor(array $refs): array
+    {
+        if (!$refs) {
+            return [];
+        }
+
+        return AuditTrail::where('action', 'INBOUND')
+            ->where(function ($q) use ($refs) {
+                foreach ($refs as $ref) {
+                    // Cocok kasar dulu; nomor yang tepat dicocokkan setelah JSON dibaca
+                    $q->orWhere('new_values', 'like', '%' . $ref . '%');
+                }
+            })
+            ->get(['new_values'])
+            ->map(fn ($audit) => json_decode($audit->new_values, true))
+            ->filter(fn ($values) => isset($values['receipt_number'], $values['supplier']) && in_array($values['receipt_number'], $refs, true))
+            ->mapWithKeys(fn ($values) => [$values['receipt_number'] => $values['supplier']])
+            ->all();
     }
 
     public function create()

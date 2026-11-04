@@ -39,15 +39,16 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                             </svg>
                             <input type="text" name="search" value="{{ request('search') }}" 
-                                   placeholder="Cari No. Receipt / Supplier..." 
+                                   placeholder="Cari No. Receipt, PO, supplier, SKU..." 
                                    class="w-full pl-10 pr-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm placeholder-slate-500 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 focus:outline-none transition-all"/>
                         </div>
                         
                         <!-- Status Filter -->
                         <select name="status" class="px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 focus:outline-none transition-all">
                             <option value="">Semua Status</option>
-                            <option value="COMPLETED" {{ request('status') == 'COMPLETED' ? 'selected' : '' }}>Completed</option>
-                            <option value="PENDING" {{ request('status') == 'PENDING' ? 'selected' : '' }}>Pending</option>
+                            @foreach ($statusOptions as $value => $label)
+                                <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
+                            @endforeach
                         </select>
 
                         <!-- Filter Button -->
@@ -96,34 +97,54 @@
                 <table class="w-full">
                     <thead>
                         <tr class="text-xs text-slate-400 border-b border-slate-800 bg-slate-800/30">
-                            <th class="text-left py-3 px-5 font-medium">No. Receipt</th>
-                            <th class="text-left py-3 px-5 font-medium">Supplier</th>
-                            <th class="text-left py-3 px-5 font-medium">PO Terkait</th>
-                            <th class="text-left py-3 px-5 font-medium">Tanggal</th>
-                            <th class="text-left py-3 px-5 font-medium">Status</th>
-                            <th class="text-left py-3 px-5 font-medium">Diterima Oleh</th>
-                            <th class="text-right py-3 px-5 font-medium">Aksi</th>
+                            <th class="text-left py-3 px-4 font-medium">No. Receipt</th>
+                            <th class="text-left py-3 px-4 font-medium">Supplier</th>
+                            <th class="text-left py-3 px-4 font-medium">PO Terkait</th>
+                            <th class="text-right py-3 px-4 font-medium">Qty</th>
+                            <th class="text-left py-3 px-4 font-medium">Tanggal</th>
+                            <th class="text-left py-3 px-4 font-medium">Status</th>
+                            <th class="text-left py-3 px-4 font-medium">Diterima Oleh</th>
+                            <th class="text-right py-3 px-4 font-medium">Aksi</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800">
                         @forelse($inbounds as $inbound)
                         <tr class="hover:bg-slate-800/30 transition-colors">
                             <td class="py-3 px-4">
-                                <span class="text-xs font-mono font-bold text-cyan-400">{{ $inbound->reference_no }}</span>
+                                <a href="{{ route('gudang.inbound.show', $inbound->first_id) }}" class="text-xs font-mono font-bold text-cyan-400 hover:text-cyan-300">{{ $inbound->reference_no }}</a>
+                                @if ($inbound->first?->notes)
+                                    <p class="text-xs text-slate-500 mt-0.5 max-w-[14rem] truncate" title="{{ $inbound->first->notes }}">{{ $inbound->first->notes }}</p>
+                                @endif
                             </td>
-                            <td class="py-3 px-4 text-sm text-white">{{ $inbound->notes ?? '-' }}</td>
-                            <td class="py-3 px-4 text-xs text-slate-300">{{ $inbound->created_at->format('d M Y') }}</td>
+                            <td class="py-3 px-4 text-sm text-white">{{ $inbound->supplier ?? '-' }}</td>
+                            <td class="py-3 px-4 text-xs">
+                                @if ($inbound->po)
+                                    <a href="{{ route('po.show', $inbound->po->id) }}" class="font-mono text-cyan-400 hover:text-cyan-300 whitespace-nowrap">{{ $inbound->po->po_number }}</a>
+                                @else
+                                    <span class="text-slate-500">-</span>
+                                @endif
+                            </td>
+                            <td class="py-3 px-4 text-right text-sm whitespace-nowrap">
+                                <span class="font-semibold text-emerald-400">+{{ number_format($inbound->total_qty) }} pcs</span>
+                                <span class="block text-[11px] text-slate-500">{{ $inbound->sku_count }} SKU</span>
+                            </td>
+                            <td class="py-3 px-4 text-xs text-slate-300 whitespace-nowrap">{{ \Illuminate\Support\Carbon::parse($inbound->last_at)->format('d M Y') }}</td>
                             <td class="py-3 px-4">
-                                <span class="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">COMPLETED</span>
+                                @if ($inbound->receipt_status === 'BELUM_KOMPLIT')
+                                    <span class="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-400 whitespace-nowrap">Belum Komplit</span>
+                                    <span class="block mt-1 text-[11px] text-slate-500 whitespace-nowrap">baru sebagian jadi · sisa {{ number_format($inbound->po->qty_remaining_total) }} pcs</span>
+                                @else
+                                    <span class="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">Komplit</span>
+                                @endif
                             </td>
-                            <td class="py-3 px-4 text-sm text-slate-300">{{ $inbound->user?->name ?? '-' }}</td>
+                            <td class="py-3 px-4 text-sm text-slate-300">{{ $inbound->first?->user?->name ?? '-' }}</td>
                             <td class="py-3 px-4 text-right">
-                                <a href="{{ route('gudang.inbound.show', $inbound->id) }}" class="text-xs text-cyan-400 hover:text-cyan-300">Detail</a>
+                                <a href="{{ route('gudang.inbound.show', $inbound->first_id) }}" class="text-xs text-cyan-400 hover:text-cyan-300">Detail</a>
                             </td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="6" class="text-center py-12 text-slate-500">Tidak ada data inbound</td>
+                            <td colspan="8" class="text-center py-12 text-slate-500">Tidak ada data inbound</td>
                         </tr>
                         @endforelse
                     </tbody>

@@ -68,8 +68,14 @@
                     <p class="text-lg font-bold text-white">{{ $inbound->user?->name }}</p>
                 </div>
                 <div>
-                    <p class="text-xs text-slate-400 mb-1">Total Item</p>
-                    <p class="text-lg font-bold text-emerald-400">{{ $items->count() }}</p>
+                    <p class="text-xs text-slate-400 mb-1">Total Diterima</p>
+                    <p class="text-lg font-bold text-emerald-400">{{ number_format($items->sum('qty')) }} pcs
+                        <span class="text-xs font-normal text-slate-400">· {{ $items->pluck('sku')->unique()->count() }} SKU</span></p>
+                    @if ($po && $po->isReceivable() && $po->qty_remaining_total > 0)
+                        <span class="inline-block mt-1 text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-400">Belum Komplit · baru sebagian jadi</span>
+                    @else
+                        <span class="inline-block mt-1 text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">Komplit</span>
+                    @endif
                 </div>
             </div>
         </div>
