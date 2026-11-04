@@ -140,6 +140,9 @@
                             <td class="py-3 px-4 text-sm text-slate-300">{{ $inbound->first?->user?->name ?? '-' }}</td>
                             <td class="py-3 px-4 text-right">
                                 <a href="{{ route('gudang.inbound.show', $inbound->first_id) }}" class="text-xs text-cyan-400 hover:text-cyan-300">Detail</a>
+                                @if (in_array(auth()->user()->role, ['OWNER', 'SUPERVISOR']))
+                                    <a href="{{ route('gudang.inbound.edit', $inbound->first_id) }}" class="ml-2 text-xs text-amber-400 hover:text-amber-300">Edit</a>
+                                @endif
                             </td>
                         </tr>
                         @empty

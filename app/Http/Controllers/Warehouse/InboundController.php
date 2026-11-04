@@ -12,6 +12,7 @@ use App\Models\Warehouse;
 use App\Models\WarehouseRack;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderReceipt;
+use App\Services\InboundCorrection;
 use App\Services\PoNotifier;
 use App\Services\WaitingStock;
 use Illuminate\Http\Request;
@@ -103,7 +104,8 @@ class InboundController extends Controller
             return [];
         }
 
-        return AuditTrail::where('action', 'INBOUND')
+        return AuditTrail::whereIn('action', ['INBOUND', 'UPDATE_INBOUND'])
+            ->orderBy('id')
             ->where(function ($q) use ($refs) {
                 foreach ($refs as $ref) {
                     // Cocok kasar dulu; nomor yang tepat dicocokkan setelah JSON dibaca
@@ -449,6 +451,84 @@ class InboundController extends Controller
             ->get();
         $po = $poReceipts->first()?->purchaseOrder;
 
-        return view('warehouse.inbound.show', compact('inbound', 'items', 'po'));
+        $canCorrect = in_array(auth()->user()->role, self::CORRECTION_ROLES, true);
+
+        return view('warehouse.inbound.show', compact('inbound', 'items', 'po', 'canCorrect'));
+    }
+
+    /** Role yang boleh mengedit dan menghapus penerimaan (mengubah stok) */
+    private const CORRECTION_ROLES = ['OWNER', 'SUPERVISOR'];
+
+    private function authorizeCorrection(): void
+    {
+        if (!in_array(auth()->user()->role, self::CORRECTION_ROLES, true)) {
+            abort(403, 'Hanya Owner atau Supervisor yang bisa mengedit atau menghapus penerimaan barang.');
+        }
+    }
+
+    public function edit($id)
+    {
+        $this->authorizeCorrection();
+        $inbound = StockMovement::where('type', 'INBOUND')->findOrFail($id);
+        $items = StockMovement::where('type', 'INBOUND')
+            ->where('reference_no', $inbound->reference_no)
+            ->with('masterSku:sku,product_name,size')
+            ->orderBy('id')
+            ->get();
+        $po = PurchaseOrderReceipt::whereIn('stock_movement_id', $items->pluck('id'))->with('purchaseOrder.items')->first()?->purchaseOrder;
+
+        return view('warehouse.inbound.edit', compact('inbound', 'items', 'po'));
+    }
+
+    public function update(Request $request, $id)
+    {
+        $this->authorizeCorrection();
+        $inbound = StockMovement::where('type', 'INBOUND')->findOrFail($id);
+
+        $validated = $request->validate([
+            'receipt_number' => ['required', 'string', 'max:100'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'reason' => ['required', 'string', 'max:500'],
+            'qty' => ['required', 'array'],
+            'qty.*' => ['required', 'integer', 'min:0'],
+        ], [
+            'reason.required' => 'Alasan perubahan wajib diisi.',
+        ]);
+
+        $receiptNo = trim($validated['receipt_number']);
+        DB::transaction(fn () => InboundCorrection::update(
+            $inbound->reference_no,
+            $receiptNo,
+            $validated['notes'] ?? null,
+            collect($validated['qty'])->mapWithKeys(fn ($qty, $lineId) => [(int) $lineId => (int) $qty])->all(),
+            $validated['reason'],
+            auth()->id(),
+            $request->ip(),
+        ));
+
+        $released = WaitingStock::release(auth()->id(), $request->ip());
+        $firstId = StockMovement::where('type', 'INBOUND')->where('reference_no', $receiptNo)->orderBy('id')->value('id');
+
+        return redirect()->route('gudang.inbound.show', $firstId)
+            ->with('success', "Penerimaan {$receiptNo} diperbarui. Stok dan PO sudah disesuaikan." . WaitingStock::releasedMessage($released));
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $this->authorizeCorrection();
+        $inbound = StockMovement::where('type', 'INBOUND')->findOrFail($id);
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+        ], [
+            'reason.required' => 'Alasan menghapus wajib diisi.',
+        ]);
+
+        $po = DB::transaction(fn () => InboundCorrection::delete($inbound->reference_no, $validated['reason'], auth()->id(), $request->ip()));
+
+        $message = "Penerimaan {$inbound->reference_no} dihapus. Stoknya sudah dikurangi lagi"
+            . ($po ? " dan qty diterima di PO {$po->po_number} dikembalikan (status sekarang {$po->status_label})." : '.');
+
+        return redirect()->route('gudang.inbound')->with('success', $message);
     }
 }

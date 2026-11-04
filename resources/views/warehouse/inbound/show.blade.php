@@ -19,6 +19,39 @@
             <div class="p-4 bg-emerald-900/30 border border-emerald-500/50 text-emerald-400 rounded-xl">{{ session('success') }}</div>
         @endif
 
+        @if ($errors->any())
+            <div class="p-4 bg-red-900/30 border border-red-500/50 text-red-400 rounded-xl">
+                <ul class="text-sm space-y-1">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        @if ($canCorrect)
+            <!-- Koreksi penerimaan yang salah input -->
+            <div x-data="{ hapus: {{ $errors->has('reason') ? 'true' : 'false' }} }" class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <div class="flex flex-wrap items-center gap-2">
+                    <p class="flex-1 min-w-[12rem] text-sm text-slate-400">Salah input? Edit atau hapus penerimaan ini; stok dan qty PO ikut disesuaikan.</p>
+                    <a href="{{ route('gudang.inbound.edit', $inbound->id) }}"
+                        class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-xl">Edit penerimaan</a>
+                    <button type="button" @click="hapus = !hapus" x-show="!hapus"
+                        class="px-4 py-2 bg-slate-700 hover:bg-red-600 text-white text-sm font-semibold rounded-xl">Hapus penerimaan</button>
+                </div>
+                <form x-show="hapus" x-cloak method="POST" action="{{ route('gudang.inbound.destroy', $inbound->id) }}"
+                    class="mt-3 flex flex-wrap items-center gap-2 p-3 rounded-xl border border-red-500/40 bg-red-900/10">
+                    @csrf @method('DELETE')
+                    <p class="w-full text-xs text-red-300">Stok {{ number_format($items->sum('qty')) }} pcs dari penerimaan ini dikurangi lagi dari raknya@if ($po), dan qty diterima di PO {{ $po->po_number }} dikembalikan@endif. Ditolak jika barangnya sudah dipindah atau dipakai order.</p>
+                    <input type="text" name="reason" required maxlength="500" placeholder="Alasan dihapus (wajib), mis. salah pilih PO"
+                        class="flex-1 min-w-[12rem] px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-red-400 focus:outline-none">
+                    <button type="submit" onclick="return confirm('Hapus penerimaan {{ $inbound->reference_no }}?')"
+                        class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl">Ya, hapus</button>
+                    <button type="button" @click="hapus = false" class="text-sm text-slate-400 hover:text-white">Batal</button>
+                </form>
+            </div>
+        @endif
+
         <!-- Cetak label SKU untuk barang yang baru diterima -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-3">
             <p class="flex-1 text-sm text-slate-300">Tempel label SKU di setiap barang sebelum disimpan ke rak, supaya bisa di-scan saat picking dan opname.</p>

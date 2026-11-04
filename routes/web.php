@@ -135,6 +135,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::get('/create', [InboundController::class, 'create'])->name('gudang.inbound.create');
     Route::post('/', [InboundController::class, 'store'])->name('gudang.inbound.store');
     Route::get('/{id}', [InboundController::class, 'show'])->name('gudang.inbound.show');
+    Route::get('/{id}/edit', [InboundController::class, 'edit'])->name('gudang.inbound.edit');
+    Route::put('/{id}', [InboundController::class, 'update'])->name('gudang.inbound.update');
+    Route::delete('/{id}', [InboundController::class, 'destroy'])->name('gudang.inbound.destroy');
 });
 
 // ==================== OUTBOUND (GUDANG) ====================
