@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp;
 use App\Services\WhatsAppAgent;
+use App\Services\WhatsAppSchedule;
 use Illuminate\Http\Request;
 
 /**
@@ -18,6 +19,8 @@ class WhatsAppQueueController extends Controller
     {
         $this->authorizeMacro($request);
         $limit = max(1, min(50, (int) $request->query('limit', 10)));
+        // Makro yang mengambil antrean juga memicu jadwal (laporan yang waktunya langsung ikut terambil)
+        WhatsAppSchedule::tick('makro');
 
         return response()->json([
             'messages' => WhatsApp::claim($limit)->map(fn (WhatsAppMessage $m) => [
@@ -65,7 +68,13 @@ class WhatsAppQueueController extends Controller
             'memory_mb' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        return response()->json(['command' => WhatsAppAgent::report($validated + ['groups' => $request->input('groups', [])])]);
+        $command = WhatsAppAgent::report($validated + ['groups' => $request->input('groups', [])]);
+        // Agen tersambung = WhatsApp siap kirim: jalankan jadwal yang sudah waktunya (tidak bergantung cron)
+        if ($validated['state'] === 'connected') {
+            WhatsAppSchedule::tick('agen');
+        }
+
+        return response()->json(['command' => $command]);
     }
 
     private function authorizeMacro(Request $request): void

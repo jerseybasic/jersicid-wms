@@ -395,6 +395,44 @@
             <form id="daily-report-test" method="POST" action="{{ route('settings.daily-report.test') }}">@csrf</form>
 
             <div class="mt-5 pt-5 border-t border-slate-700/50">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <p class="text-sm font-semibold text-white">Jadwal otomatis WhatsApp</p>
+                    @if ($report['schedule']['cron_active'])
+                        <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/15 text-emerald-300">Cron server aktif</span>
+                    @elseif ($whatsapp['agent']['state'] === 'connected')
+                        <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/15 text-emerald-300">Dijalankan agen WhatsApp</span>
+                    @else
+                        <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/15 text-amber-300">Menunggu agen tersambung</span>
+                    @endif
+                </div>
+                <p class="text-xs text-slate-500 mb-3">Terkirim sendiri pada jamnya, sekali sehari, selama agen WhatsApp tersambung (atau cron server berjalan). Tidak perlu klik Kirim uji.
+                    @unless ($report['schedule']['cron_active'])
+                        Cron server {{ $report['schedule']['cron_seen_at'] ? 'terakhir jalan ' . $report['schedule']['cron_seen_at']->format('d/m H:i') : 'belum pernah jalan' }}; jadwal tetap jalan lewat agen.
+                    @endunless
+                </p>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <tbody class="divide-y divide-slate-800">
+                            @foreach ($report['schedule']['jobs'] as $job)
+                                <tr>
+                                    <td class="py-2 pr-3 text-slate-200 whitespace-nowrap">{{ $job['label'] }}</td>
+                                    <td class="py-2 pr-3 text-slate-400 whitespace-nowrap">{{ $job['time'] }}</td>
+                                    <td class="py-2 text-slate-400">
+                                        @if ($job['last_at'])
+                                            <span class="{{ $job['failed'] ? 'text-red-300' : 'text-slate-300' }}">{{ $job['last_at']->format('d/m H:i') }} · {{ $job['result'] }}</span>
+                                            <span class="text-slate-500">(dipicu {{ $job['trigger'] }})</span>
+                                        @else
+                                            Belum pernah jalan otomatis
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="mt-5 pt-5 border-t border-slate-700/50">
                 <p class="text-sm font-semibold text-white mb-2">Log pengiriman laporan</p>
                 @if ($report['log']->isEmpty())
                     <p class="text-sm text-slate-500">Belum pernah dikirim.</p>
