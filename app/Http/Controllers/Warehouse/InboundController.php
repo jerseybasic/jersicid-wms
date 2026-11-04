@@ -491,6 +491,8 @@ class InboundController extends Controller
             'reason' => ['required', 'string', 'max:500'],
             'qty' => ['required', 'array'],
             'qty.*' => ['required', 'integer', 'min:0'],
+            'po_qty' => ['nullable', 'array'],
+            'po_qty.*' => ['required', 'integer', 'min:1'],
         ], [
             'reason.required' => 'Alasan perubahan wajib diisi.',
         ]);
@@ -504,6 +506,7 @@ class InboundController extends Controller
             $validated['reason'],
             auth()->id(),
             $request->ip(),
+            collect($validated['po_qty'] ?? [])->map(fn ($qty) => (int) $qty)->all(),
         ));
 
         $released = WaitingStock::release(auth()->id(), $request->ip());

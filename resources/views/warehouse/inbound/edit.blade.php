@@ -20,7 +20,22 @@
             </div>
         @endif
 
-        <form method="POST" action="{{ route('gudang.inbound.update', $inbound->id) }}" class="space-y-6">
+        @php
+            $poItems = $po ? $po->items->keyBy('sku') : collect();
+            // Qty diterima PO di luar penerimaan ini, per SKU
+            $otherReceived = $items->groupBy('sku')->map(fn ($rows, $sku) => ($poItems[$sku]->qty_received ?? 0) - $rows->sum('qty'));
+            $initial = [
+                'lines' => $items->mapWithKeys(fn ($i) => [$i->id => (int) old('qty.' . $i->id, $i->qty)]),
+                'ordered' => $items->pluck('sku')->unique()->filter(fn ($sku) => isset($poItems[$sku]))
+                    ->mapWithKeys(fn ($sku) => [$sku => (int) old('po_qty.' . $sku, $poItems[$sku]->qty_ordered)]),
+                'skuOf' => $items->pluck('sku', 'id'),
+                'other' => $otherReceived,
+            ];
+        @endphp
+        <form method="POST" action="{{ route('gudang.inbound.update', $inbound->id) }}" class="space-y-6"
+            x-data="{ ...@js($initial),
+                received(sku) { return (this.other[sku] || 0) + Object.keys(this.lines).filter(id => this.skuOf[id] === sku).reduce((t, id) => t + (parseInt(this.lines[id]) || 0), 0); },
+                remaining(sku) { return (parseInt(this.ordered[sku]) || 0) - this.received(sku); } }">
             @csrf @method('PUT')
 
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -50,7 +65,7 @@
             <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                 <div class="p-4 border-b border-slate-800">
                     <h3 class="text-base font-semibold text-white">Qty Diterima</h3>
-                    <p class="text-xs text-slate-400 mt-1">Isi 0 untuk membuang baris yang salah. Pindah rak lewat menu Transfer Stok.</p>
+                    <p class="text-xs text-slate-400 mt-1">Isi 0 untuk membuang baris yang salah. Pindah rak lewat menu Transfer Stok. @if ($po) Kolom Dipesan (PO) mengubah qty pesanan di PO {{ $po->po_number }}; tidak boleh di bawah yang sudah diterima. @endif</p>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -61,9 +76,14 @@
                                 <th class="text-left py-3 px-4">Bin</th>
                                 <th class="text-right py-3 px-4">Qty sekarang</th>
                                 <th class="text-right py-3 px-4 w-32">Qty benar</th>
+                                @if ($po)
+                                    <th class="text-right py-3 px-4 w-32">Dipesan (PO)</th>
+                                    <th class="text-right py-3 px-4">Sisa diproses</th>
+                                @endif
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800">
+                            @php $shownSku = []; @endphp
                             @foreach ($items as $item)
                                 <tr>
                                     <td class="py-3 px-4 font-mono text-cyan-400 font-bold">{{ $item->sku }}</td>
@@ -71,9 +91,27 @@
                                     <td class="py-3 px-4 font-mono text-slate-300">{{ $item->bin_code }}</td>
                                     <td class="py-3 px-4 text-right text-slate-300">{{ number_format($item->qty) }}</td>
                                     <td class="py-3 px-4 text-right">
-                                        <input type="number" name="qty[{{ $item->id }}]" min="0" required value="{{ old('qty.' . $item->id, $item->qty) }}"
+                                        <input type="number" name="qty[{{ $item->id }}]" min="0" required x-model="lines['{{ $item->id }}']"
                                             class="w-24 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-right focus:border-cyan-400 focus:outline-none">
                                     </td>
+                                    @if ($po)
+                                        @php $poItem = $poItems[$item->sku] ?? null; $first = $poItem && !in_array($item->sku, $shownSku, true); $shownSku[] = $item->sku; @endphp
+                                        <td class="py-3 px-4 text-right">
+                                            @if ($first)
+                                                <input type="number" name="po_qty[{{ $item->sku }}]" min="1" required x-model="ordered['{{ $item->sku }}']"
+                                                    class="w-24 px-3 py-2 bg-slate-800 border border-amber-500/40 rounded-lg text-white text-right focus:border-amber-400 focus:outline-none">
+                                            @elseif (!$poItem)
+                                                <span class="text-xs text-slate-500">tidak di PO</span>
+                                            @endif
+                                        </td>
+                                        <td class="py-3 px-4 text-right whitespace-nowrap">
+                                            @if ($first)
+                                                <span class="font-semibold" :class="remaining('{{ $item->sku }}') > 0 ? 'text-orange-400' : (remaining('{{ $item->sku }}') === 0 ? 'text-emerald-400' : 'text-red-400')"
+                                                    x-text="remaining('{{ $item->sku }}') > 0 ? remaining('{{ $item->sku }}') + ' pcs' : (remaining('{{ $item->sku }}') === 0 ? 'Lengkap' : 'Lebih ' + (-remaining('{{ $item->sku }}')) + ' pcs')"></span>
+                                                <span class="block text-[11px] text-slate-500" x-text="'diterima ' + received('{{ $item->sku }}') + ' dari ' + (ordered['{{ $item->sku }}'] || 0)"></span>
+                                            @endif
+                                        </td>
+                                    @endif
                                 </tr>
                             @endforeach
                         </tbody>

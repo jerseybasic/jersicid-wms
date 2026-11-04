@@ -33,8 +33,9 @@ class InboundCorrection
 
     /**
      * @param  array<int, int>  $qtys  id baris => qty baru (0 = baris dihapus)
+     * @param  array<string, int>  $poQtys  sku => qty dipesan baru di PO (hanya untuk penerimaan dari PO)
      */
-    public static function update(string $receiptNo, string $newReceiptNo, ?string $notes, array $qtys, string $reason, string $userId, ?string $ip): void
+    public static function update(string $receiptNo, string $newReceiptNo, ?string $notes, array $qtys, string $reason, string $userId, ?string $ip, array $poQtys = []): void
     {
         $lines = self::lines($receiptNo);
         if ($lines->isEmpty()) {
@@ -55,6 +56,7 @@ class InboundCorrection
         $po = self::lockPo($receipts);
 
         self::checkDecrease($lines, $changes);
+        $poChanges = $po ? self::applyPoQty($po, $lines, $changes, $poQtys) : [];
         self::checkPoIncrease($po, $lines, $receipts, $changes);
 
         $before = self::snapshot($lines, $receiptNo);
@@ -95,9 +97,47 @@ class InboundCorrection
             'new_values' => json_encode(self::snapshot(self::lines($newReceiptNo), $newReceiptNo) + [
                 'reason' => $reason,
                 'supplier' => self::supplier($receiptNo),
-            ] + ($po ? ['po_number' => $po->po_number, 'po_status' => $poStatus] : [])),
+            ] + ($po ? ['po_number' => $po->po_number, 'po_status' => $poStatus] : [])
+              + ($poChanges ? ['po_qty' => $poChanges] : [])),
             'ip_address' => $ip,
         ]);
+
+        if ($poChanges) {
+            $po->update(['notes' => trim('Qty diubah lewat edit penerimaan ' . $newReceiptNo . ' (' . now()->format('d/m/Y H:i') . '): '
+                . implode(', ', $poChanges) . '. Alasan: ' . $reason . "\n" . $po->notes)]);
+        }
+    }
+
+    /**
+     * Ubah qty dipesan di PO untuk SKU di penerimaan ini. Tidak boleh di bawah total yang sudah diterima
+     * setelah koreksi. Item PO di objek $po ikut diperbarui supaya pengecekan sisa memakai angka baru.
+     *
+     * @return array<int, string> ringkasan perubahan, mis. "JSC-A-L 5 → 4"
+     */
+    private static function applyPoQty(PurchaseOrder $po, Collection $lines, Collection $changes, array $poQtys): array
+    {
+        $summary = [];
+        $problems = [];
+        foreach ($lines->groupBy('sku') as $sku => $rows) {
+            $item = $po->items->firstWhere('sku', $sku);
+            if (!$item || !isset($poQtys[$sku]) || (int) $poQtys[$sku] === $item->qty_ordered) {
+                continue;
+            }
+            $newOrdered = (int) $poQtys[$sku];
+            $receivedAfter = $item->qty_received + $rows->sum(fn ($line) => $changes[$line->id] ?? 0);
+            if ($newOrdered < max(1, $receivedAfter)) {
+                $problems[] = "Qty PO {$sku} tidak boleh kurang dari yang sudah diterima ({$receivedAfter} pcs).";
+                continue;
+            }
+            $summary[] = "{$sku} {$item->qty_ordered} → {$newOrdered}";
+            $item->update(['qty_ordered' => $newOrdered]);
+        }
+
+        if ($problems) {
+            throw ValidationException::withMessages(['po_qty' => $problems]);
+        }
+
+        return $summary;
     }
 
     /** Hapus seluruh penerimaan: stok dikurangi lagi dan qty diterima di PO dikembalikan */

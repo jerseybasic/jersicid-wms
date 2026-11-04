@@ -150,4 +150,28 @@ class InboundCorrectionTest extends TestCase
         }
         $this->assertSame(1, $this->stockQty('JSC-A-L', 'A-01-01'));
     }
+
+    public function test_edit_can_change_po_ordered_qty(): void
+    {
+        $first = $this->receive('SJ-5', ['JSC-A-L' => 2]);
+        $this->get(route('gudang.inbound.edit', $first->id))->assertOk()->assertSee('Dipesan (PO)')->assertSee('po_qty[JSC-A-L]', false);
+
+        // Ternyata PO-nya cuma 4 pcs dan yang datang 3 pcs
+        $this->put(route('gudang.inbound.update', $first->id), [
+            'receipt_number' => 'SJ-5', 'reason' => 'PO salah ketik',
+            'qty' => [$first->id => 3], 'po_qty' => ['JSC-A-L' => 4],
+        ])->assertSessionHas('success');
+
+        $item = $this->po->items()->where('sku', 'JSC-A-L')->first();
+        $this->assertSame(4, $item->qty_ordered);
+        $this->assertSame(3, $item->qty_received);
+        $this->assertStringContainsString('JSC-A-L 5 → 4', $this->po->fresh()->notes);
+        $this->assertSame(['JSC-A-L 5 → 4'], json_decode(AuditTrail::where('action', 'UPDATE_INBOUND')->value('new_values'), true)['po_qty']);
+
+        // Qty PO tidak boleh di bawah yang sudah diterima
+        $this->put(route('gudang.inbound.update', $first->id), [
+            'receipt_number' => 'SJ-5', 'reason' => 'x', 'qty' => [$first->id => 3], 'po_qty' => ['JSC-A-L' => 2],
+        ])->assertSessionHasErrors('po_qty');
+        $this->assertSame(4, $item->fresh()->qty_ordered);
+    }
 }
