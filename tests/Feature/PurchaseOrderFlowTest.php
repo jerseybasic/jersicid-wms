@@ -115,7 +115,7 @@ class PurchaseOrderFlowTest extends TestCase
             'items' => [['sku' => 'JSC-A-L', 'bin_code' => 'A1-01', 'qty_received' => 7]],
         ]);
 
-        $this->assertSame('APPROVED', $po->fresh()->status);
+        $this->assertSame('PARTIALLY_RECEIVED', $po->fresh()->status);
         $this->assertSame(7, $po->items()->value('qty_received'));
     }
 

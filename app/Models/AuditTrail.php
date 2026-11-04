@@ -79,6 +79,7 @@ class AuditTrail extends Model
         'HANDOVER' => 'Serah terima',
         'TRANSFER' => 'Transfer stok',
         'INBOUND' => 'Barang masuk',
+        'RECEIVE_PO' => 'Terima barang PO',
     ];
 
     public function user()

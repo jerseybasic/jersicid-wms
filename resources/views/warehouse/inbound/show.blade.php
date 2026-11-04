@@ -28,6 +28,30 @@
                 class="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl text-center">Versi kertas A4</a>
         </div>
 
+        @if ($po)
+            <!-- PO terkait: berapa yang sudah datang dan sisa yang masih ditunggu -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <p class="text-sm text-slate-300">Dari PO
+                        <a href="{{ route('po.show', $po->id) }}" class="font-mono font-bold text-cyan-400 hover:text-cyan-300">{{ $po->po_number }}</a>
+                        <span class="ml-2 text-xs px-2 py-1 rounded-full {{ $po->status_color }}">{{ $po->status_label }}</span>
+                    </p>
+                    <p class="text-sm text-slate-400">Diterima {{ number_format($po->qty_received_total) }} / {{ number_format($po->qty_ordered_total) }} pcs
+                        @if ($po->qty_remaining_total > 0)
+                            · <span class="text-orange-400 font-semibold">sisa {{ number_format($po->qty_remaining_total) }} pcs belum datang</span>
+                        @endif
+                    </p>
+                </div>
+                @if ($po->qty_remaining_total > 0 && $po->status !== 'CANCELLED')
+                    <ul class="text-xs text-slate-400 space-y-1">
+                        @foreach ($po->items->filter(fn ($i) => $i->qty_remaining > 0) as $poItem)
+                            <li><span class="font-mono text-cyan-400">{{ $poItem->sku }}</span>: sisa {{ number_format($poItem->qty_remaining) }} dari {{ number_format($poItem->qty_ordered) }} pcs</li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
+        @endif
+
         <!-- Info Card -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4">

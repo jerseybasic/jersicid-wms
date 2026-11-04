@@ -49,6 +49,7 @@ class PurchaseOrderController extends Controller
             'pending' => PurchaseOrder::whereIn('status', ['DRAFT', 'PENDING'])->count(),
             'approved' => PurchaseOrder::where('status', 'APPROVED')->count(),
             'in_production' => PurchaseOrder::where('status', 'IN_PRODUCTION')->count(),
+            'partial' => PurchaseOrder::where('status', 'PARTIALLY_RECEIVED')->count(),
         ];
 
         $statusOptions = PurchaseOrder::STATUS_LABELS;
@@ -137,9 +138,33 @@ class PurchaseOrderController extends Controller
 
     public function show($id)
     {
-        $po = PurchaseOrder::with(['items.masterSku', 'creator:id,name,role', 'approver:id,name'])->findOrFail($id);
+        $po = PurchaseOrder::with([
+            'items.masterSku', 'creator:id,name,role', 'approver:id,name', 'supplier',
+            'receipts.receiver:id,name', 'receipts.masterSku:sku,product_name,size',
+        ])->findOrFail($id);
 
-        return view('warehouse.po.show', compact('po'));
+        // Tagih sisa barang yang belum datang lewat WhatsApp supplier
+        $reminderText = $po->isReceivable() && $po->qty_remaining_total > 0 ? self::reminderText($po) : null;
+        $waPhone = $po->supplier?->phone ? WhatsApp::normalize($po->supplier->phone) : null;
+
+        return view('warehouse.po.show', compact('po', 'reminderText', 'waPhone'));
+    }
+
+    /** Pesan penagihan sisa barang PO ke supplier */
+    private static function reminderText(PurchaseOrder $po): string
+    {
+        $lines = ["Halo {$po->supplier_name}, kami dari " . SystemSetting::get('company_name', config('app.name')) . '.'];
+        $lines[] = "Untuk PO {$po->po_number}, barang yang sudah kami terima {$po->qty_received_total} dari {$po->qty_ordered_total} pcs. Sisa yang belum datang:";
+        foreach ($po->items->where('qty_remaining', '>', 0) as $item) {
+            $lines[] = "- {$item->sku}" . ($item->masterSku ? " ({$item->masterSku->product_name} {$item->masterSku->size})" : '')
+                . ": {$item->qty_remaining} pcs (dari {$item->qty_ordered})";
+        }
+        $lines[] = '';
+        $lines[] = $po->expected_date && $po->expected_date->lt(today())
+            ? 'Target selesai ' . $po->expected_date->format('d/m/Y') . ' sudah lewat. Mohon info kapan sisanya bisa dikirim. Terima kasih.'
+            : 'Mohon info kapan sisanya bisa dikirim. Terima kasih.';
+
+        return implode("\n", $lines);
     }
 
     /** Halaman cetak A4 untuk dikirim ke supplier (cetak atau simpan PDF dari browser) */
@@ -249,12 +274,9 @@ class PurchaseOrderController extends Controller
                 }
                 $this->syncItems($po, $incoming->except($po->items->pluck('sku')->all())->values()->all());
 
-                // Qty dikurangi sampai sama dengan yang sudah diterima: PO otomatis selesai
-                $po->load('items');
-                $finished = $po->status !== 'DRAFT'
-                    && $po->items->sum('qty_received') > 0
-                    && $po->items->every(fn ($i) => $i->qty_received >= $i->qty_ordered);
-                if ($finished) {
+                // Qty dikurangi sampai sama dengan yang sudah diterima: PO otomatis selesai.
+                // Selain itu status tetap (PO Diterima Sebagian tetap menunggu sisanya).
+                if ($po->status !== 'DRAFT' && $po->receivingStatus() === 'RECEIVED') {
                     $po->update(['status' => 'RECEIVED']);
                 }
 
@@ -299,7 +321,7 @@ class PurchaseOrderController extends Controller
 
     /**
      * Ubah status PO: ajukan, setujui, tolak (kembali ke Draft), mulai produksi, siap diambil, batalkan.
-     * Status RECEIVED diisi otomatis oleh Inbound.
+     * Status PARTIALLY_RECEIVED dan RECEIVED diisi otomatis oleh Inbound.
      */
     public function updateStatus(Request $request, $id)
     {

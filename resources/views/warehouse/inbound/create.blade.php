@@ -101,6 +101,14 @@
                                 @endforeach
                             @endif
                         </select>
+                        <template x-if="poId && poData[poId]">
+                            <p class="mt-2 text-xs text-slate-400">
+                                <span x-text="poData[poId].status_label"></span> ·
+                                sudah diterima <span class="text-emerald-400 font-semibold" x-text="poData[poId].received"></span>
+                                dari <span x-text="poData[poId].ordered"></span> pcs.
+                                Boleh terima sebagian; sisanya tetap ditunggu di PO.
+                            </p>
+                        </template>
                     </div>
 
                     <div>
@@ -219,7 +227,8 @@
                                 <div class="md:col-span-2">
                                     <label class="block text-xs font-medium text-emerald-400 mb-2">Diterima *</label>
                                     <input type="number" x-model="item.qty_received" required min="0"
-                                           class="w-full px-3 py-2.5 bg-slate-900 border border-emerald-500/30 rounded-lg text-white text-sm focus:border-emerald-400 focus:outline-none transition-all"/>
+                                           :class="overRemaining(item) ? 'border-red-500' : 'border-emerald-500/30'"
+                                           class="w-full px-3 py-2.5 bg-slate-900 border rounded-lg text-white text-sm focus:border-emerald-400 focus:outline-none transition-all"/>
                                 </div>
 
                                 <!-- Qty Rejected -->
@@ -227,6 +236,17 @@
                                     <label class="block text-xs font-medium text-red-400 mb-2">Reject</label>
                                     <input type="number" x-model="item.qty_rejected" min="0"
                                            class="w-full px-3 py-2.5 bg-slate-900 border border-red-500/30 rounded-lg text-white text-sm focus:border-red-400 focus:outline-none transition-all"/>
+                                </div>
+
+                                <!-- Progres item PO: dipesan, sudah datang sebelumnya, sisa setelah penerimaan ini -->
+                                <div class="md:col-span-8 text-xs self-end" x-show="poId && item.ordered">
+                                    <p class="text-slate-400">
+                                        Dipesan <span x-text="item.ordered"></span> pcs ·
+                                        sudah datang sebelumnya <span x-text="item.received_before"></span> pcs ·
+                                        <span :class="remainingAfter(item) > 0 ? 'text-orange-400' : 'text-emerald-400'"
+                                              x-text="remainingAfter(item) > 0 ? 'sisa ' + remainingAfter(item) + ' pcs setelah ini' : 'lengkap setelah ini'"></span>
+                                    </p>
+                                    <p class="text-red-400 font-semibold" x-show="overRemaining(item)">Melebihi sisa PO. Kurangi qty, atau minta Owner/Supervisor menambah qty di PO.</p>
                                 </div>
 
                                 <!-- Batch No -->
@@ -346,6 +366,8 @@
                     this.items = po.items.map((item) => this.blankItem({
                         sku: item.sku,
                         qty_expected: item.remaining,
+                        ordered: item.ordered,
+                        received_before: item.received,
                         bin_code: item.bin_code,
                         product_name: item.product_name,
                         size: item.size,
@@ -415,6 +437,19 @@
                         message += '. Melebihi jumlah PO, cek lagi.';
                     }
                     respond({ ok: true, message: message });
+                },
+
+                // Total qty diterima untuk satu SKU (bisa dibagi ke beberapa bin)
+                qtyForSku(sku) {
+                    return this.items.filter(i => i.sku === sku).reduce((sum, i) => sum + parseInt(i.qty_received || 0), 0);
+                },
+
+                remainingAfter(item) {
+                    return (item.ordered || 0) - (item.received_before || 0) - this.qtyForSku(item.sku);
+                },
+
+                overRemaining(item) {
+                    return !!(this.poId && item.ordered && this.remainingAfter(item) < 0);
                 },
 
                 // Hanya item yang benar-benar diterima yang dikirim
