@@ -62,7 +62,9 @@ class InboundListTest extends TestCase
             ->assertSee('JB Printing')
             ->assertSee('Toko Kain Sejahtera')
             ->assertSee('Belum Komplit')
-            ->assertSee('baru sebagian jadi · sisa 9 pcs')
+            ->assertSee('baru sebagian jadi')
+            ->assertSee('6/15 pcs')
+            ->assertSee('9 pcs masih diproses')
             ->assertDontSee('COMPLETED');
 
         $this->get(route('gudang.inbound', ['status' => 'BELUM_KOMPLIT']))->assertOk()

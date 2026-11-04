@@ -100,7 +100,8 @@
                             <th class="text-left py-3 px-4 font-medium">No. Receipt</th>
                             <th class="text-left py-3 px-4 font-medium">Supplier</th>
                             <th class="text-left py-3 px-4 font-medium">PO Terkait</th>
-                            <th class="text-right py-3 px-4 font-medium">Qty</th>
+                            <th class="text-right py-3 px-4 font-medium">Diterima</th>
+                            <th class="text-right py-3 px-4 font-medium">Pesanan</th>
                             <th class="text-left py-3 px-4 font-medium">Tanggal</th>
                             <th class="text-left py-3 px-4 font-medium">Status</th>
                             <th class="text-left py-3 px-4 font-medium">Diterima Oleh</th>
@@ -128,11 +129,30 @@
                                 <span class="font-semibold text-emerald-400">+{{ number_format($inbound->total_qty) }} pcs</span>
                                 <span class="block text-[11px] text-slate-500">{{ $inbound->sku_count }} SKU</span>
                             </td>
+                            <td class="py-3 px-4 text-right text-xs whitespace-nowrap">
+                                @if ($inbound->po)
+                                    <span class="text-white font-semibold">{{ number_format($inbound->po->qty_received_total) }}/{{ number_format($inbound->po->qty_ordered_total) }} pcs</span>
+                                    @if ($inbound->po->qty_remaining_total > 0)
+                                        <span class="block text-[11px] text-orange-400">{{ number_format($inbound->po->qty_remaining_total) }} pcs masih diproses</span>
+                                    @else
+                                        <span class="block text-[11px] text-emerald-400">semua sudah datang</span>
+                                    @endif
+                                @elseif ($inbound->expected_lines > 0)
+                                    <span class="text-white font-semibold">{{ number_format($inbound->total_qty) }}/{{ number_format($inbound->ordered_qty) }} pcs</span>
+                                    @if ($inbound->pending_qty > 0)
+                                        <span class="block text-[11px] text-orange-400">{{ number_format($inbound->pending_qty) }} pcs masih diproses</span>
+                                    @else
+                                        <span class="block text-[11px] text-emerald-400">semua sudah datang</span>
+                                    @endif
+                                @else
+                                    <span class="text-slate-500">-</span>
+                                @endif
+                            </td>
                             <td class="py-3 px-4 text-xs text-slate-300 whitespace-nowrap">{{ \Illuminate\Support\Carbon::parse($inbound->last_at)->format('d M Y') }}</td>
                             <td class="py-3 px-4">
                                 @if ($inbound->receipt_status === 'BELUM_KOMPLIT')
                                     <span class="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-400 whitespace-nowrap">Belum Komplit</span>
-                                    <span class="block mt-1 text-[11px] text-slate-500 whitespace-nowrap">baru sebagian jadi · sisa {{ number_format($inbound->po->qty_remaining_total) }} pcs</span>
+                                    <span class="block mt-1 text-[11px] text-slate-500 whitespace-nowrap">baru sebagian jadi</span>
                                 @else
                                     <span class="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">Komplit</span>
                                 @endif
@@ -140,11 +160,14 @@
                             <td class="py-3 px-4 text-sm text-slate-300">{{ $inbound->first?->user?->name ?? '-' }}</td>
                             <td class="py-3 px-4 text-right">
                                 <a href="{{ route('gudang.inbound.show', $inbound->first_id) }}" class="text-xs text-cyan-400 hover:text-cyan-300">Detail</a>
+                                @if (in_array(auth()->user()->role, ['OWNER', 'SUPERVISOR']))
+                                    <a href="{{ route('gudang.inbound.edit', $inbound->first_id) }}" class="ml-2 text-xs text-amber-400 hover:text-amber-300">Edit</a>
+                                @endif
                             </td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center py-12 text-slate-500">Tidak ada data inbound</td>
+                            <td colspan="9" class="text-center py-12 text-slate-500">Tidak ada data inbound</td>
                         </tr>
                         @endforelse
                     </tbody>

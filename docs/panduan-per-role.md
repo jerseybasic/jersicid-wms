@@ -121,6 +121,15 @@ Buka **Persetujuan Stok** (juga muncul di lonceng):
 - **Stock opname** yang dikirim staf: buka, periksa baris yang selisih, lalu klik **Setujui & Sesuaikan Stok**, atau **Kembalikan untuk dihitung ulang** dengan alasan. Opname yang dibuat dan diselesaikan Owner/Supervisor sendiri langsung menyesuaikan stok.
 - **Barang tidak ada di rak** yang dilaporkan picker: cek raknya. Jika memang kosong, klik **Setujui, nolkan stok**. Jika barangnya ada, klik **Tolak, barang ada**, dan order yang tadi ditunda kembali ke antrean picking. Selama belum diputuskan, rak itu tidak dijatah ke picking.
 
+### Mengedit atau menghapus penerimaan barang (Inbound)
+Jika penerimaan salah input, buka detailnya di **Inbound** (atau klik **Edit** di daftar):
+- **Edit penerimaan**: ubah nomor surat jalan, catatan, dan qty per baris (isi 0 untuk membuang baris yang salah). Alasan wajib diisi.
+- **Dipesan** (penerimaan tanpa PO): isi jumlah yang diorder per baris. Kalau yang datang masih kurang, status di daftar Inbound jadi **Belum Komplit** dan kolom Pesanan menunjukkan sisa yang masih diproses. Saat sisanya datang, naikkan qty-nya sampai sama dengan pesanan, statusnya jadi **Komplit**. Angka ini juga bisa diisi langsung di kolom **Order** saat terima barang.
+- **Hapus penerimaan**: seluruh penerimaan dibatalkan, dengan alasan.
+- Stok di rak dan qty diterima di PO ikut disesuaikan, termasuk status PO (mis. kembali menjadi Diterima Sebagian). Qty tidak bisa dikurangi atau dihapus jika barangnya sudah dipindah, diambil, atau dijatah untuk order yang dikonfirmasi; koreksi seperti itu lewat stock opname. Menambah qty dari PO tidak boleh melebihi sisa PO.
+- Pindah rak tidak lewat edit, tapi lewat **Transfer Stok**.
+- Isi sebelum dan sesudahnya tercatat di **Audit Trail**.
+
 ### Membuat dan menyetujui PO
 1. Buka **Purchase Order**, lalu buat PO baru. Tombol **PO dari Stok Menipis** mengisi otomatis SKU yang stoknya di bawah batas.
 2. Klik **Ajukan untuk Approval** jika PO sudah siap.

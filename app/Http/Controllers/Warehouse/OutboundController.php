@@ -255,7 +255,7 @@ class OutboundController extends Controller
             DB::transaction(function () use ($validated) {
                 $order = Order::create([
                     'id' => (string) Str::uuid(),
-                    'order_number' => 'ORD-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
+                    'order_number' => $this->newOrderNumber(),
                     'customer_name' => $validated['customer_name'],
                     'customer_phone' => $validated['customer_phone'] ?? null,
                     'shipping_address' => $validated['shipping_address'],
@@ -284,6 +284,16 @@ class OutboundController extends Controller
         } catch (\Exception $e) {
             return back()->withInput()->with('error', 'Gagal membuat order: ' . safe_error_message($e));
         }
+    }
+
+    /** Nomor order manual yang belum dipakai (kode acak bisa kebetulan sama dengan order lain) */
+    private function newOrderNumber(): string
+    {
+        do {
+            $number = 'ORD-' . now()->format('Ymd') . '-' . strtoupper(Str::random(6));
+        } while (Order::where('order_number', $number)->exists());
+
+        return $number;
     }
 
     public function edit($id)

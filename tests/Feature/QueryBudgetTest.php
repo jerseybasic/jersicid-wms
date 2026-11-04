@@ -242,7 +242,7 @@ class QueryBudgetTest extends TestCase
             'shipping_address' => 'Jl. Merdeka 1, Bandung',
             'courier' => $courier = $until === 'READY_TO_SHIP' ? 'SICEPAT' : 'JNE',
             'items' => [['sku' => $skuA, 'qty' => 1], ['sku' => $skuB, 'qty' => 1]],
-        ])->assertRedirect(route('gudang.outbound'));
+        ])->assertSessionHasNoErrors()->assertSessionMissing('error')->assertRedirect(route('gudang.outbound'));
         $order = Order::where('customer_name', "Pembeli {$i} {$until}")->firstOrFail();
         if ($until === 'PENDING') {
             return $order;
