@@ -29,7 +29,7 @@
         @endif
 
         <!-- Stats -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
                 <p class="text-xs text-slate-400 mb-1">Total PO</p>
                 <p class="text-2xl font-bold text-white">{{ $stats['total'] }}</p>
@@ -46,6 +46,10 @@
                 <p class="text-xs text-cyan-400 mb-1">In Production</p>
                 <p class="text-2xl font-bold text-cyan-400">{{ $stats['in_production'] }}</p>
             </div>
+            <a href="{{ route('po.index', ['status' => 'PARTIALLY_RECEIVED']) }}" class="bg-slate-900 border border-slate-800 hover:border-orange-500/50 rounded-xl p-4 transition-colors">
+                <p class="text-xs text-orange-400 mb-1">Menunggu Sisa Barang</p>
+                <p class="text-2xl font-bold text-orange-400">{{ $stats['partial'] }}</p>
+            </a>
         </div>
 
         <!-- Filter -->
@@ -99,6 +103,7 @@
                             <th class="text-left py-3 px-4 font-medium">Supplier</th>
                             <th class="text-left py-3 px-4 font-medium">Tipe</th>
                             <th class="text-right py-3 px-4 font-medium">Total</th>
+                            <th class="text-right py-3 px-4 font-medium">Diterima</th>
                             <th class="text-left py-3 px-4 font-medium">Status</th>
                             <th class="text-left py-3 px-4 font-medium">Tanggal</th>
                             <th class="text-right py-3 px-4 font-medium">Aksi</th>
@@ -119,8 +124,17 @@
                                 <td class="py-3 px-4 text-right">
                                     <span class="text-xs font-semibold text-emerald-400">Rp {{ number_format($po->total_amount, 0, ',', '.') }}</span>
                                 </td>
+                                <td class="py-3 px-4 text-right text-xs whitespace-nowrap">
+                                    <span class="{{ $po->qty_remaining_total > 0 && $po->qty_received_total > 0 ? 'text-orange-400 font-semibold' : 'text-slate-300' }}">{{ number_format($po->qty_received_total) }}/{{ number_format($po->qty_ordered_total) }}</span>
+                                    @if ($po->qty_received_total > 0 && $po->qty_remaining_total > 0 && !in_array($po->status, ['CANCELLED', 'RECEIVED']))
+                                        <span class="block text-[11px] text-slate-500">sisa {{ number_format($po->qty_remaining_total) }}</span>
+                                    @endif
+                                </td>
                                 <td class="py-3 px-4">
-<span class="text-xs px-2 py-1 rounded-full {{ $po->status_color }}">{{ $po->status_label }}</span>
+                                    <span class="text-xs px-2 py-1 rounded-full {{ $po->status_color }}">{{ $po->status_label }}</span>
+                                    @if ($po->isOverdue())
+                                        <span class="block mt-1 text-[11px] text-red-400">Lewat target</span>
+                                    @endif
                                 </td>
                                 <td class="py-3 px-4 text-xs text-slate-300">{{ $po->created_at->format('d M Y') }}</td>
                                 <td class="py-3 px-4 text-right">
@@ -158,7 +172,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center py-12 text-slate-500">
+                                <td colspan="8" class="text-center py-12 text-slate-500">
                                     <div class="w-16 h-16 bg-slate-800/50 rounded-2xl flex items-center justify-center mx-auto mb-3">
                                         <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

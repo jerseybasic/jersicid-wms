@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Commands\SendShipReminder;
+use App\Services\DailyShipmentReport;
 use Illuminate\Support\Facades\Schedule;
 
 // Backup database harian (butuh cron: * * * * * php /path/artisan schedule:run). Hasilnya di storage/app/private.
@@ -12,3 +13,6 @@ Schedule::command('wms:kirim-stok-menipis')->dailyAt('08:00');
 
 // Pengingat order terlambat / harus dikirim hari ini, 2 jam sebelum jam potong di Pengaturan
 Schedule::command('wms:kirim-pengingat-kirim')->hourly()->when(fn () => now()->hour === SendShipReminder::hour());
+
+// Laporan kiriman harian ke WhatsApp (nomor pribadi atau grup), sekali sehari setelah jam di Pengaturan
+Schedule::command('wms:kirim-laporan-kiriman')->everyMinute()->when(fn () => DailyShipmentReport::due());

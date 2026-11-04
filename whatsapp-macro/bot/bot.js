@@ -461,7 +461,9 @@ async function openByPhone(page, phone) {
   throw new Error("gagal membuka chat (timeout)");
 }
 
-async function openByName(page, name) {
+// exact: hanya nama yang sama persis (huruf besar/kecil diabaikan). Dipakai Mode WMS untuk grup,
+// supaya laporan tidak salah masuk ke grup lain yang namanya mirip.
+async function openByName(page, name, exact = false) {
   const box = await firstSel(page, SEARCH_SEL);
   if (!box) throw new Error("kotak pencarian tidak ditemukan");
   await box.click();
@@ -483,14 +485,14 @@ async function openByName(page, name) {
         await t.click();
         return verifyOpened(page);
       }
-      if (!partial && title.includes(want)) partial = t;
+      if (!exact && !partial && title.includes(want)) partial = t;
     }
     if (partial) {
       await partial.click();
       return verifyOpened(page);
     }
   }
-  throw new Error("kontak/grup tidak ditemukan");
+  throw new Error(exact ? `grup/kontak "${name}" tidak ditemukan (nama harus sama persis dan akun ini harus anggota grup)` : "kontak/grup tidak ditemukan");
 }
 
 async function verifyOpened(page) {
@@ -522,12 +524,12 @@ async function sendText(page, text) {
 }
 
 let currentTarget = null;
-async function sendTo(page, to, text) {
+async function sendTo(page, to, text, exact = false) {
   const open = currentTarget === to && (await page.$(COMPOSE_SEL[1]));
   if (!open) {
     currentTarget = null;
     if (isPhone(to)) await openByPhone(page, to);
-    else await openByName(page, to);
+    else await openByName(page, to, exact);
     currentTarget = to;
   }
   await sendText(page, text);
@@ -1444,7 +1446,8 @@ async function wmsLoop(c) {
       for (let i = 0; i < messages.length && !abortSend; i++) {
         const m = messages[i];
         try {
-          await sendTo(session.page, m.to, m.message);
+          // m.to: nomor 62xx (chat pribadi) atau nama grup WhatsApp (laporan kiriman harian)
+          await sendTo(session.page, m.to, m.message, true);
           await wmsCall(c, `/${m.id}/terkirim`, {});
           sent++;
           log(C.g(`✔ ${m.to}: `) + String(m.message).split("\n")[0].slice(0, 45));

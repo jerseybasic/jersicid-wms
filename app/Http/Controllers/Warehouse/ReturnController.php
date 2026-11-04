@@ -97,7 +97,7 @@ class ReturnController extends Controller
             'items.*.bin_code' => ['nullable', 'string', 'max:50'],
         ]);
 
-        $order = Order::with('items')->findOrFail($validated['order_id']);
+        $order = Order::with('items.masterSku:sku,product_name,size')->findOrFail($validated['order_id']);
         abort_unless(in_array($order->status, self::RETURNABLE_STATUSES), 422, 'Order ini belum dikirim.');
 
         $lines = $this->returnableLines($order)->keyBy('order_item_id');

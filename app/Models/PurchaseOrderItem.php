@@ -33,4 +33,15 @@ class PurchaseOrderItem extends Model
     {
         return $this->belongsTo(MasterSku::class, 'sku', 'sku');
     }
+
+    public function receipts()
+    {
+        return $this->hasMany(PurchaseOrderReceipt::class, 'purchase_order_item_id');
+    }
+
+    /** Sisa yang belum datang dari supplier */
+    public function getQtyRemainingAttribute(): int
+    {
+        return max(0, (int) $this->qty_ordered - (int) $this->qty_received);
+    }
 }

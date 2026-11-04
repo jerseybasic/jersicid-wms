@@ -4,17 +4,20 @@ namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
+use App\Models\RackRowRule;
 use App\Models\StockActive;
 use App\Models\StockMovement;
 use App\Models\AuditTrail;
 use App\Models\Warehouse;
 use App\Models\WarehouseRack;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderReceipt;
 use App\Services\PoNotifier;
 use App\Services\WaitingStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class InboundController extends Controller
 {
@@ -58,7 +61,7 @@ class InboundController extends Controller
             ->get(['id', 'code', 'color', 'rows_count']);
 
         // 4. Purchase Order yang siap diterima, beserta sisa qty per item
-        $purchaseOrders = PurchaseOrder::whereIn('status', ['APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'READY'])
+        $purchaseOrders = PurchaseOrder::whereIn('status', PurchaseOrder::RECEIVABLE_STATUSES)
             ->with('items.masterSku:sku,product_name,size,price')
             ->orderBy('po_number')
             ->get();
@@ -68,6 +71,10 @@ class InboundController extends Controller
 
         $poData = $purchaseOrders->mapWithKeys(fn ($po) => [$po->id => [
             'supplier_name' => $po->supplier_name,
+            'po_number' => $po->po_number,
+            'status_label' => $po->status_label,
+            'ordered' => $po->qty_ordered_total,
+            'received' => $po->qty_received_total,
             'items' => $po->items
                 ->filter(fn ($item) => $item->qty_received < $item->qty_ordered)
                 ->map(fn ($item) => [
@@ -75,6 +82,8 @@ class InboundController extends Controller
                     'product_name' => $item->masterSku?->product_name,
                     'size' => $item->masterSku?->size,
                     'price' => $item->masterSku?->price,
+                    'ordered' => $item->qty_ordered,
+                    'received' => $item->qty_received,
                     'remaining' => $item->qty_ordered - $item->qty_received,
                     'bin_code' => $suggestedBins[$item->sku] ?? '',
                 ])
@@ -91,12 +100,32 @@ class InboundController extends Controller
     {
         $bins = [];
 
+        // Paling lemah: baris rak yang aturannya cocok dengan kata kunci produk + size SKU
+        $rules = RackRowRule::join('warehouse_racks', 'warehouse_racks.id', '=', 'rack_row_rules.warehouse_rack_id')
+            ->orderByDesc('warehouse_racks.code')
+            ->orderByDesc('rack_row_rules.row_index')
+            ->get(['rack_row_rules.*', 'warehouse_racks.code as rack_code']);
+        if ($rules->isNotEmpty()) {
+            MasterSku::where('status', 'AKTIF')
+                ->get(['sku', 'article', 'product_name', 'version', 'sub_version', 'size'])
+                ->each(function ($sku) use ($rules, &$bins) {
+                    // diurutkan turun, jadi rak dan baris paling awal yang menang
+                    foreach ($rules as $rule) {
+                        if ($rule->matches($sku)) {
+                            $bins[$sku->sku] = RackRowRule::binFor($rule->rack_code, $rule->row_index);
+                        }
+                    }
+                });
+        }
+
         DB::table('rack_products')
             ->join('warehouse_racks', 'warehouse_racks.id', '=', 'rack_products.warehouse_rack_id')
-            ->select('rack_products.sku', 'warehouse_racks.code')
+            ->select('rack_products.sku', 'rack_products.bin_location', 'warehouse_racks.code')
             ->get()
             ->each(function ($row) use (&$bins) {
-                $bins[$row->sku] = $row->code . '-01-01';
+                $bins[$row->sku] = $row->bin_location && WarehouseRack::codeFromBin($row->bin_location) === $row->code
+                    ? strtoupper($row->bin_location)
+                    : $row->code . '-01-01';
             });
 
         StockActive::where('qty', '>', 0)
@@ -132,11 +161,18 @@ class InboundController extends Controller
         ]);
 
         try {
-            $receivedPo = null;
-            $firstMovementId = DB::transaction(function () use ($validated, $request, &$receivedPo) {
+            $notifyPo = null;
+            $firstMovementId = DB::transaction(function () use ($validated, $request, &$notifyPo) {
                 $user = auth()->user();
                 $receiptNo = $validated['receipt_number'];
                 $firstMovementId = null;
+
+                // Barang dari PO: hanya SKU di PO itu, dan tidak boleh melebihi sisa yang belum datang
+                $po = !empty($validated['po_id'])
+                    ? PurchaseOrder::with('items')->lockForUpdate()->find($validated['po_id'])
+                    : null;
+                $poItems = $po ? $this->checkAgainstPo($po, $validated['items']) : collect();
+                $poBefore = $po ? $po->items->mapWithKeys(fn ($i) => [$i->sku => $i->qty_received])->all() : [];
 
                 foreach ($validated['items'] as $item) {
                     $sku = $item['sku'];
@@ -190,23 +226,54 @@ class InboundController extends Controller
                     ]);
                     $firstMovementId ??= $movement->id;
 
-                    // Jika ada PO terkait, update qty_received di PO items
-                    if (!empty($validated['po_id'])) {
-                        $po = PurchaseOrder::find($validated['po_id']);
-                        if ($po) {
-                            $poItem = $po->items()->where('sku', $sku)->first();
-                            if ($poItem) {
-                                $poItem->increment('qty_received', $qtyReceived);
-                            }
+                    // Barang dari PO: tambah qty diterima dan catat sebagai satu kedatangan
+                    if ($po) {
+                        $poItem = $poItems[$sku];
+                        $poItem->increment('qty_received', $qtyReceived);
 
-                            // Cek apakah semua item PO sudah diterima
-                            $allReceived = $po->items()->whereColumn('qty_received', '<', 'qty_ordered')->count() === 0;
-                            if ($allReceived && $po->status !== 'RECEIVED') {
-                                $po->update(['status' => 'RECEIVED']);
-                                $receivedPo = $po;
-                            }
-                        }
+                        PurchaseOrderReceipt::create([
+                            'purchase_order_id' => $po->id,
+                            'purchase_order_item_id' => $poItem->id,
+                            'sku' => $sku,
+                            'qty' => $qtyReceived,
+                            'qty_rejected' => $qtyRejected,
+                            'receipt_number' => $receiptNo,
+                            'received_date' => $validated['received_date'],
+                            'bin_code' => $binCode,
+                            'stock_movement_id' => $movement->id,
+                            'received_by' => $user->id,
+                            'notes' => $validated['notes'] ?? null,
+                        ]);
                     }
+                }
+
+                if ($po) {
+                    $oldStatus = $po->status;
+                    $newStatus = $po->receivingStatus();
+                    if ($newStatus !== $oldStatus) {
+                        $po->update(['status' => $newStatus]);
+                    }
+                    // Kabari setiap kedatangan selama masih sebagian, dan sekali saat lengkap
+                    if ($newStatus === 'PARTIALLY_RECEIVED' || $newStatus !== $oldStatus) {
+                        $notifyPo = $po;
+                    }
+
+                    AuditTrail::create([
+                        'user_id' => $user->id,
+                        'action' => 'RECEIVE_PO',
+                        'module' => 'PURCHASE_ORDER',
+                        'old_values' => json_encode(['status' => $oldStatus, 'qty_received' => $poBefore]),
+                        'new_values' => json_encode([
+                            'po_id' => $po->id,
+                            'po_number' => $po->po_number,
+                            'receipt_number' => $receiptNo,
+                            'received_date' => $validated['received_date'],
+                            'status' => $newStatus,
+                            'qty_received' => $po->items->mapWithKeys(fn ($i) => [$i->sku => $i->qty_received])->all(),
+                            'qty_remaining' => $po->items->mapWithKeys(fn ($i) => [$i->sku => $i->qty_remaining])->all(),
+                        ]),
+                        'ip_address' => $request->ip(),
+                    ]);
                 }
 
                 // Audit trail
@@ -219,28 +286,74 @@ class InboundController extends Controller
                         'supplier' => $validated['supplier_name'],
                         'total_items' => count($validated['items']),
                         'warehouse_id' => $validated['warehouse_id'],
-                    ]),
+                    ] + ($po ? ['po_number' => $po->po_number] : [])),
                     'ip_address' => $request->ip(),
                 ]);
 
                 return $firstMovementId;
             });
 
-            if ($receivedPo) {
-                PoNotifier::statusChanged($receivedPo, auth()->user()->name);
+            if ($notifyPo) {
+                PoNotifier::statusChanged($notifyPo, auth()->user()->name);
             }
 
             // Order yang menunggu stok langsung kembali ke antrean jika barangnya sekarang cukup
             $released = WaitingStock::release(auth()->id(), $request->ip());
 
             // Langsung ke detail penerimaan supaya label SKU bisa dicetak
+            $poMessage = '';
+            if ($notifyPo?->status === 'PARTIALLY_RECEIVED') {
+                $poMessage = " PO {$notifyPo->po_number} diterima sebagian: {$notifyPo->qty_received_total} dari {$notifyPo->qty_ordered_total} pcs, sisa {$notifyPo->qty_remaining_total} pcs menunggu kedatangan berikutnya.";
+            } elseif ($notifyPo?->status === 'RECEIVED') {
+                $poMessage = " PO {$notifyPo->po_number} sudah diterima lengkap.";
+            }
+
             return redirect()->route('gudang.inbound.show', $firstMovementId)
-                ->with('success', 'Barang berhasil diterima! Stok telah diperbarui. Cetak label SKU di bawah ini.' . WaitingStock::releasedMessage($released));
+                ->with('success', 'Barang berhasil diterima! Stok telah diperbarui.' . $poMessage . ' Cetak label SKU di bawah ini.' . WaitingStock::releasedMessage($released));
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Exception $e) {
             return back()
                 ->withInput()
                 ->with('error', 'Gagal memproses inbound: ' . safe_error_message($e));
         }
+    }
+
+    /**
+     * Pastikan barang yang diterima cocok dengan PO: PO masih menunggu barang, SKU-nya ada di PO, dan
+     * jumlahnya (digabung jika satu SKU dibagi ke beberapa bin) tidak melebihi sisa yang belum datang.
+     *
+     * @return \Illuminate\Support\Collection<string, \App\Models\PurchaseOrderItem> sku => item PO
+     */
+    private function checkAgainstPo(PurchaseOrder $po, array $items)
+    {
+        if (!$po->isReceivable()) {
+            throw ValidationException::withMessages([
+                'po_id' => "PO {$po->po_number} berstatus {$po->status_label}, jadi barangnya tidak bisa diterima.",
+            ]);
+        }
+
+        $poItems = $po->items->keyBy('sku');
+        $problems = [];
+
+        foreach (collect($items)->groupBy('sku') as $sku => $rows) {
+            $qty = (int) $rows->sum('qty_received');
+            $poItem = $poItems[$sku] ?? null;
+
+            if (!$poItem) {
+                $problems[] = "{$sku} tidak ada di PO {$po->po_number}. Terima tanpa PO, atau minta Owner/Supervisor menambahkannya ke PO dulu.";
+            } elseif ($qty > $poItem->qty_remaining) {
+                $problems[] = $poItem->qty_remaining === 0
+                    ? "{$sku} di PO {$po->po_number} sudah diterima lengkap ({$poItem->qty_ordered} pcs)."
+                    : "{$sku} diterima {$qty} pcs, melebihi sisa PO {$poItem->qty_remaining} pcs (dipesan {$poItem->qty_ordered}, sudah diterima {$poItem->qty_received}). Jika supplier memang mengirim lebih, minta Owner/Supervisor menambah qty di PO dulu.";
+            }
+        }
+
+        if ($problems) {
+            throw ValidationException::withMessages(['items' => $problems]);
+        }
+
+        return $poItems;
     }
 
     public function show($id)
@@ -256,6 +369,12 @@ class InboundController extends Controller
             ->orderBy('created_at')
             ->get();
 
-        return view('warehouse.inbound.show', compact('inbound', 'items'));
+        // Penerimaan dari PO: tampilkan PO-nya dan sisa yang masih ditunggu
+        $poReceipts = PurchaseOrderReceipt::whereIn('stock_movement_id', $items->pluck('id'))
+            ->with('purchaseOrder.items')
+            ->get();
+        $po = $poReceipts->first()?->purchaseOrder;
+
+        return view('warehouse.inbound.show', compact('inbound', 'items', 'po'));
     }
 }

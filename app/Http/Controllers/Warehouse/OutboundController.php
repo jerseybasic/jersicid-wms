@@ -63,19 +63,24 @@ class OutboundController extends Controller
         $needs = $request->status === 'WAITING_STOCK' ? WaitingStock::needs() : collect();
 
         // Stats
-        $stats = [
-            'total' => Order::count(),
-            'pending' => Order::where('status', 'PENDING')->whereNull('waiting_stock_at')->count(),
-            'waiting' => Order::waitingStock()->count(),
-            'picking' => Order::whereIn('status', ['CONFIRMED', 'PICKING'])->count(),
-            'packing' => Order::whereIn('status', ['PACKING', 'READY_TO_SHIP'])->count(),
-            'ready' => Order::where('status', 'READY_TO_SHIP')->count(),
-        ];
+        // Stats: satu query untuk semua kartu
+        $row = Order::query()
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'PENDING' AND waiting_stock_at IS NULL THEN 1 ELSE 0 END), 0) as pending")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'PENDING' AND waiting_stock_at IS NOT NULL THEN 1 ELSE 0 END), 0) as waiting")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status IN ('CONFIRMED', 'PICKING') THEN 1 ELSE 0 END), 0) as picking")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status IN ('PACKING', 'READY_TO_SHIP') THEN 1 ELSE 0 END), 0) as packing")
+            ->selectRaw("COALESCE(SUM(CASE WHEN status = 'READY_TO_SHIP' THEN 1 ELSE 0 END), 0) as ready")
+            ->first();
+        $stats = array_map('intval', $row->only(['total', 'pending', 'waiting', 'picking', 'packing', 'ready']));
 
         // Order Pending yang stoknya cukup: bisa langsung dicentang lalu masuk picking gabungan
         $stockReady = StockAvailability::readyMap($orders->getCollection());
 
-        return view('warehouse.outbound.index', compact('orders', 'stats', 'needs', 'stockReady'));
+        // Data tombol "Proses ulang" untuk order Dikirim/Selesai, dimuat sekaligus untuk satu halaman
+        $returnedByOrder = OrderReprocess::preloadForList($orders->getCollection());
+
+        return view('warehouse.outbound.index', compact('orders', 'stats', 'needs', 'stockReady', 'returnedByOrder'));
     }
 
     /**

@@ -64,7 +64,7 @@
     </form>
 @endif
 @if(in_array($order->status, ['SHIPPED', 'COMPLETED']) && in_array(auth()->user()->role, \App\Services\OrderReprocess::ROLES))
-    @php [$reprocessTo, $reprocessError] = \App\Services\OrderReprocess::target($order); @endphp
+    @php [$reprocessTo, $reprocessError] = \App\Services\OrderReprocess::target($order, ($returnedByOrder ?? [])[$order->id] ?? null); @endphp
     @if ($reprocessTo)
         {{-- Kirim ulang dengan resi yang sama, tanpa membuat order baru --}}
         <form method="POST" action="{{ route('gudang.outbound.reprocess', $order->id) }}"

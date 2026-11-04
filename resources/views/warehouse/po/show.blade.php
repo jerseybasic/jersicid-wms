@@ -49,10 +49,27 @@
                 @if ($po->ready_at)
                     <p class="text-xs text-slate-500 mt-1">Siap diambil: {{ $po->ready_at->format('d M Y H:i') }}</p>
                 @endif
+                @if ($po->qty_received_total > 0 || $po->isReceivable())
+                    @php $percent = $po->qty_ordered_total > 0 ? min(100, round($po->qty_received_total / $po->qty_ordered_total * 100)) : 0; @endphp
+                    <div class="mt-3">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Diterima {{ number_format($po->qty_received_total) }} / {{ number_format($po->qty_ordered_total) }} pcs</span>
+                            @if ($po->qty_remaining_total > 0)
+                                <span class="text-orange-400 font-semibold">Sisa {{ number_format($po->qty_remaining_total) }} pcs</span>
+                            @endif
+                        </div>
+                        <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div class="h-full bg-emerald-500" style="width: {{ $percent }}%"></div>
+                        </div>
+                    </div>
+                @endif
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
                 <p class="text-xs text-slate-400 mb-1">Estimasi Tiba</p>
                 <p class="text-lg font-bold text-white">{{ $po->expected_date?->format('d M Y') }}</p>
+                @if ($po->isOverdue())
+                    <p class="text-xs text-red-400 font-semibold mt-1">Lewat {{ (int) $po->expected_date->diffInDays(today()) }} hari, sisa barang belum datang</p>
+                @endif
                 <p class="text-xs text-slate-500 mt-2">Dibuat: {{ $po->creator?->name }}
                     ({{ $po->creator?->role }})</p>
             </div>
@@ -136,9 +153,20 @@
                     </form>
                 @endif
 
-                @if (in_array($po->status, ['APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'READY']))
+                @if ($po->isReceivable())
                     <a href="{{ route('gudang.inbound.create', ['po_id' => $po->id]) }}"
-                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Terima Barang (Inbound)</a>
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent text-sm font-semibold rounded-xl transition-all">{{ $po->status === 'PARTIALLY_RECEIVED' ? 'Terima Sisa Barang (Inbound)' : 'Terima Barang (Inbound)' }}</a>
+                @endif
+
+                @if ($reminderText && ($po->qty_received_total > 0 || $po->isOverdue()))
+                    @if ($waPhone)
+                        <a href="https://wa.me/{{ $waPhone }}?text={{ rawurlencode($reminderText) }}" target="_blank" rel="noopener"
+                            class="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Tagih Sisa ke Supplier (WA)</a>
+                    @else
+                        <button type="button" x-data @click="navigator.clipboard.writeText(@js($reminderText)); $el.textContent = 'Teks tagihan tersalin'"
+                            class="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-on-accent text-sm font-semibold rounded-xl transition-all"
+                            title="Nomor WhatsApp supplier belum diisi di data supplier">Salin Teks Tagihan Sisa</button>
+                    @endif
                 @endif
 
                 @if ($isManager && $po->canTransitionTo('CANCELLED'))
@@ -214,6 +242,7 @@
                             <th class="text-left py-3 px-6">Size</th>
                             <th class="text-right py-3 px-6">Qty Order</th>
                             <th class="text-right py-3 px-6">Qty Diterima</th>
+                            <th class="text-right py-3 px-6">Sisa</th>
                             <th class="text-right py-3 px-6">Harga</th>
                             <th class="text-right py-3 px-6">Total</th>
                         </tr>
@@ -228,6 +257,8 @@
                                     {{ number_format($item->qty_ordered) }}</td>
                                 <td class="py-3 px-6 text-sm text-emerald-400 text-right font-semibold">
                                     {{ number_format($item->qty_received) }}</td>
+                                <td class="py-3 px-6 text-sm text-right font-semibold {{ $item->qty_remaining > 0 ? 'text-orange-400' : 'text-slate-500' }}">
+                                    {{ $item->qty_remaining > 0 ? number_format($item->qty_remaining) : 'Lengkap' }}</td>
                                 <td class="py-3 px-6 text-sm text-slate-300 text-right">Rp
                                     {{ number_format($item->price, 0, ',', '.') }}</td>
                                 <td class="py-3 px-6 text-sm text-white text-right font-bold">Rp
@@ -237,13 +268,65 @@
                     </tbody>
                     <tfoot class="bg-slate-800/50 border-t border-slate-700">
                         <tr>
-                            <td colspan="6" class="py-3 px-6 text-right text-sm font-semibold text-white">Grand Total:</td>
+                            <td colspan="7" class="py-3 px-6 text-right text-sm font-semibold text-white">Grand Total:</td>
                             <td class="py-3 px-6 text-right text-lg font-bold text-cyan-400">Rp
                                 {{ number_format($po->total_amount, 0, ',', '.') }}</td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
+        </div>
+
+        {{-- Riwayat penerimaan: setiap kedatangan barang (surat jalan) dari supplier --}}
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+            <div class="p-5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-lg font-semibold text-white">Riwayat Penerimaan</h3>
+                @php $arrivals = $po->receipts->groupBy('receipt_number'); @endphp
+                <span class="text-xs text-slate-400">{{ $arrivals->count() }} kali kedatangan</span>
+            </div>
+            @if ($arrivals->isEmpty())
+                <p class="p-5 text-sm text-slate-500">
+                    @if ($po->qty_received_total > 0)
+                        Barang yang sudah diterima tercatat sebelum riwayat per kedatangan tersedia, jadi rinciannya tidak tampil di sini.
+                    @else
+                        Belum ada barang yang datang untuk PO ini.
+                    @endif
+                </p>
+            @else
+                <div class="divide-y divide-slate-800">
+                    @foreach ($arrivals as $receiptNumber => $rows)
+                        @php $first = $rows->first(); @endphp
+                        <div class="p-5">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                <div>
+                                    <p class="text-sm font-semibold text-white">{{ $first->received_date->format('d M Y') }}
+                                        <span class="text-slate-400 font-normal">· diterima {{ $first->receiver?->name ?? '-' }}</span></p>
+                                    <p class="text-xs text-slate-500 font-mono">Surat jalan {{ $receiptNumber }} · dicatat {{ $first->created_at->format('d M Y H:i') }}</p>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-sm font-bold text-emerald-400">+{{ number_format($rows->sum('qty')) }} pcs</span>
+                                    @if ($first->stock_movement_id)
+                                        <a href="{{ route('gudang.inbound.show', $first->stock_movement_id) }}" class="text-xs text-cyan-400 hover:text-cyan-300">Lihat inbound</a>
+                                    @endif
+                                </div>
+                            </div>
+                            <ul class="text-sm space-y-1">
+                                @foreach ($rows as $row)
+                                    <li class="flex flex-wrap gap-x-3 text-slate-300">
+                                        <span class="font-mono text-cyan-400">{{ $row->sku }}</span>
+                                        <span>{{ number_format($row->qty) }} pcs</span>
+                                        @if ($row->bin_code)<span class="text-slate-500 font-mono">ke {{ $row->bin_code }}</span>@endif
+                                        @if ($row->qty_rejected)<span class="text-red-400">reject {{ number_format($row->qty_rejected) }}</span>@endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                            @if ($first->notes)
+                                <p class="text-xs text-slate-500 mt-2">{{ $first->notes }}</p>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         </div>
 
         {{-- Notes --}}

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditTrail;
 use App\Models\MasterSku;
 use App\Models\PickingSessionItem;
+use App\Models\RackRowRule;
 use App\Models\StockActive;
 use App\Models\StockMovement;
 use App\Models\WarehouseRack;
@@ -106,6 +107,18 @@ class WarehouseMappingController extends Controller
         $unplacedBySku = $this->unplacedStock()->map(fn ($bins) => (int) $bins->sum('qty'));
         $allSkus->each(fn ($sku) => $sku->unplaced_stock = $unplacedBySku->get($sku->sku, 0));
 
+        // Aturan baris: SKU yang cocok diberi nomor baris dan bin tujuannya,
+        // supaya keranjang bisa menyaring dan mengisi semua SKU satu baris sekaligus.
+        $rowRules = $rack->rowRules()->get();
+        $allSkus->each(function ($sku) use ($rowRules, $rack) {
+            $row = $rowRules->first(fn ($rule) => $rule->matches($sku));
+            $sku->rule_row = $row?->row_index;
+            $sku->rule_bin = $row ? RackRowRule::binFor($rack->code, $row->row_index) : null;
+        });
+        $rowSummary = $this->rowSummary($rack, $rowRules, $allSkus);
+        $articleOptions = $allSkus->pluck('article')->merge($allSkus->pluck('product_name'))->filter()->unique()->sort()->values();
+        $sizeOptions = $allSkus->pluck('size')->filter()->unique()->values();
+
         $rackProducts = $this->rackProducts($rack);
 
         $groupedProducts = $rackProducts->groupBy(function ($product) {
@@ -121,8 +134,85 @@ class WarehouseMappingController extends Controller
             'rackProducts',
             'groupedProducts',
             'totalSku',
-            'totalQty'
+            'totalQty',
+            'rowRules',
+            'rowSummary',
+            'articleOptions',
+            'sizeOptions'
         ));
+    }
+
+    /**
+     * Simpan aturan per baris rak (kata kunci produk + size). Baris yang dikosongkan dihapus aturannya.
+     * Tidak mengubah stok maupun penetapan SKU yang sudah ada.
+     */
+    public function saveRowRules(Request $request, $rackCode)
+    {
+        $rack = WarehouseRack::where('code', $rackCode)->firstOrFail();
+        $validated = $request->validate([
+            'rows' => 'present|array|max:99',
+            'rows.*.row' => 'required|integer|min:1|max:99|distinct',
+            'rows.*.article' => 'nullable|string|max:100',
+            'rows.*.size' => 'nullable|string|max:30',
+        ]);
+
+        $rows = collect($validated['rows'])
+            ->map(fn ($row) => [
+                'row_index' => (int) $row['row'],
+                'article' => RackRowRule::norm($row['article'] ?? '') ?: null,
+                'size' => RackRowRule::norm($row['size'] ?? '') ?: null,
+            ])
+            ->filter(fn ($row) => $row['article'] !== null || $row['size'] !== null)
+            ->sortBy('row_index')
+            ->values();
+
+        DB::transaction(function () use ($rack, $rows, $request) {
+            $old = $rack->rowRules()->get(['row_index', 'article', 'size'])->toArray();
+            RackRowRule::where('warehouse_rack_id', $rack->id)->delete();
+            foreach ($rows as $row) {
+                RackRowRule::create($row + ['warehouse_rack_id' => $rack->id]);
+            }
+
+            AuditTrail::create([
+                'user_id' => auth()->id(),
+                'action' => 'ROW_RULES',
+                'module' => 'WAREHOUSE_MAPPING',
+                'old_values' => json_encode(['rack' => $rack->code, 'rows' => $old]),
+                'new_values' => json_encode(['rack' => $rack->code, 'rows' => $rows->all()]),
+                'ip_address' => $request->ip(),
+            ]);
+        });
+
+        return back()->with('success', $rows->isEmpty()
+            ? "Aturan baris rak {$rack->code} dikosongkan."
+            : "Aturan {$rows->count()} baris rak {$rack->code} disimpan.");
+    }
+
+    /**
+     * Ringkasan per baris yang punya aturan: jumlah SKU yang cocok di Master SKU,
+     * dan stok yang sudah ada di bin baris itu (bin RAK-0N-xx).
+     */
+    private function rowSummary(WarehouseRack $rack, Collection $rowRules, Collection $allSkus): array
+    {
+        $stockByRow = [];
+        DB::table('stock_actives')->where('qty', '>', 0)->where('bin_code', 'like', $rack->code . '-%')
+            ->get(['bin_code', 'qty'])
+            ->each(function ($stock) use ($rack, &$stockByRow) {
+                $parts = explode('-', strtoupper($stock->bin_code));
+                if (($parts[0] ?? '') === $rack->code && isset($parts[1]) && ctype_digit($parts[1])) {
+                    $stockByRow[(int) $parts[1]] = ($stockByRow[(int) $parts[1]] ?? 0) + (int) $stock->qty;
+                }
+            });
+
+        $summary = [];
+        foreach ($rowRules as $rule) {
+            $summary[$rule->row_index] = [
+                'matches' => $allSkus->where('rule_row', $rule->row_index)->count(),
+                'qty' => $stockByRow[$rule->row_index] ?? 0,
+            ];
+        }
+
+        return $summary;
     }
 
     /**
@@ -135,6 +225,7 @@ class WarehouseMappingController extends Controller
             'products' => 'required|array|min:1',
             'products.*.sku' => 'required|exists:master_skus,sku',
             'products.*.max_capacity' => 'required|integer|min:1',
+            'products.*.bin_code' => 'nullable|string|max:50',
             'move_unplaced' => 'nullable|boolean',
             'bin_code' => 'nullable|string|max:50',
         ]);
@@ -144,12 +235,23 @@ class WarehouseMappingController extends Controller
         if (WarehouseRack::codeFromBin($targetBin) !== $rack->code) {
             return back()->withErrors(['bin_code' => "Lokasi {$targetBin} bukan bagian dari rak {$rack->code}. Contoh: {$rack->code}-01-01."]);
         }
+        // Bin per SKU (dari aturan baris), selain itu memakai lokasi umum di atas
+        $binsBySku = [];
+        foreach ($validated['products'] as $product) {
+            $bin = strtoupper(preg_replace('/\s+/', '', $product['bin_code'] ?? ''));
+            if ($bin !== '' && WarehouseRack::codeFromBin($bin) !== $rack->code) {
+                return back()->withErrors(['bin_code' => "Lokasi {$bin} untuk {$product['sku']} bukan bagian dari rak {$rack->code}."]);
+            }
+            $binsBySku[$product['sku']] = $bin !== '' ? $bin : $targetBin;
+        }
         $moveUnplaced = $request->boolean('move_unplaced');
         $moved = 0;
 
         try {
-            DB::transaction(function () use ($rack, $validated, $targetBin, $moveUnplaced, $request, &$moved) {
+            DB::transaction(function () use ($rack, $validated, $binsBySku, $moveUnplaced, $request, &$moved) {
                 foreach ($validated['products'] as $product) {
+                    $itemBin = $binsBySku[$product['sku']];
+                    $ownBin = !empty($product['bin_code']);
                     $exists = DB::table('rack_products')
                         ->where('warehouse_rack_id', $rack->id)
                         ->where('sku', $product['sku'])
@@ -162,14 +264,14 @@ class WarehouseMappingController extends Controller
                             ->update([
                                 'max_capacity' => $product['max_capacity'],
                                 'updated_at' => now(),
-                            ]);
+                            ] + ($ownBin ? ['bin_location' => $itemBin] : []));
                     } else {
                         DB::table('rack_products')->insert([
                             'warehouse_rack_id' => $rack->id,
                             'sku' => $product['sku'],
                             'current_qty' => 0,
                             'max_capacity' => $product['max_capacity'],
-                            'bin_location' => $targetBin,
+                            'bin_location' => $itemBin,
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
@@ -177,7 +279,7 @@ class WarehouseMappingController extends Controller
                 }
 
                 if ($moveUnplaced) {
-                    $moved = $this->moveUnplacedStock(array_column($validated['products'], 'sku'), $targetBin, $request);
+                    $moved = $this->moveUnplacedStock($binsBySku, $request);
                 }
 
                 AuditTrail::create([
@@ -187,7 +289,7 @@ class WarehouseMappingController extends Controller
                     'new_values' => json_encode([
                         'rack' => $rack->code,
                         'skus' => array_column($validated['products'], 'sku'),
-                        'moved_to' => $moved ? $targetBin : null,
+                        'moved_to' => $moved ? array_values(array_unique($binsBySku)) : null,
                         'moved_qty' => $moved,
                     ]),
                     'ip_address' => request()->ip(),
@@ -196,7 +298,9 @@ class WarehouseMappingController extends Controller
 
             $message = count($validated['products']) . ' produk berhasil ditetapkan ke rak ' . $rackCode . '.';
             if ($moved) {
-                $message .= " {$moved} pcs stok yang belum punya rak dipindah ke {$targetBin}.";
+                $targets = array_values(array_unique($binsBySku));
+                $message .= " {$moved} pcs stok yang belum punya rak dipindah ke "
+                    . (count($targets) > 3 ? count($targets) . ' bin sesuai baris' : implode(', ', $targets)) . '.';
             }
 
             return back()->with('success', $message);
@@ -427,13 +531,16 @@ class WarehouseMappingController extends Controller
     }
 
     /**
-     * Pindahkan stok yang belum punya rak ke bin tujuan (tercatat sebagai TRANSFER). Mengembalikan jumlah pcs.
+     * Pindahkan stok yang belum punya rak ke bin tujuan per SKU (tercatat sebagai TRANSFER). Mengembalikan jumlah pcs.
+     *
+     * @param  array<string, string>  $binsBySku  sku => bin tujuan
      */
-    private function moveUnplacedStock(array $skus, string $targetBin, Request $request): int
+    private function moveUnplacedStock(array $binsBySku, Request $request): int
     {
         $moved = 0;
 
-        foreach ($this->unplacedStock($skus) as $sku => $sources) {
+        foreach ($this->unplacedStock(array_keys($binsBySku)) as $sku => $sources) {
+            $targetBin = $binsBySku[$sku];
             foreach ($sources as $source) {
                 $source = StockActive::lockForUpdate()->find($source->id);
                 $qty = (int) $source->qty;

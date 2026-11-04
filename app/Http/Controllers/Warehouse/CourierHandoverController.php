@@ -131,7 +131,11 @@ class CourierHandoverController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate(['courier' => ['required', 'string', 'max:50']]);
+        $validated = $request->validate([
+            'courier' => ['required', 'string', 'max:50'],
+            // Kurir tidak datang menjemput: paket kita antar (drop) sendiri ke agen/counter ekspedisi
+            'method' => ['nullable', 'in:' . implode(',', array_keys(CourierHandover::METHODS))],
+        ]);
         $courier = $validated['courier'] === CourierHandover::NO_COURIER
             ? CourierHandover::NO_COURIER
             : CourierHandover::brand($validated['courier']);
@@ -139,6 +143,9 @@ class CourierHandoverController extends Controller
         // Satu serah terima terbuka per kurir, supaya paket tidak tercecer di dua daftar
         $handover = CourierHandover::where('status', 'OPEN')->where('courier', $courier)->first()
             ?? CourierHandover::create(['courier' => $courier, 'user_id' => auth()->id(), 'status' => 'OPEN']);
+        if (!empty($validated['method']) && $handover->method !== $validated['method']) {
+            $handover->update(['method' => $validated['method']]);
+        }
 
         return redirect()->route('gudang.handover.show', $handover);
     }
@@ -286,6 +293,8 @@ class CourierHandoverController extends Controller
     public function finish(Request $request, CourierHandover $handover)
     {
         $validated = $request->validate([
+            'method' => ['nullable', 'in:' . implode(',', array_keys(CourierHandover::METHODS))],
+            'drop_point' => ['nullable', 'required_if:method,' . CourierHandover::DROP, 'string', 'max:100'],
             'driver_name' => ['nullable', 'string', 'max:100'],
             // Tanda tangan kurir dari layar (PNG base64), maksimal sekitar 500 KB
             'signature' => ['nullable', 'string', 'max:700000', 'regex:/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/'],
@@ -294,14 +303,17 @@ class CourierHandoverController extends Controller
             'signature.regex' => 'Tanda tangan tidak terbaca. Hapus lalu tanda tangan lagi.',
             'photo.image' => 'Foto harus berupa gambar.',
             'photo.max' => 'Foto maksimal 8 MB.',
+            'drop_point.required_if' => 'Isi tempat drop, misalnya "Agen J&T Cimahi".',
         ]);
+        $method = $validated['method'] ?? $handover->method ?? CourierHandover::PICKUP;
+        $dropPoint = $method === CourierHandover::DROP ? trim($validated['drop_point'] ?? '') : null;
         if ($handover->status !== 'OPEN') {
             return back()->with('error', 'Serah terima ini sudah selesai.');
         }
         $proof = $this->storeProof($handover, $validated['signature'] ?? null, $request->file('photo'));
 
         try {
-            $count = DB::transaction(function () use ($handover, $validated, $request, $proof) {
+            $count = DB::transaction(function () use ($handover, $validated, $request, $proof, $method, $dropPoint) {
                 $handover = CourierHandover::lockForUpdate()->findOrFail($handover->id);
                 if ($handover->status !== 'OPEN') {
                     throw new \RuntimeException('Serah terima ini sudah selesai.');
@@ -322,6 +334,8 @@ class CourierHandoverController extends Controller
                 $handover->update([
                     'status' => 'COMPLETED',
                     'completed_at' => $now,
+                    'method' => $method,
+                    'drop_point' => $dropPoint,
                     'driver_name' => $validated['driver_name'] ?? null,
                 ] + $proof);
 
@@ -332,6 +346,8 @@ class CourierHandoverController extends Controller
                     'new_values' => json_encode([
                         'handover_number' => $handover->handover_number,
                         'courier' => $handover->courier,
+                        'metode' => CourierHandover::METHODS[$method],
+                        'tempat_drop' => $dropPoint,
                         'orders' => $orders->pluck('order_number'),
                     ]),
                     'ip_address' => $request->ip(),
@@ -345,8 +361,11 @@ class CourierHandoverController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return redirect()->route('gudang.handover.print', $handover)
-            ->with('success', "{$count} paket diserahkan ke {$handover->courier} dan berstatus Dikirim.");
+        $message = $method === CourierHandover::DROP
+            ? "{$count} paket {$handover->courier} di-drop sendiri ke {$dropPoint} dan berstatus Dikirim."
+            : "{$count} paket diserahkan ke {$handover->courier} dan berstatus Dikirim.";
+
+        return redirect()->route('gudang.handover.print', $handover)->with('success', $message);
     }
 
     /**

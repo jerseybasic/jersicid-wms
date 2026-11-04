@@ -12,9 +12,13 @@ Setiap anggota bisa memasang **foto profil** sendiri: klik nama di kanan atas, p
 
 ### Menerima barang (Inbound)
 1. Buka **Inbound**, lalu klik **Terima Barang Baru**.
-2. Jika barangnya dari PO, pilih PO-nya agar daftar barang terisi otomatis.
+2. Jika barangnya dari PO, pilih PO-nya agar daftar barang terisi otomatis. Kolom **Sisa PO** berisi jumlah yang belum datang.
 3. Scan lokasi rak, lalu scan barangnya, kemudian simpan.
 4. Cetak label SKU dari tombol **Cetak** jika barang belum berlabel.
+
+Barang PO boleh datang bertahap. Contoh: PO 5 pcs, hari ini datang 2 pcs. Isi **Diterima** 2 dan simpan; stok bertambah 2 pcs dan PO menjadi **Diterima Sebagian** dengan sisa 3 pcs. Saat sisanya datang, buat penerimaan baru dengan nomor surat jalan yang baru dan pilih PO yang sama (atau klik **Terima Sisa Barang** di detail PO). Setelah semua lengkap, PO otomatis menjadi **Sudah Diterima**.
+- Di bawah tiap barang tampil jumlah dipesan, yang sudah datang sebelumnya, dan sisa setelah penerimaan ini.
+- Jumlah diterima tidak boleh melebihi sisa PO, dan barang yang tidak ada di PO ditolak. Jika supplier memang mengirim lebih, minta Owner/Supervisor menambah qty di PO dulu, atau terima barang lebihnya tanpa PO.
 
 ### Order keluar (Outbound)
 1. Buka **Outbound**, lalu klik **Buat Order Baru** untuk order yang masuk.
@@ -80,6 +84,13 @@ Buka **Transfer Stok**, isi SKU, rak asal, rak tujuan, dan jumlahnya, lalu simpa
 2. Klik rak tujuan, cari produknya, lalu masukkan ke keranjang.
 3. Biarkan **Pindahkan stok yang belum punya rak** tercentang, isi lokasinya (misalnya A-01-01), lalu klik **Simpan**. Stoknya pindah ke rak itu dan tercatat sebagai transfer.
 
+### Aturan baris rak (satu baris = satu kata kunci produk + satu size)
+1. Di halaman rak, buka **Aturan Baris Rak**. Isi kata kunci produk dan size untuk tiap baris, atau pakai **Isi cepat**: kata kunci `ONE PIECE`, size `M, L, XL, XXL`, mulai baris 1, lalu **Terapkan ke baris**. Klik **Simpan Aturan**.
+2. Baris N memakai bin `RAK-0N-01`, misalnya baris 2 rak A = `A-02-01`. Kata kunci (misalnya `ONE PIECE`, `NARUTO`, `JUJUTSU KAISEN`) dicari di nama produk, artikel, versi, dan kode SKU. Semua kata harus ada, urutan dan tanda baca bebas. Size harus sama persis.
+3. Di **Keranjang Produk** muncul **Isi sesuai aturan baris**. Klik **Masukkan semua** atau tombol per baris, lalu **Simpan**. Setiap SKU dan stok yang belum punya rak masuk ke bin barisnya masing-masing.
+4. Pencarian di keranjang otomatis hanya menampilkan SKU yang cocok aturan rak. Hapus centangnya untuk mencari semua SKU.
+5. Di **Inbound**, SKU yang belum punya stok atau rak disarankan masuk ke bin baris yang aturannya cocok.
+
 ### Cek barang dan lokasi
 Buka **Cek Barang & Lokasi**, lalu scan barcode barang untuk melihat stok di setiap rak, atau scan rak untuk melihat isinya.
 
@@ -92,8 +103,12 @@ Semua pekerjaan STAFF_GUDANG, ditambah:
 ### Purchase order
 1. Buka **Purchase Order** untuk melihat PO yang sudah disetujui.
 2. Saat supplier mulai mengerjakan, klik **Mulai Produksi**.
-3. Saat barang siap, klik **Siap Diambil**. Penerimaan barangnya dilakukan lewat Inbound.
+3. Saat barang siap, klik **Siap Diambil**. Penerimaan barangnya dilakukan lewat Inbound, boleh bertahap.
 4. Klik **Cetak PO** untuk membuka lembar PO A4. Dari sana PO bisa dicetak atau disimpan sebagai PDF, teksnya disalin, atau langsung dikirim ke WhatsApp supplier (nomor diambil dari data supplier). PO yang belum disetujui diberi cap DRAFT.
+5. Pantau barang yang belum datang:
+   - Daftar PO punya kolom **Diterima** (mis. 2/5) dan kartu **Menunggu Sisa Barang** untuk membuka semua PO yang baru diterima sebagian. PO yang sisanya belum datang padahal estimasi tiba sudah lewat diberi tanda **Lewat target**.
+   - Detail PO menampilkan kolom **Sisa** per SKU dan **Riwayat Penerimaan**: setiap kedatangan dengan tanggal, nomor surat jalan, penerima, jumlah, dan rak tujuannya.
+   - Klik **Tagih Sisa ke Supplier (WA)** untuk mengirim daftar sisa barang ke WhatsApp supplier. Jika nomor supplier belum diisi, tombolnya menjadi **Salin Teks Tagihan Sisa**.
 
 ---
 
@@ -110,7 +125,8 @@ Buka **Persetujuan Stok** (juga muncul di lonceng):
 1. Buka **Purchase Order**, lalu buat PO baru. Tombol **PO dari Stok Menipis** mengisi otomatis SKU yang stoknya di bawah batas.
 2. Klik **Ajukan untuk Approval** jika PO sudah siap.
 3. PO yang menunggu persetujuan bisa disetujui (**Approve PO**) atau dikembalikan (**Tolak**) dengan alasan. PO yang ditolak kembali menjadi draft dan bisa diedit.
-4. Setiap perubahan status PO (diajukan, disetujui, ditolak, mulai produksi, siap diambil, diterima, dibatalkan) dikirim ke antrean WhatsApp anggota. Matikan lewat centang **Kirim notifikasi WhatsApp saat status PO berubah** di Pengaturan.
+   - Jika supplier tidak sanggup mengirim sisa PO yang sudah diterima sebagian, klik **Batalkan PO**. Barang yang sudah datang tetap di stok; hanya sisanya yang dibatalkan. Jika jumlah pesanan berubah, edit qty PO; qty tidak bisa diturunkan di bawah yang sudah diterima, dan jika diturunkan sampai sama, PO otomatis selesai.
+4. Setiap perubahan status PO (diajukan, disetujui, ditolak, mulai produksi, siap diambil, diterima sebagian, diterima lengkap, dibatalkan) dikirim ke antrean WhatsApp anggota. Matikan lewat centang **Kirim notifikasi WhatsApp saat status PO berubah** di Pengaturan.
 
 ### Laporan
 Buka **Laporan** untuk melihat:

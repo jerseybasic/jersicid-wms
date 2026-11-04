@@ -20,6 +20,7 @@ class PoNotifier
         'DRAFT' => 'ditolak dan kembali ke Draft',
         'IN_PRODUCTION' => 'mulai diproduksi',
         'READY_FOR_PICKUP' => 'siap diambil di supplier',
+        'PARTIALLY_RECEIVED' => 'diterima sebagian di gudang',
         'RECEIVED' => 'sudah diterima lengkap di gudang',
         'CANCELLED' => 'dibatalkan',
     ];
@@ -55,6 +56,9 @@ class PoNotifier
         $lines[] = 'Supplier: ' . $po->supplier_name;
         $lines[] = $po->items->count() . ' SKU · ' . (int) $po->items->sum('qty_ordered') . ' pcs'
             . ($po->expected_date ? ' · target ' . $po->expected_date->format('d/m/Y') : '');
+        if ($po->status === 'PARTIALLY_RECEIVED') {
+            $lines[] = "Sudah diterima {$po->qty_received_total} dari {$po->qty_ordered_total} pcs, sisa {$po->qty_remaining_total} pcs belum datang";
+        }
         if ($byName) {
             $lines[] = 'Oleh: ' . $byName;
         }

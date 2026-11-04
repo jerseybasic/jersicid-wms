@@ -91,6 +91,7 @@ class ReportController extends Controller
     public function opname(Request $request)
     {
         $query = StockOpname::with(['creator:id,name', 'warehouse:id,name', 'approver:id,name'])
+            ->withCount('items')
             ->orderBy('created_at', 'desc');
 
         if ($request->filled('status')) {
@@ -110,7 +111,10 @@ class ReportController extends Controller
             return Excel::download(new OpnameReportExport($request), 'Laporan_Stock_Opname_' . date('Ymd_His') . '.xlsx');
         }
 
-        return view('reports.opname', compact('opnames'));
+        // Satu query untuk semua kartu ringkasan, bukan satu query per status
+        $statusCounts = StockOpname::selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status');
+
+        return view('reports.opname', compact('opnames', 'statusCounts'));
     }
     public function downloadTemplate(Request $request)
     {

@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 class WaitingStock
 {
     /** Status PO yang barangnya masih akan datang */
-    private const INCOMING_PO_STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'READY'];
+    private const INCOMING_PO_STATUSES = ['DRAFT', 'PENDING', 'APPROVED', 'IN_PRODUCTION', 'READY_FOR_PICKUP', 'READY', 'PARTIALLY_RECEIVED'];
 
     /** Tandai order Pending sebagai menunggu stok (tanggal pertama kali ditunda tetap disimpan) */
     public static function mark(Order $order, ?string $userId, ?string $ip, ?string $reason = null): void
