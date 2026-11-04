@@ -61,7 +61,8 @@ class InboundCorrectionTest extends TestCase
         $this->assertSame('PARTIALLY_RECEIVED', $this->po->fresh()->status);
         $lines = StockMovement::where('reference_no', 'SJ-1')->orderBy('id')->get();
 
-        $this->get(route('gudang.inbound.show', $first->id))->assertOk()->assertSee('Edit penerimaan')->assertSee('Hapus penerimaan');
+        $this->get(route('gudang.inbound.show', $first->id))->assertOk()->assertSee('Edit penerimaan')->assertSee('Hapus penerimaan')
+            ->assertSee('Dipesan (PO)')->assertSee('Sisa diproses');
         $this->get(route('gudang.inbound.edit', $first->id))->assertOk()->assertSee('Qty benar');
 
         // L sebenarnya 2 (bukan 3), XL ternyata 5, nomor receipt salah ketik
@@ -118,6 +119,9 @@ class InboundCorrectionTest extends TestCase
     public function test_cannot_remove_stock_already_committed_to_orders(): void
     {
         $first = $this->receive('SJ-3', ['JSC-A-L' => 4], false);
+
+        // Penerimaan tanpa PO tetap bisa dibuka Owner (dulu error 500 karena teks hapus memakai PO)
+        $this->get(route('gudang.inbound.show', $first->id))->assertOk()->assertSee('Hapus penerimaan')->assertDontSee('Sisa diproses');
         $order = Order::create([
             'id' => (string) Str::uuid(), 'order_number' => 'ORD-1', 'customer_name' => 'Budi',
             'status' => 'CONFIRMED', 'created_by' => auth()->id(),

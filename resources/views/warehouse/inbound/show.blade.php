@@ -42,7 +42,7 @@
                 <form x-show="hapus" x-cloak method="POST" action="{{ route('gudang.inbound.destroy', $inbound->id) }}"
                     class="mt-3 flex flex-wrap items-center gap-2 p-3 rounded-xl border border-red-500/40 bg-red-900/10">
                     @csrf @method('DELETE')
-                    <p class="w-full text-xs text-red-300">Stok {{ number_format($items->sum('qty')) }} pcs dari penerimaan ini dikurangi lagi dari raknya@if ($po), dan qty diterima di PO {{ $po->po_number }} dikembalikan@endif. Ditolak jika barangnya sudah dipindah atau dipakai order.</p>
+                    <p class="w-full text-xs text-red-300">Stok {{ number_format($items->sum('qty')) }} pcs dari penerimaan ini dikurangi lagi dari raknya{{ $po ? ', dan qty diterima di PO ' . $po->po_number . ' dikembalikan' : '' }}. Ditolak jika barangnya sudah dipindah atau dipakai order.</p>
                     <input type="text" name="reason" required maxlength="500" placeholder="Alasan dihapus (wajib), mis. salah pilih PO"
                         class="flex-1 min-w-[12rem] px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-red-400 focus:outline-none">
                     <button type="submit" onclick="return confirm('Hapus penerimaan {{ $inbound->reference_no }}?')"
@@ -125,17 +125,37 @@
                             <th class="text-left py-3 px-4">SKU</th>
                             <th class="text-left py-3 px-4">Produk</th>
                             <th class="text-left py-3 px-4">Bin</th>
-                            <th class="text-right py-3 px-4">Qty</th>
+                            <th class="text-right py-3 px-4">Diterima di sini</th>
+                            @if ($po)
+                                <th class="text-right py-3 px-4">Dipesan (PO)</th>
+                                <th class="text-right py-3 px-4">Total diterima</th>
+                                <th class="text-right py-3 px-4">Sisa diproses</th>
+                            @endif
                             <th class="text-left py-3 px-4">Catatan</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-800">
+                        @php $poItems = $po ? $po->items->keyBy('sku') : collect(); @endphp
                         @foreach($items as $item)
+                        @php $poItem = $poItems[$item->sku] ?? null; @endphp
                         <tr class="hover:bg-slate-800/30">
                             <td class="py-3 px-4 font-mono text-cyan-400 font-bold">{{ $item->sku }}</td>
-                            <td class="py-3 px-4 text-white">{{ $item->masterSku?->product_name ?? '-' }}</td>
+                            <td class="py-3 px-4 text-white">{{ $item->masterSku?->product_name ?? '-' }} {{ $item->masterSku?->size }}</td>
                             <td class="py-3 px-4 font-mono text-slate-300">{{ $item->bin_code }}</td>
                             <td class="py-3 px-4 text-right font-bold text-emerald-400">+{{ number_format($item->qty) }}</td>
+                            @if ($po)
+                                <td class="py-3 px-4 text-right text-white">{{ $poItem ? number_format($poItem->qty_ordered) : '-' }}</td>
+                                <td class="py-3 px-4 text-right text-slate-300">{{ $poItem ? number_format($poItem->qty_received) : '-' }}</td>
+                                <td class="py-3 px-4 text-right font-semibold whitespace-nowrap">
+                                    @if (!$poItem)
+                                        <span class="text-slate-500">-</span>
+                                    @elseif ($poItem->qty_remaining > 0)
+                                        <span class="text-orange-400">{{ number_format($poItem->qty_remaining) }} pcs</span>
+                                    @else
+                                        <span class="text-emerald-400">Lengkap</span>
+                                    @endif
+                                </td>
+                            @endif
                             <td class="py-3 px-4 text-xs text-slate-400">{{ $item->notes ?? '-' }}</td>
                         </tr>
                         @endforeach
