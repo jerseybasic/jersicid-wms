@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
 use App\Models\MasterSku;
+use App\Models\RackRowRule;
 use App\Models\StockActive;
 use App\Models\StockMovement;
 use App\Models\AuditTrail;
@@ -99,12 +100,32 @@ class InboundController extends Controller
     {
         $bins = [];
 
+        // Paling lemah: baris rak yang aturannya cocok dengan kata kunci produk + size SKU
+        $rules = RackRowRule::join('warehouse_racks', 'warehouse_racks.id', '=', 'rack_row_rules.warehouse_rack_id')
+            ->orderByDesc('warehouse_racks.code')
+            ->orderByDesc('rack_row_rules.row_index')
+            ->get(['rack_row_rules.*', 'warehouse_racks.code as rack_code']);
+        if ($rules->isNotEmpty()) {
+            MasterSku::where('status', 'AKTIF')
+                ->get(['sku', 'article', 'product_name', 'version', 'sub_version', 'size'])
+                ->each(function ($sku) use ($rules, &$bins) {
+                    // diurutkan turun, jadi rak dan baris paling awal yang menang
+                    foreach ($rules as $rule) {
+                        if ($rule->matches($sku)) {
+                            $bins[$sku->sku] = RackRowRule::binFor($rule->rack_code, $rule->row_index);
+                        }
+                    }
+                });
+        }
+
         DB::table('rack_products')
             ->join('warehouse_racks', 'warehouse_racks.id', '=', 'rack_products.warehouse_rack_id')
-            ->select('rack_products.sku', 'warehouse_racks.code')
+            ->select('rack_products.sku', 'rack_products.bin_location', 'warehouse_racks.code')
             ->get()
             ->each(function ($row) use (&$bins) {
-                $bins[$row->sku] = $row->code . '-01-01';
+                $bins[$row->sku] = $row->bin_location && WarehouseRack::codeFromBin($row->bin_location) === $row->code
+                    ? strtoupper($row->bin_location)
+                    : $row->code . '-01-01';
             });
 
         StockActive::where('qty', '>', 0)

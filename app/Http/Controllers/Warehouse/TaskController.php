@@ -20,6 +20,12 @@ use App\Services\ShipDeadline;
  */
 class TaskController extends Controller
 {
+    /**
+     * Banyaknya kartu per daftar (yang paling mendesak dulu). Angka di judul tetap jumlah sebenarnya;
+     * sisanya dibuka lewat Outbound. Tanpa batas, ratusan kartu dirender setiap kali halaman dibuka.
+     */
+    public const LIST_LIMIT = 30;
+
     public function index()
     {
         $activePicking = PickingSession::with(['user:id,name', 'order:id,order_number,customer_name', 'items:id,picking_session_id,bin_code,qty_ordered,qty_picked'])
@@ -44,35 +50,43 @@ class TaskController extends Controller
             ->orderBy('created_at')
             ->get();
 
-        $toPick = Order::where('status', 'CONFIRMED')
-            ->whereDoesntHave('pickingSession')
+        $pickQuery = Order::where('status', 'CONFIRMED')->whereDoesntHave('pickingSession');
+        $packQuery = Order::where('status', 'PACKING')->whereDoesntHave('packingSession');
+        $shipQuery = Order::where('status', 'READY_TO_SHIP');
+        $totals = [
+            'pick' => (clone $pickQuery)->count(),
+            'pack' => (clone $packQuery)->count(),
+            'ship' => (clone $shipQuery)->count(),
+        ];
+
+        $toPick = $pickQuery
             ->withSum('items', 'qty_ordered')
             ->withCount('items')
             ->orderBy('ship_by')
             ->orderBy('created_at')
+            ->limit(self::LIST_LIMIT)
             ->get();
 
-        $toPack = Order::where('status', 'PACKING')
-            ->whereDoesntHave('packingSession')
+        $toPack = $packQuery
             ->with('pickingSession:id,order_id,batch_id,basket_no', 'pickingSession.batch:id,batch_number')
             ->withSum('items', 'qty_ordered')
             ->withCount('items')
             ->orderBy('ship_by')
             ->orderBy('picked_at')
+            ->limit(self::LIST_LIMIT)
             ->get();
 
         // Tombol "Kemas sekaligus": keranjang dari picking gabungan yang sama dikemas di satu layar
-        $packTogether = $toPack->count() >= 2 ? Packing::autoOrders()->count() : 0;
+        $packTogether = $totals['pack'] >= 2 ? Packing::autoOrders()->count() : 0;
 
-        $toShip = Order::where('status', 'READY_TO_SHIP')
+        $toShip = $shipQuery
             ->withSum('items', 'qty_ordered')
             ->orderBy('ship_by')
             ->orderBy('packed_at')
+            ->limit(self::LIST_LIMIT)
             ->get();
 
-        // Order yang belum dikirim, dihitung per batas kirim (terlambat / harus kirim hari ini)
-        $deadlines = Order::whereIn('status', ShipDeadline::OPEN_STATUSES)->get(['id', 'ship_by', 'created_at'])
-            ->countBy(fn ($order) => $order->shipStatus());
+        $deadlines = self::deadlineCounts();
 
         $toRefill = ReplenishmentController::pendingCount();
         $toRestock = OrderItemChange::pendingRestockQty();
@@ -90,6 +104,25 @@ class TaskController extends Controller
         $activePacking = $activePacking->filter($mine)->values();
         $activePackingBatches = $activePackingBatches->filter($mine)->values();
 
-        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'activePackingBatches', 'packTogether', 'othersWork', 'toPick', 'toPack', 'toShip', 'toRefill', 'toRestock', 'waitingStock', 'deadlines'));
+        return view('warehouse.tasks.index', compact('activePicking', 'activeBatches', 'activePacking', 'activePackingBatches', 'packTogether', 'othersWork', 'toPick', 'toPack', 'toShip', 'totals', 'toRefill', 'toRestock', 'waitingStock', 'deadlines'));
+    }
+
+    /**
+     * Order yang belum dikirim per batas kirim (terlambat / harus kirim hari ini), dihitung di database.
+     * Hanya order lama tanpa kolom ship_by yang dihitung satu per satu.
+     */
+    private static function deadlineCounts(): array
+    {
+        $open = Order::whereIn('status', ShipDeadline::OPEN_STATUSES);
+        $counts = [
+            ShipDeadline::LATE => (clone $open)->where('ship_by', '<', now())->count(),
+            ShipDeadline::TODAY => (clone $open)->whereBetween('ship_by', [now(), now()->endOfDay()])->count(),
+        ];
+        foreach ((clone $open)->whereNull('ship_by')->get(['id', 'ship_by', 'created_at']) as $order) {
+            $status = $order->shipStatus();
+            $counts[$status] = ($counts[$status] ?? 0) + 1;
+        }
+
+        return $counts;
     }
 }

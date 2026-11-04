@@ -66,7 +66,7 @@ class PickingBatchTest extends TestCase
         $response->assertRedirect(route('gudang.picking-batch.show', $batch));
         $this->assertSame('IN_PROGRESS', $batch->status);
         $this->assertSame([$first->id => 1, $second->id => 2, $third->id => 3],
-            PickingSession::where('batch_id', $batch->id)->pluck('basket_no', 'order_id')->all());
+            PickingSession::where('batch_id', $batch->id)->orderBy('basket_no')->pluck('basket_no', 'order_id')->all());
         $this->assertSame(['PICKING'], Order::pluck('status')->unique()->values()->all());
 
         $pickList = $this->get(route('gudang.picking-batch.show', $batch))->assertOk()

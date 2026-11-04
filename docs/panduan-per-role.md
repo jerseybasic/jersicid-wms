@@ -84,6 +84,13 @@ Buka **Transfer Stok**, isi SKU, rak asal, rak tujuan, dan jumlahnya, lalu simpa
 2. Klik rak tujuan, cari produknya, lalu masukkan ke keranjang.
 3. Biarkan **Pindahkan stok yang belum punya rak** tercentang, isi lokasinya (misalnya A-01-01), lalu klik **Simpan**. Stoknya pindah ke rak itu dan tercatat sebagai transfer.
 
+### Aturan baris rak (satu baris = satu kata kunci produk + satu size)
+1. Di halaman rak, buka **Aturan Baris Rak**. Isi kata kunci produk dan size untuk tiap baris, atau pakai **Isi cepat**: kata kunci `ONE PIECE`, size `M, L, XL, XXL`, mulai baris 1, lalu **Terapkan ke baris**. Klik **Simpan Aturan**.
+2. Baris N memakai bin `RAK-0N-01`, misalnya baris 2 rak A = `A-02-01`. Kata kunci (misalnya `ONE PIECE`, `NARUTO`, `JUJUTSU KAISEN`) dicari di nama produk, artikel, versi, dan kode SKU. Semua kata harus ada, urutan dan tanda baca bebas. Size harus sama persis.
+3. Di **Keranjang Produk** muncul **Isi sesuai aturan baris**. Klik **Masukkan semua** atau tombol per baris, lalu **Simpan**. Setiap SKU dan stok yang belum punya rak masuk ke bin barisnya masing-masing.
+4. Pencarian di keranjang otomatis hanya menampilkan SKU yang cocok aturan rak. Hapus centangnya untuk mencari semua SKU.
+5. Di **Inbound**, SKU yang belum punya stok atau rak disarankan masuk ke bin baris yang aturannya cocok.
+
 ### Cek barang dan lokasi
 Buka **Cek Barang & Lokasi**, lalu scan barcode barang untuk melihat stok di setiap rak, atau scan rak untuk melihat isinya.
 

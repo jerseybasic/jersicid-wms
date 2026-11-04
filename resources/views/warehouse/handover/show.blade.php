@@ -68,33 +68,58 @@
             $total = $orders->filter(fn ($order) => filled($order->tracking_number))->count();
         @endphp
         <form method="POST" action="{{ route('gudang.handover.finish', $handover) }}" enctype="multipart/form-data" class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3"
+              x-data="{ method: @js(old('method', $handover->method ?? \App\Models\CourierHandover::PICKUP)) }"
               onsubmit="const left = {{ $total }} - parseInt(document.querySelector('[data-scan-qty=count]').textContent || '0', 10);
                         return confirm((left > 0 ? 'Masih ada ' + left + ' paket ' + @js($handover->courier) + ' yang belum di-scan. Paket itu tetap Siap Kirim untuk penjemputan berikutnya.\n\n' : '') + 'Semua paket yang sudah di-scan akan berstatus Dikirim. Lanjutkan?')">
             @csrf
+            {{-- Normalnya paket dijemput kurir. Kalau kurir tidak datang, paket kita antar (drop) sendiri ke agen/counter ekspedisi. --}}
+            <fieldset>
+                <legend class="block text-xs font-medium text-slate-400 mb-1">Cara serah terima</legend>
+                <div class="grid grid-cols-2 gap-2">
+                    @foreach (\App\Models\CourierHandover::METHODS as $value => $label)
+                        <label class="flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm"
+                               :class="method === @js($value) ? 'border-cyan-500 bg-cyan-500/10 text-white' : 'border-slate-700 text-slate-300'">
+                            <input type="radio" name="method" value="{{ $value }}" x-model="method" class="text-cyan-500 focus:ring-cyan-500">
+                            <span>{{ $label }}</span>
+                        </label>
+                    @endforeach
+                </div>
+                <p class="text-[11px] text-slate-500 mt-1" x-show="method === 'PICKUP'">Kurir {{ $handover->courier }} menjemput paket di gudang.</p>
+                <p class="text-[11px] text-slate-500 mt-1" x-show="method === 'DROP'" x-cloak>Kurir tidak menjemput, paket kita antar sendiri ke agen/counter {{ $handover->courier }}.</p>
+            </fieldset>
+            <div x-show="method === 'DROP'" x-cloak>
+                <label for="drop_point" class="block text-xs font-medium text-slate-400 mb-1">Tempat drop</label>
+                <input id="drop_point" type="text" name="drop_point" maxlength="100" value="{{ old('drop_point', $handover->drop_point) }}" placeholder="Contoh: Agen {{ $handover->courier }} Cimahi"
+                       :required="method === 'DROP'"
+                       class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:ring-cyan-500">
+                @error('drop_point') <p class="text-xs text-red-400 mt-1">{{ $message }}</p> @enderror
+            </div>
             <div>
-                <label for="driver_name" class="block text-xs font-medium text-slate-400 mb-1">Nama kurir yang menerima (opsional)</label>
-                <input id="driver_name" type="text" name="driver_name" maxlength="100" placeholder="Contoh: Pak Andi SPX"
+                <label for="driver_name" class="block text-xs font-medium text-slate-400 mb-1"
+                       x-text="method === 'DROP' ? 'Nama petugas agen yang menerima (opsional)' : 'Nama kurir yang menerima (opsional)'">Nama kurir yang menerima (opsional)</label>
+                <input id="driver_name" type="text" name="driver_name" maxlength="100" value="{{ old('driver_name') }}" placeholder="Contoh: Pak Andi {{ $handover->courier }}"
                        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:ring-cyan-500">
             </div>
             {{-- Bukti terima: tanda tangan kurir di layar dan/atau foto tumpukan paket --}}
             <div x-data="signaturePad()" class="space-y-1">
                 <div class="flex items-center justify-between">
-                    <span class="text-xs font-medium text-slate-400">Tanda tangan kurir (opsional)</span>
+                    <span class="text-xs font-medium text-slate-400" x-text="method === 'DROP' ? 'Tanda tangan petugas agen (opsional)' : 'Tanda tangan kurir (opsional)'">Tanda tangan kurir (opsional)</span>
                     <button type="button" x-show="signed" x-cloak @click="clear()" class="text-xs text-slate-400 hover:text-red-400">Hapus</button>
                 </div>
                 <canvas x-ref="canvas" class="w-full h-36 bg-white rounded-lg touch-none"
                     @pointerdown="start($event)" @pointermove="move($event)" @pointerup="end()" @pointerleave="end()"></canvas>
                 <input type="hidden" name="signature" x-ref="input">
-                <p class="text-[11px] text-slate-500" x-show="!signed">Minta kurir tanda tangan di kotak putih.</p>
+                <p class="text-[11px] text-slate-500" x-show="!signed" x-text="method === 'DROP' ? 'Minta petugas agen tanda tangan di kotak putih.' : 'Minta kurir tanda tangan di kotak putih.'">Minta kurir tanda tangan di kotak putih.</p>
             </div>
             <div>
-                <label for="photo" class="block text-xs font-medium text-slate-400 mb-1">Foto tumpukan paket (opsional)</label>
+                <label for="photo" class="block text-xs font-medium text-slate-400 mb-1"
+                       x-text="method === 'DROP' ? 'Foto bukti drop / struk agen (opsional)' : 'Foto tumpukan paket (opsional)'">Foto tumpukan paket (opsional)</label>
                 <input id="photo" type="file" name="photo" accept="image/*" capture="environment"
                        class="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-slate-700 file:text-white">
             </div>
             @error('signature') <p class="text-xs text-red-400">{{ $message }}</p> @enderror
             @error('photo') <p class="text-xs text-red-400">{{ $message }}</p> @enderror
-            <button type="submit" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold rounded-xl">Serahkan dan cetak manifest</button>
+            <button type="submit" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold rounded-xl"><span x-text="method === 'DROP' ? 'Tandai sudah di-drop dan cetak manifest' : 'Serahkan dan cetak manifest'">Serahkan dan cetak manifest</span></button>
             <p class="text-xs text-slate-500">Paket yang belum di-scan tetap Siap Kirim dan bisa diserahkan di serah terima berikutnya.</p>
         </form>
 

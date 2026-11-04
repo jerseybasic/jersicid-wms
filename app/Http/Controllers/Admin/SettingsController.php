@@ -10,11 +10,13 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\WhatsAppMessage;
 use App\Console\Commands\SendLowStockAlert;
+use App\Services\DailyShipmentReport;
 use App\Services\LowStock;
 use App\Services\ShipDeadline;
 use App\Services\PoNotifier;
 use App\Services\ProfilePhoto;
 use App\Services\WhatsApp;
+use App\Services\WhatsAppAgent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -53,9 +55,20 @@ class SettingsController extends Controller
             'seen_at' => WhatsApp::macroSeenAt(),
             'counts' => WhatsAppMessage::selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status'),
             'recent' => WhatsAppMessage::latest('id')->limit(10)->get(),
+            'agent' => self::agentView(WhatsAppAgent::status()),
         ];
 
-        return view('settings.index', compact('stats', 'company', 'whatsapp'));
+        $report = [
+            'enabled' => DailyShipmentReport::enabled(),
+            'time' => DailyShipmentReport::time(),
+            'targets' => DailyShipmentReport::rawTargets(),
+            'parsed' => DailyShipmentReport::targets(),
+            'log' => DailyShipmentReport::log(),
+            'preview' => DailyShipmentReport::message(),
+            'groups' => WhatsAppAgent::groupNames(),
+        ];
+
+        return view('settings.index', compact('stats', 'company', 'whatsapp', 'report'));
     }
 
     /**
@@ -126,6 +139,55 @@ class SettingsController extends Controller
             ->with('whatsapp_token', WhatsApp::generateToken());
     }
 
+    /** Status koneksi agen WhatsApp untuk kartu "Koneksi WhatsApp" (diperbarui tiap beberapa detik) */
+    public function whatsAppAgentStatus()
+    {
+        return response()->json(self::agentView(WhatsAppAgent::status()));
+    }
+
+    /** Perintah owner ke agen: putuskan nomor (scan ulang), sambung ulang, atau muat ulang daftar grup */
+    public function whatsAppAgentCommand(Request $request)
+    {
+        $validated = $request->validate(['command' => ['required', 'in:' . implode(',', WhatsAppAgent::COMMANDS)]]);
+        WhatsAppAgent::command($validated['command']);
+        AuditTrail::record('WHATSAPP_AGENT', 'SETTINGS', ['perintah' => $validated['command']]);
+
+        $message = [
+            'logout' => 'Nomor akan diputuskan. QR baru muncul di sini dalam beberapa detik untuk scan nomor pengirim.',
+            'restart' => 'Agen akan menyambung ulang dalam beberapa detik.',
+            'refresh_groups' => 'Daftar grup akan diperbarui dalam beberapa detik.',
+        ][$validated['command']];
+
+        return $request->expectsJson()
+            ? response()->json(['ok' => true, 'message' => $message])
+            : back()->with('success', $message);
+    }
+
+    /** Data agen untuk tampilan: label status, QR sebagai SVG, waktu terakhir terlihat */
+    public static function agentView(array $agent): array
+    {
+        $labels = [
+            'connected' => 'Tersambung',
+            'qr' => 'Menunggu scan QR',
+            'connecting' => 'Menyambung…',
+            'logged_out' => 'Nomor diputuskan',
+            'offline' => 'Agen tidak berjalan',
+        ];
+
+        return [
+            'state' => $agent['state'],
+            'label' => $labels[$agent['state']] ?? $agent['state'],
+            'qr_svg' => $agent['qr'] ? (string) \SimpleSoftwareIO\QrCode\Facades\QrCode::size(240)->margin(1)->generate($agent['qr']) : null,
+            'phone' => $agent['phone'] ? '+' . $agent['phone'] : null,
+            'name' => $agent['name'],
+            'groups' => count($agent['groups']),
+            'memory_mb' => $agent['memory_mb'],
+            'version' => $agent['version'],
+            'seen' => $agent['seen_at'] ? $agent['seen_at']->diffForHumans() . ' (' . $agent['seen_at']->format('d/m H:i') . ')' : 'belum pernah',
+            'pending' => $agent['pending'],
+        ];
+    }
+
     /** Kirim pesan percobaan berisi ringkasan stok menipis saat ini. */
     public function testWhatsApp()
     {
@@ -136,6 +198,53 @@ class SettingsController extends Controller
         }
 
         return back()->with('success', 'Pesan tes masuk antrean. Makro akan mengirimnya saat mengambil antrean berikutnya.');
+    }
+
+    /** Laporan kiriman harian: aktif/mati, jam kirim, dan penerima (nomor pribadi atau nama grup WhatsApp) */
+    public function updateDailyReport(Request $request)
+    {
+        $validated = $request->validate([
+            'daily_report_time' => ['required', 'date_format:H:i'],
+            'daily_report_targets' => ['nullable', 'string', 'max:2000'],
+        ], [
+            'daily_report_time.date_format' => 'Jam kirim harus berformat JJ:MM, contoh 17:00.',
+        ]);
+
+        $targets = DailyShipmentReport::targets($validated['daily_report_targets'] ?? '');
+        if (count($targets) > DailyShipmentReport::MAX_TARGETS) {
+            return back()->withInput()->withErrors(['daily_report_targets' => 'Maksimal ' . DailyShipmentReport::MAX_TARGETS . ' penerima.']);
+        }
+        foreach ($targets as $target) {
+            if (mb_strlen($target['to']) > 100) {
+                return back()->withInput()->withErrors(['daily_report_targets' => 'Nama grup maksimal 100 huruf: ' . \Illuminate\Support\Str::limit($target['to'], 40)]);
+            }
+        }
+        $enabled = $request->boolean('daily_report_enabled');
+        if ($enabled && $targets === []) {
+            return back()->withInput()->withErrors(['daily_report_targets' => 'Isi minimal satu nomor atau nama grup WhatsApp untuk mengaktifkan laporan.']);
+        }
+
+        $before = ['aktif' => DailyShipmentReport::enabled() ? 'Ya' : 'Tidak', 'jam' => DailyShipmentReport::time(), 'penerima' => DailyShipmentReport::rawTargets()];
+        DailyShipmentReport::save($enabled, $validated['daily_report_time'], $validated['daily_report_targets'] ?? '');
+        $after = ['aktif' => DailyShipmentReport::enabled() ? 'Ya' : 'Tidak', 'jam' => DailyShipmentReport::time(), 'penerima' => DailyShipmentReport::rawTargets()];
+
+        [$old, $new] = AuditTrail::changes($before, $after);
+        if ($new) {
+            AuditTrail::record('UPDATE_DAILY_REPORT', 'SETTINGS', $new, $old);
+        }
+
+        return back()->with('success', 'Pengaturan laporan kiriman harian disimpan.');
+    }
+
+    /** Kirim uji: laporan hari ini langsung masuk antrean, tanpa mengubah jadwal harian */
+    public function testDailyReport()
+    {
+        if ($error = DailyShipmentReport::queue(markSent: false)) {
+            return back()->withErrors(['daily_report' => $error]);
+        }
+        AuditTrail::record('TEST_DAILY_REPORT', 'SETTINGS', ['penerima' => count(DailyShipmentReport::targets())]);
+
+        return back()->with('success', 'Laporan kiriman hari ini masuk antrean. Makro akan mengirimnya saat mengambil antrean berikutnya.');
     }
 
     public function updateProfile(Request $request)

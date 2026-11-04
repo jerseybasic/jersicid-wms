@@ -54,7 +54,8 @@ Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
 // ==================== DASHBOARD ====================
 Route::middleware(['auth'])->group(function () {
-    Route::get('/dashboard/owner', [DashboardController::class, 'owner'])->name('dashboard.owner');
+    // Dashboard owner memuat nilai stok (harga modal): hanya OWNER, sesuai matriks akses PRD
+    Route::get('/dashboard/owner', [DashboardController::class, 'owner'])->middleware('role:OWNER')->name('dashboard.owner');
     Route::get('/dashboard/gudang', [DashboardController::class, 'gudang'])->name('dashboard.gudang');
 });
 
@@ -300,6 +301,7 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/{rackCode}/assign', [WarehouseMappingController::class, 'assign'])->name('gudang.mapping.assign');
         Route::post('/{rackCode}/ubah', [WarehouseMappingController::class, 'bulkUpdate'])->name('gudang.mapping.bulk-update');
         Route::post('/{rackCode}/hapus', [WarehouseMappingController::class, 'bulkDelete'])->name('gudang.mapping.bulk-delete');
+        Route::post('/{rackCode}/aturan-baris', [WarehouseMappingController::class, 'saveRowRules'])->name('gudang.mapping.row-rules');
         Route::delete('/{rackCode}/{sku}', [WarehouseMappingController::class, 'unassign'])->name('gudang.mapping.unassign');
     });
 
@@ -326,9 +328,9 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])
         Route::post('/print-sku', [PrinterController::class, 'printSkuLabel'])->name('printer.print-sku');
         Route::post('/preview-zpl', [PrinterController::class, 'previewZpl'])->name('printer.preview');
         Route::post('/print-shipping', [PrinterController::class, 'printShippingLabel'])->name('printer.print-shipping');
-        Route::post('/save-template', [PrinterController::class, 'saveTemplate'])->name('printer.save-template');
-        Route::put('/template/{id}', [PrinterController::class, 'updateTemplate'])->name('printer.update-template');
-        Route::delete('/template/{id}', [PrinterController::class, 'deleteTemplate'])->name('printer.delete-template');
+        Route::post('/save-template', [PrinterController::class, 'saveTemplate'])->middleware('role:OWNER,SUPERVISOR,ADMIN_GUDANG')->name('printer.save-template');
+        Route::put('/template/{id}', [PrinterController::class, 'updateTemplate'])->middleware('role:OWNER,SUPERVISOR,ADMIN_GUDANG')->name('printer.update-template');
+        Route::delete('/template/{id}', [PrinterController::class, 'deleteTemplate'])->middleware('role:OWNER,SUPERVISOR,ADMIN_GUDANG')->name('printer.delete-template');
         Route::post('/test-connection', [PrinterController::class, 'testConnection'])->name('printer.test');
     });
 
@@ -382,6 +384,10 @@ Route::middleware(['auth', 'role:OWNER'])->prefix('settings')->name('settings.')
     Route::put('/whatsapp', [SettingsController::class, 'updateWhatsApp'])->name('whatsapp');
     Route::post('/whatsapp/tes', [SettingsController::class, 'testWhatsApp'])->name('whatsapp.test');
     Route::post('/whatsapp/token', [SettingsController::class, 'whatsAppToken'])->name('whatsapp.token');
+    Route::get('/whatsapp/koneksi', [SettingsController::class, 'whatsAppAgentStatus'])->name('whatsapp.agent');
+    Route::post('/whatsapp/koneksi', [SettingsController::class, 'whatsAppAgentCommand'])->name('whatsapp.agent.command');
+    Route::put('/laporan-harian', [SettingsController::class, 'updateDailyReport'])->name('daily-report');
+    Route::post('/laporan-harian/tes', [SettingsController::class, 'testDailyReport'])->name('daily-report.test');
     Route::post('/clear-cache', function () {
         \Illuminate\Support\Facades\Artisan::call('cache:clear');
         \Illuminate\Support\Facades\Artisan::call('view:clear');

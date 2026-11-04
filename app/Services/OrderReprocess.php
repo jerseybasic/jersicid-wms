@@ -23,14 +23,14 @@ class OrderReprocess
      *
      * @return array{0: ?string, 1: ?string}
      */
-    public static function target(Order $order): array
+    public static function target(Order $order, ?\Illuminate\Support\Collection $returned = null): array
     {
         if (!in_array($order->status, ['SHIPPED', 'COMPLETED'], true)) {
             return [null, 'Hanya order Dikirim atau Selesai yang bisa diproses ulang.'];
         }
 
         $order->loadMissing('items', 'handoverItem.handover');
-        $returned = self::returnedQty($order);
+        $returned ??= self::returnedQty($order);
         if ($returned->sum() > 0) {
             $complete = $order->items->every(fn ($item) => ($returned[$item->id] ?? 0) >= $item->qty_ordered);
 
@@ -110,5 +110,37 @@ class OrderReprocess
             ->selectRaw('order_item_id, SUM(qty_good + qty_damaged) as total')
             ->groupBy('order_item_id')
             ->pluck('total', 'order_item_id');
+    }
+
+    /**
+     * Untuk daftar order: muat data serah terima dan jumlah retur semua order Dikirim/Selesai
+     * sekaligus (2-3 query untuk satu halaman), bukan 3 query per order.
+     *
+     * @return array<string, \Illuminate\Support\Collection> [order_id => [order_item_id => qty]]
+     */
+    public static function preloadForList(\Illuminate\Support\Collection $orders): array
+    {
+        $shipped = $orders->filter(fn (Order $order) => in_array($order->status, ['SHIPPED', 'COMPLETED'], true));
+        if ($shipped->isEmpty()) {
+            return [];
+        }
+
+        (new \Illuminate\Database\Eloquent\Collection($shipped->values()->all()))->loadMissing('items', 'handoverItem.handover');
+
+        $rows = OrderReturnItem::query()
+            ->join('order_returns as r', 'r.id', '=', 'order_return_items.order_return_id')
+            ->join('order_items as oi', 'oi.id', '=', 'order_return_items.order_item_id')
+            ->join('orders as o', 'o.id', '=', 'oi.order_id')
+            ->whereIn('oi.order_id', $shipped->pluck('id'))
+            ->where(fn ($q) => $q->whereNull('o.shipped_at')->orWhereColumn('r.created_at', '>=', 'o.shipped_at'))
+            ->groupBy('oi.order_id', 'order_return_items.order_item_id')
+            ->get(['oi.order_id', 'order_return_items.order_item_id', \Illuminate\Support\Facades\DB::raw('SUM(order_return_items.qty_good + order_return_items.qty_damaged) as total')]);
+
+        $map = $shipped->mapWithKeys(fn (Order $order) => [$order->id => collect()])->all();
+        foreach ($rows as $row) {
+            $map[$row->order_id][$row->order_item_id] = $row->total;
+        }
+
+        return $map;
     }
 }

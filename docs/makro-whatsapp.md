@@ -1,5 +1,7 @@
 # Notifikasi WhatsApp lewat makro toko
 
+> **Disarankan:** pakai [agen WhatsApp ringan](../whatsapp-agent/README.md) (folder `whatsapp-agent/`). Agen tidak membuka browser sehingga jauh lebih hemat memori, dan scan QR, status, serta putus/sambung nomor dilakukan dari WMS (Pengaturan → Notifikasi WhatsApp → Koneksi WhatsApp). Antrean dan API di bawah dipakai keduanya. Makro di bawah tetap bisa dipakai, tetapi jalankan hanya salah satu untuk antrean WMS.
+
 WMS tidak mengirim WhatsApp sendiri. WMS menaruh pesan di **antrean**, satu pesan untuk setiap penerima. Makro WhatsApp toko di folder [`whatsapp-macro/`](../whatsapp-macro/README.md) mengambil antrean itu dalam **Mode WMS**, mengirim pesannya lewat WhatsApp Web, lalu melaporkan hasilnya ke WMS.
 
 ```
@@ -21,6 +23,17 @@ Makro memakai Chromium/Chrome, atau Firefox jika Chrome tidak ada. Untuk memaksa
 
 Untuk menjalankan berikutnya cukup `./wa-login.sh --wms`. Cara menjalankannya terus-menerus di server ada di README makro.
 
+## Laporan kiriman harian (nomor pribadi atau grup)
+
+Di **Pengaturan → Laporan Kiriman Harian**, centang **Kirim laporan otomatis setiap hari**, isi jam kirim (bawaan 17:00), lalu isi penerima satu per baris:
+
+- nomor pribadi, misalnya `081234567890`;
+- nama grup WhatsApp, persis seperti tertulis di aplikasi, misalnya `Gudang Jersic`.
+
+Untuk grup, nomor pengirim yang dipakai makro harus sudah menjadi anggota grup itu. Makro membuka grup lewat kotak pencarian WhatsApp Web dan hanya mengirim jika namanya sama persis (huruf besar/kecil tidak berpengaruh). Jika tidak ketemu, pesan berstatus gagal dengan alasan "grup/kontak tidak ditemukan".
+
+Tombol **Kirim uji sekarang** langsung mengantrekan laporan hari ini tanpa mengubah jadwal. Riwayatnya tampil di **Log pengiriman laporan**. Jadwal butuh cron `schedule:run` yang sama dengan backup harian.
+
 ## API antrean (untuk referensi)
 
 Setiap permintaan wajib memakai header `Authorization: Bearer <token>`.
@@ -29,9 +42,10 @@ Setiap permintaan wajib memakai header `Authorization: Bearer <token>`.
 |---|---|
 | `GET /api/whatsapp/antrean?limit=10` | Mengambil sampai 10 pesan yang menunggu. Hasilnya: `{"messages": [{"id": 12, "to": "6281234567890", "message": "..."}]}` |
 | `POST /api/whatsapp/antrean/{id}/terkirim` | Menandai pesan terkirim. |
+| `POST /api/whatsapp/agen` | Khusus agen ringan: melapor status (`state`, `qr`, `phone`, `groups`). Balasannya `{"command": ...}` berisi `null`, `"logout"`, `"restart"`, atau `"refresh_groups"`. |
 | `POST /api/whatsapp/antrean/{id}/gagal` dengan `{"error": "alasan"}` | Menandai pesan gagal. Pesan diberikan lagi sampai 3 kali percobaan, lalu statusnya menjadi **Gagal** dan alasannya tampil di Pengaturan. |
 
-- Nomor `to` sudah dalam format `62…`.
+- `to` berisi nomor dalam format `62…`, atau nama grup WhatsApp untuk laporan kiriman harian.
 - Pesan yang sudah diambil tidak diberikan lagi. Kecuali jika dalam 10 menit belum dilaporkan terkirim atau gagal, pesan itu diberikan lagi.
 - Batas permintaan adalah 120 kali per menit.
 
