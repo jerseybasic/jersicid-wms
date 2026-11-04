@@ -37,6 +37,8 @@ class InboundController extends Controller
         $query = StockMovement::where('type', 'INBOUND')
             ->whereNotNull('reference_no')
             ->selectRaw('reference_no, MIN(id) as first_id, MAX(created_at) as last_at, SUM(qty) as total_qty, COUNT(DISTINCT sku) as sku_count')
+            // Penerimaan tanpa PO: jumlah dipesan dan sisa yang belum datang dari kolom qty_expected
+            ->selectRaw('SUM(COALESCE(qty_expected, qty)) as ordered_qty, SUM(CASE WHEN qty_expected > qty THEN qty_expected - qty ELSE 0 END) as pending_qty, COUNT(qty_expected) as expected_lines')
             ->groupBy('reference_no');
 
         if ($request->filled('search')) {
@@ -53,13 +55,19 @@ class InboundController extends Controller
             });
         }
 
-        // Belum Komplit = penerimaan dari PO yang sisa barangnya masih ditunggu
-        $openReceipts = PurchaseOrderReceipt::select('receipt_number')
+        // Belum Komplit = penerimaan dari PO yang sisa barangnya masih ditunggu,
+        // atau penerimaan tanpa PO yang qty datangnya masih di bawah qty dipesan
+        $poReceiptNumbers = PurchaseOrderReceipt::select('receipt_number');
+        $openPoReceipts = PurchaseOrderReceipt::select('receipt_number')
             ->whereIn('purchase_order_id', PurchaseOrder::select('id')->whereIn('status', PurchaseOrder::RECEIVABLE_STATUSES));
+        $openManualReceipts = StockMovement::select('reference_no')
+            ->where('type', 'INBOUND')
+            ->whereColumn('qty_expected', '>', 'qty')
+            ->whereNotIn('reference_no', $poReceiptNumbers);
         if ($request->status === 'BELUM_KOMPLIT') {
-            $query->whereIn('reference_no', $openReceipts);
+            $query->where(fn ($q) => $q->whereIn('reference_no', $openPoReceipts)->orWhereIn('reference_no', $openManualReceipts));
         } elseif ($request->status === 'KOMPLIT') {
-            $query->whereNotIn('reference_no', $openReceipts);
+            $query->whereNotIn('reference_no', $openPoReceipts)->whereNotIn('reference_no', $openManualReceipts);
         }
 
         $inbounds = $query->orderByDesc('last_at')->paginate(20)->withQueryString();
@@ -83,7 +91,7 @@ class InboundController extends Controller
             $row->first = $first;
             $row->po = $po;
             $row->supplier = $po?->supplier_name ?? $suppliers[$row->reference_no] ?? null;
-            $row->receipt_status = $po && $po->isReceivable() && $po->qty_remaining_total > 0 ? 'BELUM_KOMPLIT' : 'KOMPLIT';
+            $row->receipt_status = ($po ? $po->isReceivable() && $po->qty_remaining_total > 0 : $row->pending_qty > 0) ? 'BELUM_KOMPLIT' : 'KOMPLIT';
 
             return $row;
         });
@@ -294,6 +302,9 @@ class InboundController extends Controller
                         'bin_code' => $binCode,
                         'type' => 'INBOUND',
                         'qty' => $qtyReceived,
+                        // Tanpa PO: simpan jumlah yang dipesan supaya sisa yang belum datang terlihat.
+                        // Angka di bawah qty diterima diabaikan (biasanya nilai bawaan form yang tidak diisi).
+                        'qty_expected' => !$po && isset($item['qty_expected']) && (int) $item['qty_expected'] >= $qtyReceived ? (int) $item['qty_expected'] : null,
                         'qty_before' => $qtyBefore,
                         'qty_after' => $qtyAfter,
                         'reference_no' => $receiptNo,
@@ -501,6 +512,8 @@ class InboundController extends Controller
             'po_qty' => ['nullable', 'array'],
             'po_qty.*' => ['required', 'integer', 'min:1'],
             'po_id' => ['nullable', 'exists:purchase_orders,id'],
+            'expected' => ['nullable', 'array'],
+            'expected.*' => ['nullable', 'integer', 'min:1'],
         ], [
             'reason.required' => 'Alasan perubahan wajib diisi.',
         ]);
@@ -516,6 +529,7 @@ class InboundController extends Controller
             $request->ip(),
             collect($validated['po_qty'] ?? [])->map(fn ($qty) => (int) $qty)->all(),
             $validated['po_id'] ?? null,
+            collect($validated['expected'] ?? [])->mapWithKeys(fn ($qty, $lineId) => [(int) $lineId => $qty === null ? null : (int) $qty])->all(),
         ));
 
         $released = WaitingStock::release(auth()->id(), $request->ip());

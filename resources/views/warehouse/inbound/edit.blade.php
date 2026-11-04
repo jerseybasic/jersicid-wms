@@ -30,12 +30,15 @@
                     ->mapWithKeys(fn ($sku) => [$sku => (int) old('po_qty.' . $sku, $poItems[$sku]->qty_ordered)]),
                 'skuOf' => $items->pluck('sku', 'id'),
                 'other' => $otherReceived,
+                // Tanpa PO: qty dipesan per baris
+                'expected' => $po ? (object) [] : $items->mapWithKeys(fn ($i) => [$i->id => old('expected.' . $i->id, $i->qty_expected)]),
             ];
         @endphp
         <form method="POST" action="{{ route('gudang.inbound.update', $inbound->id) }}" class="space-y-6"
             x-data="{ ...@js($initial),
                 received(sku) { return (this.other[sku] || 0) + Object.keys(this.lines).filter(id => this.skuOf[id] === sku).reduce((t, id) => t + (parseInt(this.lines[id]) || 0), 0); },
-                remaining(sku) { return (parseInt(this.ordered[sku]) || 0) - this.received(sku); } }">
+                remaining(sku) { return (parseInt(this.ordered[sku]) || 0) - this.received(sku); },
+                pending(id) { const e = parseInt(this.expected[id]); return isNaN(e) ? null : e - (parseInt(this.lines[id]) || 0); } }">
             @csrf @method('PUT')
 
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -76,7 +79,7 @@
             <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                 <div class="p-4 border-b border-slate-800">
                     <h3 class="text-base font-semibold text-white">Qty Diterima</h3>
-                    <p class="text-xs text-slate-400 mt-1">Isi 0 untuk membuang baris yang salah. Pindah rak lewat menu Transfer Stok. @if ($po) Kolom Dipesan (PO) mengubah qty pesanan di PO {{ $po->po_number }}; tidak boleh di bawah yang sudah diterima. @endif</p>
+                    <p class="text-xs text-slate-400 mt-1">Isi 0 untuk membuang baris yang salah. Pindah rak lewat menu Transfer Stok. @if ($po) Kolom Dipesan (PO) mengubah qty pesanan di PO {{ $po->po_number }}; tidak boleh di bawah yang sudah diterima. @else Isi kolom Dipesan dengan jumlah yang diorder. Kalau yang datang masih kurang, status penerimaan jadi Belum Komplit sampai sisanya datang. Kosongkan jika tidak ada pesanan. @endif</p>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -89,6 +92,9 @@
                                 <th class="text-right py-3 px-4 w-32">Qty benar</th>
                                 @if ($po)
                                     <th class="text-right py-3 px-4 w-32">Dipesan (PO)</th>
+                                    <th class="text-right py-3 px-4">Sisa diproses</th>
+                                @else
+                                    <th class="text-right py-3 px-4 w-32">Dipesan</th>
                                     <th class="text-right py-3 px-4">Sisa diproses</th>
                                 @endif
                             </tr>
@@ -121,6 +127,21 @@
                                                     x-text="remaining('{{ $item->sku }}') > 0 ? remaining('{{ $item->sku }}') + ' pcs' : (remaining('{{ $item->sku }}') === 0 ? 'Lengkap' : 'Lebih ' + (-remaining('{{ $item->sku }}')) + ' pcs')"></span>
                                                 <span class="block text-[11px] text-slate-500" x-text="'diterima ' + received('{{ $item->sku }}') + ' dari ' + (ordered['{{ $item->sku }}'] || 0)"></span>
                                             @endif
+                                        </td>
+                                    @else
+                                        <td class="py-3 px-4 text-right">
+                                            <input type="number" name="expected[{{ $item->id }}]" min="1" x-model="expected['{{ $item->id }}']" placeholder="-"
+                                                class="w-24 px-3 py-2 bg-slate-800 border border-amber-500/40 rounded-lg text-white text-right focus:border-amber-400 focus:outline-none">
+                                        </td>
+                                        <td class="py-3 px-4 text-right whitespace-nowrap">
+                                            <span x-show="pending('{{ $item->id }}') === null" class="text-slate-500">-</span>
+                                            <template x-if="pending('{{ $item->id }}') !== null">
+                                                <span>
+                                                    <span class="font-semibold" :class="pending('{{ $item->id }}') > 0 ? 'text-orange-400' : (pending('{{ $item->id }}') === 0 ? 'text-emerald-400' : 'text-red-400')"
+                                                        x-text="pending('{{ $item->id }}') > 0 ? pending('{{ $item->id }}') + ' pcs' : (pending('{{ $item->id }}') === 0 ? 'Lengkap' : 'Dipesan kurang dari diterima')"></span>
+                                                    <span class="block text-[11px] text-slate-500" x-text="'diterima ' + (parseInt(lines['{{ $item->id }}']) || 0) + ' dari ' + expected['{{ $item->id }}']"></span>
+                                                </span>
+                                            </template>
                                         </td>
                                     @endif
                                 </tr>

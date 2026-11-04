@@ -101,7 +101,7 @@
                             <th class="text-left py-3 px-4 font-medium">Supplier</th>
                             <th class="text-left py-3 px-4 font-medium">PO Terkait</th>
                             <th class="text-right py-3 px-4 font-medium">Diterima</th>
-                            <th class="text-right py-3 px-4 font-medium">Pesanan PO</th>
+                            <th class="text-right py-3 px-4 font-medium">Pesanan</th>
                             <th class="text-left py-3 px-4 font-medium">Tanggal</th>
                             <th class="text-left py-3 px-4 font-medium">Status</th>
                             <th class="text-left py-3 px-4 font-medium">Diterima Oleh</th>
@@ -134,6 +134,13 @@
                                     <span class="text-white font-semibold">{{ number_format($inbound->po->qty_received_total) }}/{{ number_format($inbound->po->qty_ordered_total) }} pcs</span>
                                     @if ($inbound->po->qty_remaining_total > 0)
                                         <span class="block text-[11px] text-orange-400">{{ number_format($inbound->po->qty_remaining_total) }} pcs masih diproses</span>
+                                    @else
+                                        <span class="block text-[11px] text-emerald-400">semua sudah datang</span>
+                                    @endif
+                                @elseif ($inbound->expected_lines > 0)
+                                    <span class="text-white font-semibold">{{ number_format($inbound->total_qty) }}/{{ number_format($inbound->ordered_qty) }} pcs</span>
+                                    @if ($inbound->pending_qty > 0)
+                                        <span class="block text-[11px] text-orange-400">{{ number_format($inbound->pending_qty) }} pcs masih diproses</span>
                                     @else
                                         <span class="block text-[11px] text-emerald-400">semua sudah datang</span>
                                     @endif

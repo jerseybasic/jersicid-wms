@@ -12,12 +12,17 @@ class StockMovement extends Model
         'bin_code',
         'type',
         'qty',
+        'qty_expected',
         'qty_before',
         'qty_after',
         'reference_no',
         'reference_type',
         'notes',
         'ip_address',
+    ];
+
+    protected $casts = [
+        'qty_expected' => 'integer',
     ];
 
     public function user()

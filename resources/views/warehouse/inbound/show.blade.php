@@ -104,7 +104,15 @@
                     <p class="text-xs text-slate-400 mb-1">Total Diterima</p>
                     <p class="text-lg font-bold text-emerald-400">{{ number_format($items->sum('qty')) }} pcs
                         <span class="text-xs font-normal text-slate-400">· {{ $items->pluck('sku')->unique()->count() }} SKU</span></p>
-                    @if ($po && $po->isReceivable() && $po->qty_remaining_total > 0)
+                    @php
+                        // Tanpa PO: qty dipesan per baris (diisi saat terima barang atau lewat Edit)
+                        $manualOrdered = !$po && $items->whereNotNull('qty_expected')->isNotEmpty();
+                        $manualPending = $manualOrdered ? $items->sum(fn ($i) => max(0, ($i->qty_expected ?? 0) - $i->qty)) : 0;
+                    @endphp
+                    @if ($manualOrdered)
+                        <p class="text-xs text-slate-400 mt-1">Dipesan {{ number_format($items->sum(fn ($i) => $i->qty_expected ?? $i->qty)) }} pcs @if ($manualPending > 0)· <span class="text-orange-400 font-semibold">sisa {{ number_format($manualPending) }} pcs masih diproses</span>@endif</p>
+                    @endif
+                    @if (($po && $po->isReceivable() && $po->qty_remaining_total > 0) || $manualPending > 0)
                         <span class="inline-block mt-1 text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-400">Belum Komplit · baru sebagian jadi</span>
                     @else
                         <span class="inline-block mt-1 text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400">Komplit</span>
@@ -130,6 +138,9 @@
                                 <th class="text-right py-3 px-4">Dipesan (PO)</th>
                                 <th class="text-right py-3 px-4">Total diterima</th>
                                 <th class="text-right py-3 px-4">Sisa diproses</th>
+                            @elseif ($manualOrdered)
+                                <th class="text-right py-3 px-4">Dipesan</th>
+                                <th class="text-right py-3 px-4">Sisa diproses</th>
                             @endif
                             <th class="text-left py-3 px-4">Catatan</th>
                         </tr>
@@ -151,6 +162,17 @@
                                         <span class="text-slate-500">-</span>
                                     @elseif ($poItem->qty_remaining > 0)
                                         <span class="text-orange-400">{{ number_format($poItem->qty_remaining) }} pcs</span>
+                                    @else
+                                        <span class="text-emerald-400">Lengkap</span>
+                                    @endif
+                                </td>
+                            @elseif ($manualOrdered)
+                                <td class="py-3 px-4 text-right text-white">{{ $item->qty_expected !== null ? number_format($item->qty_expected) : '-' }}</td>
+                                <td class="py-3 px-4 text-right font-semibold whitespace-nowrap">
+                                    @if ($item->qty_expected === null)
+                                        <span class="text-slate-500">-</span>
+                                    @elseif ($item->qty_expected > $item->qty)
+                                        <span class="text-orange-400">{{ number_format($item->qty_expected - $item->qty) }} pcs</span>
                                     @else
                                         <span class="text-emerald-400">Lengkap</span>
                                     @endif

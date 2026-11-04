@@ -208,4 +208,45 @@ class InboundCorrectionTest extends TestCase
         $this->get(route('gudang.inbound.edit', $old[0]->id))->assertOk()->assertSee('po_qty[JSC-A-L]', false);
         $this->get(route('gudang.inbound'))->assertOk()->assertSee('Belum Komplit');
     }
+
+    public function test_receipt_without_po_tracks_ordered_qty_and_status(): void
+    {
+        // Saat terima barang tanpa PO: kolom Order 5, yang datang 2
+        $this->post(route('gudang.inbound.store'), [
+            'receipt_number' => 'SJ-MANUAL',
+            'supplier_name' => 'JB Printing',
+            'received_date' => now()->toDateString(),
+            'warehouse_id' => $this->warehouse->id,
+            'items' => [['sku' => 'JSC-A-L', 'bin_code' => 'A-01-01', 'qty_received' => 2, 'qty_expected' => 5]],
+        ])->assertRedirectContains('/gudang/inbound/');
+        $line = StockMovement::where('reference_no', 'SJ-MANUAL')->firstOrFail();
+        $this->assertSame(5, $line->qty_expected);
+
+        $this->get(route('gudang.inbound'))->assertOk()->assertSee('2/5 pcs')->assertSee('3 pcs masih diproses')->assertSee('baru sebagian jadi');
+        $this->get(route('gudang.inbound', ['status' => 'BELUM_KOMPLIT']))->assertSee('SJ-MANUAL');
+        $this->get(route('gudang.inbound', ['status' => 'KOMPLIT']))->assertDontSee('SJ-MANUAL');
+        $this->get(route('gudang.inbound.show', $line->id))->assertOk()->assertSee('Sisa diproses')->assertSee('Belum Komplit');
+        $this->get(route('gudang.inbound.edit', $line->id))->assertOk()->assertSee('expected[' . $line->id . ']', false);
+
+        // Penerimaan lama tanpa angka pesanan: isi Dipesan lewat Edit
+        $old = $this->receive('SJ-LAMA', ['JSC-A-XL' => 4], false);
+        $this->assertNull($old->qty_expected);
+        $this->put(route('gudang.inbound.update', $old->id), [
+            'receipt_number' => 'SJ-LAMA', 'reason' => 'isi pesanan', 'qty' => [$old->id => 4], 'expected' => [$old->id => 10],
+        ])->assertSessionHas('success');
+        $this->assertSame(10, $old->fresh()->qty_expected);
+        $this->get(route('gudang.inbound'))->assertSee('4/10 pcs')->assertSee('6 pcs masih diproses');
+
+        // Dipesan lebih kecil dari yang diterima ditolak
+        $this->put(route('gudang.inbound.update', $old->id), [
+            'receipt_number' => 'SJ-LAMA', 'reason' => 'x', 'qty' => [$old->id => 4], 'expected' => [$old->id => 3],
+        ])->assertSessionHasErrors('expected');
+
+        // Sisanya datang: qty dinaikkan sampai sama dengan pesanan, jadi Komplit
+        $this->put(route('gudang.inbound.update', $line->id), [
+            'receipt_number' => 'SJ-MANUAL', 'reason' => 'sisa datang', 'qty' => [$line->id => 5], 'expected' => [$line->id => 5],
+        ])->assertSessionHas('success');
+        $this->get(route('gudang.inbound', ['status' => 'KOMPLIT']))->assertSee('SJ-MANUAL')->assertSee('5/5 pcs');
+        $this->assertStringContainsString('(dipesan 5)', AuditTrail::where('action', 'UPDATE_INBOUND')->latest('id')->value('new_values'));
+    }
 }

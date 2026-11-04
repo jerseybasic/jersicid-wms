@@ -35,8 +35,9 @@ class InboundCorrection
      * @param  array<int, int>  $qtys  id baris => qty baru (0 = baris dihapus)
      * @param  array<string, int>  $poQtys  sku => qty dipesan baru di PO (hanya untuk penerimaan dari PO)
      * @param  string|null  $linkPoId  hubungkan penerimaan lama yang belum terhubung ke PO ini
+     * @param  array<int, int|null>  $expected  id baris => qty dipesan (hanya untuk penerimaan tanpa PO; null = dikosongkan)
      */
-    public static function update(string $receiptNo, string $newReceiptNo, ?string $notes, array $qtys, string $reason, string $userId, ?string $ip, array $poQtys = [], ?string $linkPoId = null): void
+    public static function update(string $receiptNo, string $newReceiptNo, ?string $notes, array $qtys, string $reason, string $userId, ?string $ip, array $poQtys = [], ?string $linkPoId = null, array $expected = []): void
     {
         $lines = self::lines($receiptNo);
         if ($lines->isEmpty()) {
@@ -63,6 +64,7 @@ class InboundCorrection
         }
 
         self::checkDecrease($lines, $changes);
+        $expectedAfter = $po ? [] : self::expectedAfter($lines, $changes, $expected);
         $poChanges = $po ? self::applyPoQty($po, $lines, $changes, $poQtys) : [];
         self::checkPoIncrease($po, $lines, $receipts, $changes);
 
@@ -90,6 +92,8 @@ class InboundCorrection
                 'qty' => $newQty,
                 'qty_after' => $line->qty_before + $newQty,
                 'notes' => $notesChanged ? $notes : $line->notes,
+                // Penerimaan dari PO memakai qty pesanan di PO, bukan angka per baris
+                'qty_expected' => $po ? null : $expectedAfter[$line->id],
             ]);
             $receipt?->update(['receipt_number' => $newReceiptNo, 'qty' => $newQty] + ($notesChanged ? ['notes' => $notes] : []));
         }
@@ -114,6 +118,30 @@ class InboundCorrection
             $po->update(['notes' => trim('Qty diubah lewat edit penerimaan ' . $newReceiptNo . ' (' . now()->format('d/m/Y H:i') . '): '
                 . implode(', ', $poChanges) . '. Alasan: ' . $reason . "\n" . $po->notes)]);
         }
+    }
+
+    /**
+     * Qty dipesan per baris setelah koreksi, untuk penerimaan tanpa PO. Tidak boleh di bawah qty yang diterima.
+     *
+     * @return array<int, int|null>
+     */
+    private static function expectedAfter(Collection $lines, Collection $changes, array $expected): array
+    {
+        $result = [];
+        $problems = [];
+        foreach ($lines as $line) {
+            $value = array_key_exists($line->id, $expected) ? $expected[$line->id] : $line->qty_expected;
+            $newQty = $line->qty + ($changes[$line->id] ?? 0);
+            if ($value !== null && $newQty > 0 && $value < $newQty) {
+                $problems[] = "{$line->sku}: dipesan {$value} pcs, tapi yang diterima {$newQty} pcs. Qty dipesan tidak boleh lebih kecil dari yang diterima.";
+            }
+            $result[$line->id] = $value;
+        }
+        if ($problems) {
+            throw ValidationException::withMessages(['expected' => $problems]);
+        }
+
+        return $result;
     }
 
     /**
@@ -379,7 +407,7 @@ class InboundCorrection
         return [
             'receipt_number' => $receiptNo,
             'notes' => $lines->first()?->notes,
-            'items' => $lines->map(fn ($line) => "{$line->sku} x{$line->qty} di {$line->bin_code}")->values()->all(),
+            'items' => $lines->map(fn ($line) => "{$line->sku} x{$line->qty}" . ($line->qty_expected !== null ? " (dipesan {$line->qty_expected})" : '') . " di {$line->bin_code}")->values()->all(),
         ];
     }
 
