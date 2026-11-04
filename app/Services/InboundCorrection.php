@@ -34,8 +34,9 @@ class InboundCorrection
     /**
      * @param  array<int, int>  $qtys  id baris => qty baru (0 = baris dihapus)
      * @param  array<string, int>  $poQtys  sku => qty dipesan baru di PO (hanya untuk penerimaan dari PO)
+     * @param  string|null  $linkPoId  hubungkan penerimaan lama yang belum terhubung ke PO ini
      */
-    public static function update(string $receiptNo, string $newReceiptNo, ?string $notes, array $qtys, string $reason, string $userId, ?string $ip, array $poQtys = []): void
+    public static function update(string $receiptNo, string $newReceiptNo, ?string $notes, array $qtys, string $reason, string $userId, ?string $ip, array $poQtys = [], ?string $linkPoId = null): void
     {
         $lines = self::lines($receiptNo);
         if ($lines->isEmpty()) {
@@ -54,6 +55,12 @@ class InboundCorrection
 
         $receipts = PurchaseOrderReceipt::whereIn('stock_movement_id', $lines->pluck('id'))->get()->keyBy('stock_movement_id');
         $po = self::lockPo($receipts);
+        $linked = false;
+        if (!$po && $linkPoId) {
+            $po = self::linkPo($linkPoId, $lines, $userId);
+            $receipts = PurchaseOrderReceipt::whereIn('stock_movement_id', $lines->pluck('id'))->get()->keyBy('stock_movement_id');
+            $linked = true;
+        }
 
         self::checkDecrease($lines, $changes);
         $poChanges = $po ? self::applyPoQty($po, $lines, $changes, $poQtys) : [];
@@ -98,7 +105,8 @@ class InboundCorrection
                 'reason' => $reason,
                 'supplier' => self::supplier($receiptNo),
             ] + ($po ? ['po_number' => $po->po_number, 'po_status' => $poStatus] : [])
-              + ($poChanges ? ['po_qty' => $poChanges] : [])),
+              + ($poChanges ? ['po_qty' => $poChanges] : [])
+              + ($linked ? ['linked_po' => $po->po_number] : [])),
             'ip_address' => $ip,
         ]);
 
@@ -106,6 +114,71 @@ class InboundCorrection
             $po->update(['notes' => trim('Qty diubah lewat edit penerimaan ' . $newReceiptNo . ' (' . now()->format('d/m/Y H:i') . '): '
                 . implode(', ', $poChanges) . '. Alasan: ' . $reason . "\n" . $po->notes)]);
         }
+    }
+
+    /**
+     * Hubungkan penerimaan yang dicatat sebelum ada riwayat per kedatangan ke sebuah PO. Inbound lama
+     * sudah menambah qty diterima PO jika PO-nya dipilih saat itu, tapi tidak menyimpan hubungannya.
+     * Jadi qty diterima PO yang belum punya riwayat dianggap milik penerimaan ini dulu, dan hanya
+     * kekurangannya yang ditambahkan ke PO.
+     */
+    private static function linkPo(string $poId, Collection $lines, string $userId): PurchaseOrder
+    {
+        $po = PurchaseOrder::with('items')->lockForUpdate()->find($poId);
+        if (!$po || !in_array($po->status, [...PurchaseOrder::RECEIVABLE_STATUSES, 'RECEIVED'], true)) {
+            throw ValidationException::withMessages(['po_id' => 'PO yang dipilih tidak bisa dihubungkan (belum disetujui atau sudah dibatalkan).']);
+        }
+
+        $missing = $lines->pluck('sku')->unique()->reject(fn ($sku) => $po->items->contains('sku', $sku));
+        if ($missing->isNotEmpty()) {
+            throw ValidationException::withMessages(['po_id' => 'SKU ' . $missing->implode(', ') . " tidak ada di PO {$po->po_number}. Pilih PO yang benar, atau tambahkan SKU-nya ke PO dulu."]);
+        }
+
+        $linkedQty = PurchaseOrderReceipt::whereIn('purchase_order_item_id', $po->items->pluck('id'))
+            ->groupBy('purchase_order_item_id')
+            ->selectRaw('purchase_order_item_id, SUM(qty) as qty')
+            ->pluck('qty', 'purchase_order_item_id');
+        $unlinked = $po->items->mapWithKeys(fn ($item) => [$item->sku => max(0, $item->qty_received - (int) ($linkedQty[$item->id] ?? 0))])->all();
+
+        $add = [];
+        foreach ($lines as $line) {
+            $counted = min($unlinked[$line->sku], $line->qty);
+            $unlinked[$line->sku] -= $counted;
+            $add[$line->sku] = ($add[$line->sku] ?? 0) + $line->qty - $counted;
+        }
+
+        $problems = [];
+        foreach ($add as $sku => $qty) {
+            $item = $po->items->firstWhere('sku', $sku);
+            if ($qty > $item->qty_remaining) {
+                $problems[] = "{$sku}: penerimaan ini menambah {$qty} pcs ke PO, melebihi sisa PO {$item->qty_remaining} pcs. Naikkan qty PO-nya dulu lewat Edit PO.";
+            }
+        }
+        if ($problems) {
+            throw ValidationException::withMessages(['po_id' => $problems]);
+        }
+
+        foreach ($add as $sku => $qty) {
+            if ($qty > 0) {
+                $po->items->firstWhere('sku', $sku)->increment('qty_received', $qty);
+            }
+        }
+        foreach ($lines as $line) {
+            PurchaseOrderReceipt::create([
+                'purchase_order_id' => $po->id,
+                'purchase_order_item_id' => $po->items->firstWhere('sku', $line->sku)->id,
+                'sku' => $line->sku,
+                'qty' => $line->qty,
+                'receipt_number' => $line->reference_no,
+                'received_date' => $line->created_at->toDateString(),
+                'bin_code' => $line->bin_code,
+                'stock_movement_id' => $line->id,
+                'received_by' => $line->user_id ?? $userId,
+                'notes' => $line->notes,
+            ]);
+        }
+
+        return $po;
     }
 
     /**

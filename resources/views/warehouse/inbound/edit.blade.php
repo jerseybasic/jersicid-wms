@@ -50,10 +50,21 @@
                         @if ($po)
                             <a href="{{ route('po.show', $po->id) }}" class="font-mono text-cyan-400">{{ $po->po_number }}</a>
                             · {{ $po->status_label }} · sisa {{ number_format($po->qty_remaining_total) }} pcs
-                        @else
+                        @elseif ($linkablePos->isEmpty())
                             Tanpa PO
                         @endif
                     </p>
+                    @if (!$po && $linkablePos->isNotEmpty())
+                        <select name="po_id" class="w-full px-4 py-3 bg-slate-800 border border-amber-500/40 rounded-xl text-white text-sm focus:border-amber-400 focus:outline-none">
+                            <option value="">-- Tanpa PO --</option>
+                            @foreach ($linkablePos as $option)
+                                <option value="{{ $option->id }}" @selected(old('po_id') === $option->id)>
+                                    {{ $option->po_number }} · {{ $option->supplier_name }} · {{ $option->status_label }} · diterima {{ $option->qty_received_total }}/{{ $option->qty_ordered_total }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <p class="text-xs text-slate-500 mt-2">Penerimaan ini belum terhubung ke PO. Pilih PO-nya supaya qty diterima, sisa, dan status PO ikut terhitung. Qty yang dulu sudah tercatat di PO tidak dihitung dua kali. Setelah disimpan, buka Edit lagi untuk mengubah qty pesanan PO.</p>
+                    @endif
                 </div>
                 <div class="md:col-span-2">
                     <label class="block text-sm font-medium text-slate-300 mb-2">Catatan</label>

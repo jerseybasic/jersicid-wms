@@ -174,4 +174,38 @@ class InboundCorrectionTest extends TestCase
         ])->assertSessionHasErrors('po_qty');
         $this->assertSame(4, $item->fresh()->qty_ordered);
     }
+
+    public function test_old_receipt_can_be_linked_to_po_without_double_counting(): void
+    {
+        // Penerimaan lama (sebelum ada riwayat per kedatangan): L sudah tercatat di PO, XL belum
+        $owner = auth()->user();
+        $old = collect(['JSC-A-L' => 2, 'JSC-A-XL' => 2])->map(fn ($qty, $sku) => StockMovement::create([
+            'user_id' => $owner->id, 'sku' => $sku, 'bin_code' => 'GUDANG-UTAMA', 'type' => 'INBOUND',
+            'qty' => $qty, 'qty_before' => 0, 'qty_after' => $qty, 'reference_no' => 'JJ637 - JJ639',
+            'notes' => 'baru jadi 2pcs per size',
+        ]))->values();
+        $this->putStock('JSC-A-L', 'GUDANG-UTAMA', 2);
+        $this->putStock('JSC-A-XL', 'GUDANG-UTAMA', 2);
+        $this->po->items()->where('sku', 'JSC-A-L')->update(['qty_received' => 2]);
+
+        $this->get(route('gudang.inbound.edit', $old[0]->id))->assertOk()
+            ->assertSee('belum terhubung ke PO')->assertSee($this->po->po_number);
+
+        $this->put(route('gudang.inbound.update', $old[0]->id), [
+            'receipt_number' => 'JJ637 - JJ639', 'reason' => 'hubungkan ke PO',
+            'qty' => [$old[0]->id => 2, $old[1]->id => 2], 'po_id' => $this->po->id,
+        ])->assertSessionHas('success');
+
+        $po = $this->po->fresh()->load('items');
+        $this->assertSame(2, $po->items->firstWhere('sku', 'JSC-A-L')->qty_received);
+        $this->assertSame(2, $po->items->firstWhere('sku', 'JSC-A-XL')->qty_received);
+        $this->assertSame('PARTIALLY_RECEIVED', $po->status);
+        $this->assertSame(2, PurchaseOrderReceipt::where('receipt_number', 'JJ637 - JJ639')->count());
+        $this->assertSame(2, $this->stockQty('JSC-A-L', 'GUDANG-UTAMA'));
+
+        // Sekarang detail dan edit menampilkan pesanan PO dan sisanya
+        $this->get(route('gudang.inbound.show', $old[0]->id))->assertOk()->assertSee('Dipesan (PO)')->assertSee('Sisa diproses');
+        $this->get(route('gudang.inbound.edit', $old[0]->id))->assertOk()->assertSee('po_qty[JSC-A-L]', false);
+        $this->get(route('gudang.inbound'))->assertOk()->assertSee('Belum Komplit');
+    }
 }

@@ -477,7 +477,14 @@ class InboundController extends Controller
             ->get();
         $po = PurchaseOrderReceipt::whereIn('stock_movement_id', $items->pluck('id'))->with('purchaseOrder.items')->first()?->purchaseOrder;
 
-        return view('warehouse.inbound.edit', compact('inbound', 'items', 'po'));
+        // Penerimaan lama tanpa PO: tawarkan PO yang memuat SKU-nya untuk dihubungkan
+        $linkablePos = $po ? collect() : PurchaseOrder::whereIn('status', [...PurchaseOrder::RECEIVABLE_STATUSES, 'RECEIVED'])
+            ->whereHas('items', fn ($q) => $q->whereIn('sku', $items->pluck('sku')->unique()))
+            ->with('items')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return view('warehouse.inbound.edit', compact('inbound', 'items', 'po', 'linkablePos'));
     }
 
     public function update(Request $request, $id)
@@ -493,6 +500,7 @@ class InboundController extends Controller
             'qty.*' => ['required', 'integer', 'min:0'],
             'po_qty' => ['nullable', 'array'],
             'po_qty.*' => ['required', 'integer', 'min:1'],
+            'po_id' => ['nullable', 'exists:purchase_orders,id'],
         ], [
             'reason.required' => 'Alasan perubahan wajib diisi.',
         ]);
@@ -507,6 +515,7 @@ class InboundController extends Controller
             auth()->id(),
             $request->ip(),
             collect($validated['po_qty'] ?? [])->map(fn ($qty) => (int) $qty)->all(),
+            $validated['po_id'] ?? null,
         ));
 
         $released = WaitingStock::release(auth()->id(), $request->ip());
