@@ -8,8 +8,8 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\WhatsAppMessage;
 use App\Services\WhatsApp;
+use App\Services\WhatsAppSchedule;
 use Carbon\Carbon;
-use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Feature\Concerns\CreatesWarehouseData;
 use Tests\TestCase;
@@ -66,14 +66,16 @@ class ShipReminderTest extends TestCase
         SystemSetting::set('ship_cutoff_hour', '1', 'ORDER');
         $this->assertSame(0, SendShipReminder::hour());
 
-        $event = collect(app(Schedule::class)->events())->first(fn ($e) => str_contains($e->command, 'wms:kirim-pengingat-kirim'));
-        $this->assertNotNull($event);
-
+        // Jalan otomatis lewat jadwal WhatsApp: mulai 2 jam sebelum jam potong, sampai jam potong
+        WhatsApp::generateToken();
+        User::factory()->role('OWNER')->create(['whatsapp' => '081200001111', 'notify_whatsapp' => true, 'status' => 'AKTIF']);
         SystemSetting::set('ship_cutoff_hour', '15', 'ORDER');
+        Carbon::setTestNow('2026-10-23 12:59:00');
+        $this->assertFalse(WhatsAppSchedule::due('ship_reminder'));
         Carbon::setTestNow('2026-10-23 13:00:00');
-        $this->assertTrue($event->filtersPass($this->app));
-        Carbon::setTestNow('2026-10-23 14:00:00');
-        $this->assertFalse($event->filtersPass($this->app));
+        $this->assertTrue(WhatsAppSchedule::due('ship_reminder'));
+        Carbon::setTestNow('2026-10-23 16:00:00');
+        $this->assertFalse(WhatsAppSchedule::due('ship_reminder'));
     }
 
     public function test_bell_shows_orders_past_deadline(): void

@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\WhatsAppMessage;
 use App\Console\Commands\SendLowStockAlert;
 use App\Services\DailyShipmentReport;
+use App\Services\WhatsAppSchedule;
 use App\Services\LowStock;
 use App\Services\ShipDeadline;
 use App\Services\PoNotifier;
@@ -66,6 +67,7 @@ class SettingsController extends Controller
             'log' => DailyShipmentReport::log(),
             'preview' => DailyShipmentReport::message(),
             'groups' => WhatsAppAgent::groupNames(),
+            'schedule' => WhatsAppSchedule::overview(),
         ];
 
         return view('settings.index', compact('stats', 'company', 'whatsapp', 'report'));

@@ -32,7 +32,16 @@ Di **Pengaturan → Laporan Kiriman Harian**, centang **Kirim laporan otomatis s
 
 Untuk grup, nomor pengirim yang dipakai makro harus sudah menjadi anggota grup itu. Makro membuka grup lewat kotak pencarian WhatsApp Web dan hanya mengirim jika namanya sama persis (huruf besar/kecil tidak berpengaruh). Jika tidak ketemu, pesan berstatus gagal dengan alasan "grup/kontak tidak ditemukan".
 
-Tombol **Kirim uji sekarang** langsung mengantrekan laporan hari ini tanpa mengubah jadwal. Riwayatnya tampil di **Log pengiriman laporan**. Jadwal butuh cron `schedule:run` yang sama dengan backup harian.
+Tombol **Kirim uji sekarang** langsung mengantrekan laporan hari ini tanpa mengubah jadwal. Riwayatnya tampil di **Log pengiriman laporan**.
+
+## Jadwal otomatis (tanpa klik)
+
+Laporan kiriman harian (jam di Pengaturan), stok menipis (08:00), dan pengingat batas kirim (2 jam sebelum jam potong) terkirim sendiri pada jamnya, masing-masing **sekali sehari**. Pengecekannya dipicu dua jalur, mana saja yang hidup:
+
+1. **Agen WhatsApp yang tersambung.** Agen melapor ke WMS tiap ~20 detik; selama statusnya tersambung, WMS sekalian menjalankan jadwal yang sudah waktunya. Jadi laporan tetap terkirim walau cron belum dipasang. Kalau agen baru tersambung setelah jamnya lewat (misal jam 17:10 untuk jadwal 16:50), laporan dikirim saat itu juga.
+2. **Cron server** `* * * * * cd /path/ke/jersicid-wms && php artisan schedule:run >> /dev/null 2>&1` (sama dengan backup harian). Pesan masuk antrean dan terkirim begitu agen tersambung.
+
+Keduanya boleh hidup bersamaan: tanggal terakhir tiap jadwal disimpan dan pengecekannya dikunci, jadi tidak ada kiriman ganda. Status dan hasil terakhir tiap jadwal tampil di **Pengaturan → Laporan Kiriman Harian → Jadwal otomatis WhatsApp**. Untuk menjalankan pengecekan manual: `php artisan wms:jadwal-whatsapp`.
 
 ## API antrean (untuk referensi)
 

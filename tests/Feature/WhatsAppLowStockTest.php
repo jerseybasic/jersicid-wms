@@ -172,6 +172,6 @@ class WhatsAppLowStockTest extends TestCase
         $this->assertStringNotContainsString('JSC-A-L', $body);
 
         $events = collect(app(Schedule::class)->events())->map(fn ($e) => $e->command . ' @ ' . $e->expression);
-        $this->assertTrue($events->contains(fn ($e) => str_contains($e, 'wms:kirim-stok-menipis') && str_ends_with($e, '0 8 * * *')));
+        $this->assertTrue($events->contains(fn ($e) => str_contains($e, 'wms:jadwal-whatsapp') && str_ends_with($e, '* * * * *')));
     }
 }
