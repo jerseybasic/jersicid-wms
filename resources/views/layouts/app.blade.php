@@ -675,9 +675,11 @@
                                     d="M4 6h16M4 12h16M4 18h16" />
                             </svg>
                         </button>
-                        <div class="min-w-0">
-                            <h1 class="text-lg lg:text-xl font-bold text-white truncate">{{ $header ?? 'Dashboard' }}</h1>
-                            <p class="text-xs lg:text-sm text-slate-400 truncate">{{ $subheader ?? '' }}</p>
+                        <div class="page-title min-w-0">
+                            <h1 class="text-lg lg:text-xl font-bold text-white">{{ $header ?? 'Dashboard' }}</h1>
+                            @if (filled($subheader ?? null))
+                                <p class="text-xs lg:text-sm text-slate-400 truncate">{{ $subheader }}</p>
+                            @endif
                         </div>
                     </div>
 

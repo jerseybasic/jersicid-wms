@@ -81,7 +81,7 @@
         <!-- Table -->
         <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="[&_td]:whitespace-nowrap w-full text-sm">
                     <thead>
                         <tr class="text-xs text-slate-400 border-b border-slate-800 bg-slate-800/30">
                             <th class="text-left py-3 px-4 font-medium">No. Session</th>

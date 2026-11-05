@@ -34,7 +34,7 @@
 
         <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="[&_td]:whitespace-nowrap w-full text-sm">
                     <thead class="bg-slate-800/50 text-xs text-slate-400">
                         <tr>
                             <th class="text-left py-3 px-4">No. Opname</th>
