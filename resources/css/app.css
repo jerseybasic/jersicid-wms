@@ -217,13 +217,13 @@ html.light {
    ============================================ */
 :root,
 html.dark {
-    --login-page-left: linear-gradient(160deg, #03070F 0%, #071226 60%, #0A1E33 100%);
+    --login-page-glow: radial-gradient(60% 70% at 0% 0%, rgb(14 116 144 / 0.22) 0%, transparent 70%), radial-gradient(50% 60% at 100% 100%, rgb(11 59 102 / 0.30) 0%, transparent 70%);
     --login-cloud2: rgb(255 255 255 / 0.07);
     --login-shadow: 0 30px 80px rgb(0 0 0 / 0.55);
 }
 
 html.light {
-    --login-page-left: linear-gradient(160deg, #08203D 0%, #0B3B66 60%, #0B5A85 100%);
+    --login-page-glow: radial-gradient(60% 70% at 0% 0%, rgb(14 116 144 / 0.14) 0%, transparent 70%), radial-gradient(50% 60% at 100% 100%, rgb(11 59 102 / 0.12) 0%, transparent 70%);
     --login-cloud2: rgb(255 255 255 / 0.45);
     --login-shadow: 0 24px 60px rgb(11 59 102 / 0.18);
 }
@@ -250,9 +250,61 @@ html.light {
         @apply w-full p-0 border-0 bg-transparent text-[15px] text-white placeholder-slate-500 focus:ring-0;
     }
 
-    @media (min-width: 1024px) {
+    /* Panel biru: tinggi & posisi ilustrasi per ukuran layar.
+       HP: panel di atas form, ilustrasi menyusut di layar pendek (landscape). */
+    .login-hero {
+        height: clamp(250px, 52svh, 380px);
+    }
+
+    .login-scene {
+        right: 0;
+        width: min(100%, 440px);
+        bottom: 54px;
+        margin-inline: auto;
+    }
+
+    @media (min-width: 768px) {
         .login-page {
-            background: linear-gradient(90deg, transparent 50%, rgb(var(--c-slate-950)) 50%), var(--login-page-left);
+            background-image: var(--login-page-glow);
+        }
+
+        .login-card {
+            box-shadow: var(--login-shadow);
+        }
+
+        .login-hero {
+            height: 400px;
+        }
+
+        .login-scene {
+            bottom: 46px;
+            width: min(100%, 440px);
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .login-hero {
+            height: auto;
+        }
+
+        /* Ilustrasi berhenti sebelum awan pembatas supaya truk tidak terpotong */
+        .login-scene {
+            right: auto;
+            width: calc(100% - 28px);
+            bottom: 15%;
+            margin-inline: 0;
+        }
+    }
+
+    @media (max-height: 520px) and (max-width: 1023.98px) {
+        /* HP landscape: ilustrasi disembunyikan agar form langsung terlihat */
+        .login-hero {
+            height: auto;
+            padding-bottom: 64px;
+        }
+
+        .login-scene {
+            display: none !important; /* menimpa utilitas .block bawaan SVG */
         }
     }
 }
