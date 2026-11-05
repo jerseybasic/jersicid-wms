@@ -492,7 +492,7 @@
 
             @unless ($cron['cron_active'])
                 <p class="text-sm text-slate-300 mb-2">Pasang satu baris ini di crontab server (lewat SSH: <code class="text-cyan-300">crontab -e</code>, atau menu Cron Jobs di cPanel), dengan user yang menjalankan aplikasi:</p>
-                <pre class="text-xs text-cyan-300 bg-slate-950/60 border border-slate-700 rounded-lg p-3 whitespace-pre-wrap break-all select-all">* * * * * cd {{ base_path() }} &amp;&amp; php artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</pre>
+                <pre class="text-xs text-cyan-300 bg-slate-950/60 border border-slate-700 rounded-lg p-3 whitespace-pre-wrap break-all select-all">* * * * * cd {{ escapeshellarg(base_path()) }} &amp;&amp; php artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</pre>
                 <p class="text-xs text-slate-500 mt-2">Setelah dipasang, status di atas berubah menjadi Cron aktif dalam 1 sampai 2 menit.</p>
             @endunless
         </div>
