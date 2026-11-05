@@ -21,6 +21,8 @@ class Order extends Model
     /**
      * Alur status order:
      * PENDING → CONFIRMED → PICKING → PACKING → READY_TO_SHIP → SHIPPED → COMPLETED
+     * SHIPPED → COMPLETED juga otomatis setelah lewat batas hari di Pengaturan (OrderAutoComplete)
+     * SHIPPED/COMPLETED → RETURNED saat paket returnya diterima (dicocokkan lewat no. resi / no. order)
      * PENDING/CONFIRMED → CANCELLED
      * PICKING/PACKING/READY_TO_SHIP → CANCELLED (barang yang sudah diambil dikembalikan ke rak)
      *
@@ -34,8 +36,12 @@ class Order extends Model
         'READY_TO_SHIP' => 'Siap Kirim',
         'SHIPPED' => 'Dikirim',
         'COMPLETED' => 'Selesai',
+        'RETURNED' => 'Diretur',
         'CANCELLED' => 'Dibatalkan',
     ];
+
+    /** Barangnya sudah keluar dari gudang (dikirim, selesai, atau sudah ada retur) */
+    public const SENT_STATUSES = ['SHIPPED', 'COMPLETED', 'RETURNED'];
 
     public const WAITING_STOCK_LABEL = 'Menunggu Stok';
 
@@ -148,7 +154,7 @@ class Order extends Model
     /** Data order masih boleh diubah (belum selesai atau dibatalkan) */
     public function isEditable(): bool
     {
-        return !in_array($this->status, ['COMPLETED', 'CANCELLED'], true);
+        return !in_array($this->status, ['COMPLETED', 'RETURNED', 'CANCELLED'], true);
     }
 
     /**

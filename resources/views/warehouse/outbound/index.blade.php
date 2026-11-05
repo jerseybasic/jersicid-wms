@@ -91,7 +91,10 @@
                         <option value="PICKING" {{ request('status') == 'PICKING' ? 'selected' : '' }}>Picking</option>
                         <option value="PACKING" {{ request('status') == 'PACKING' ? 'selected' : '' }}>Packing</option>
                         <option value="READY_TO_SHIP" {{ request('status') == 'READY_TO_SHIP' ? 'selected' : '' }}>Siap Kirim</option>
-                        <option value="SHIPPED" {{ request('status') == 'SHIPPED' ? 'selected' : '' }}>Shipped</option>
+                        <option value="SHIPPED" {{ request('status') == 'SHIPPED' ? 'selected' : '' }}>Dikirim</option>
+                        <option value="COMPLETED" {{ request('status') == 'COMPLETED' ? 'selected' : '' }}>Selesai</option>
+                        <option value="RETURNED" {{ request('status') == 'RETURNED' ? 'selected' : '' }}>Diretur</option>
+                        <option value="CANCELLED" {{ request('status') == 'CANCELLED' ? 'selected' : '' }}>Dibatalkan</option>
                     </select>
                     <select name="batas" class="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:border-cyan-400 focus:outline-none">
                         <option value="">Semua batas kirim</option>
@@ -171,6 +174,7 @@
                                         'READY_TO_SHIP' => 'bg-indigo-500/20 text-indigo-400',
                                         'SHIPPED' => 'bg-emerald-500/20 text-emerald-400',
                                         'COMPLETED' => 'bg-slate-500/20 text-slate-300',
+                                        'RETURNED' => 'bg-orange-500/20 text-orange-300',
                                         'CANCELLED' => 'bg-red-500/20 text-red-400',
                                     ];
                                 @endphp

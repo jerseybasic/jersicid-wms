@@ -39,7 +39,7 @@ class CourierHandoverController extends Controller
             ->get();
 
         // Hanya yang benar-benar lewat scan serah terima; sisanya muncul di "perlu dicek" (lihat packedOn)
-        $shipped = Order::whereIn('status', ['SHIPPED', 'COMPLETED'])
+        $shipped = Order::whereIn('status', Order::SENT_STATUSES)
             ->whereBetween('shipped_at', [$date, $date->copy()->endOfDay()])
             ->whereHas('handoverItem')
             ->with('handoverItem.handover:id,handover_number,driver_name,completed_at')
@@ -116,7 +116,7 @@ class CourierHandoverController extends Controller
     public static function checkReason(Order $order): string
     {
         return match ($order->status) {
-            'SHIPPED', 'COMPLETED' => 'Berstatus ' . $order->status_label . ' tanpa scan serah terima' . ($order->shipped_at ? ' (' . $order->shipped_at->format('d/m H:i') . ')' : ''),
+            'SHIPPED', 'COMPLETED', 'RETURNED' => 'Berstatus ' . $order->status_label . ' tanpa scan serah terima' . ($order->shipped_at ? ' (' . $order->shipped_at->format('d/m H:i') . ')' : ''),
             'CANCELLED' => 'Order dibatalkan setelah dikemas',
             'PICKING', 'PACKING' => 'Kembali ke ' . strtolower($order->status_label) . ' setelah dikemas',
             default => 'Status sekarang: ' . $order->status_label,
@@ -251,7 +251,7 @@ class CourierHandoverController extends Controller
         if (!$order) {
             throw new \RuntimeException("Resi atau nomor order {$code} tidak ditemukan.");
         }
-        if ($order->status === 'SHIPPED' || $order->status === 'COMPLETED') {
+        if (in_array($order->status, Order::SENT_STATUSES, true)) {
             throw new \RuntimeException("{$order->order_number} sudah dikirim sebelumnya" . ($order->shipped_at ? ' (' . $order->shipped_at->format('d/m H:i') . ')' : '') . '.');
         }
         if ($order->status !== 'READY_TO_SHIP') {

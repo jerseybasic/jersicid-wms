@@ -207,7 +207,7 @@ class LabelController extends Controller
         $order = Order::with('items.masterSku')->findOrFail($orderId);
 
         abort_unless(
-            in_array($order->status, ['READY_TO_SHIP', 'SHIPPED', 'COMPLETED']),
+            in_array($order->status, ['READY_TO_SHIP', ...Order::SENT_STATUSES]),
             422,
             'Label kirim baru bisa dicetak setelah packing selesai.'
         );
@@ -224,7 +224,7 @@ class LabelController extends Controller
         $ids = array_filter((array) $request->input('ids', []), 'is_string');
         $orders = Order::with('items.masterSku')
             ->when($ids,
-                fn ($query) => $query->whereIn('id', $ids)->whereIn('status', ['READY_TO_SHIP', 'SHIPPED', 'COMPLETED']),
+                fn ($query) => $query->whereIn('id', $ids)->whereIn('status', ['READY_TO_SHIP', ...Order::SENT_STATUSES]),
                 fn ($query) => $query->where('status', 'READY_TO_SHIP'))
             ->orderBy('packed_at')
             ->orderBy('created_at')

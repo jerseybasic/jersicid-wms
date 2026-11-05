@@ -120,7 +120,7 @@ class OutboundController extends Controller
         ]]);
 
         // Perubahan status manual (konfirmasi, batal, kirim, selesai) dari audit trail
-        $labels = ['CONFIRMED' => ['Dikonfirmasi', 'blue'], 'CANCELLED' => ['Dibatalkan', 'red'], 'SHIPPED' => ['Dikirim', 'emerald'], 'COMPLETED' => ['Selesai', 'slate']];
+        $labels = ['CONFIRMED' => ['Dikonfirmasi', 'blue'], 'CANCELLED' => ['Dibatalkan', 'red'], 'SHIPPED' => ['Dikirim', 'emerald'], 'COMPLETED' => ['Selesai', 'slate'], 'RETURNED' => ['Diretur', 'orange']];
         AuditTrail::with('user:id,name')
             ->where('module', 'OUTBOUND')->whereIn('action', ['UPDATE_STATUS', 'UPDATE', 'WAITING_STOCK', 'REACTIVATE', 'CARRY_OVER', 'CHANGE_ITEMS'])
             ->where('new_values', 'like', '%' . $order->order_number . '%')

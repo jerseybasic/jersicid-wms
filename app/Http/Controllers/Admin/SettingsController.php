@@ -13,6 +13,7 @@ use App\Console\Commands\SendLowStockAlert;
 use App\Services\DailyShipmentReport;
 use App\Services\WhatsAppSchedule;
 use App\Services\LowStock;
+use App\Services\OrderAutoComplete;
 use App\Services\ShipDeadline;
 use App\Services\PoNotifier;
 use App\Services\ProfilePhoto;
@@ -45,6 +46,9 @@ class SettingsController extends Controller
             'low_stock_threshold' => LowStock::defaultThreshold(),
             'ship_cutoff_hour' => ShipDeadline::cutoffHour(),
             'ship_grace_days' => ShipDeadline::graceDays(),
+            'order_auto_complete_days' => OrderAutoComplete::days(),
+            'auto_complete_last' => OrderAutoComplete::lastRun(),
+            'auto_complete_due' => OrderAutoComplete::enabled() ? OrderAutoComplete::dueQuery()->count() : 0,
         ];
 
         $whatsapp = [
@@ -85,6 +89,7 @@ class SettingsController extends Controller
             'low_stock_threshold' => ['required', 'integer', 'min:0', 'max:100000'],
             'ship_cutoff_hour' => ['nullable', 'integer', 'min:0', 'max:23'],
             'ship_grace_days' => ['nullable', 'integer', 'min:0', 'max:14'],
+            'order_auto_complete_days' => ['nullable', 'integer', 'min:0', 'max:' . OrderAutoComplete::MAX_DAYS],
         ]);
 
         $keys = array_keys($validated);
@@ -102,6 +107,10 @@ class SettingsController extends Controller
         if (isset($validated['ship_grace_days'])) {
             SystemSetting::set('ship_grace_days', (string) $validated['ship_grace_days'], 'ORDER',
                 'Tambahan hari dari batas kirim order');
+        }
+        if (isset($validated['order_auto_complete_days'])) {
+            SystemSetting::set('order_auto_complete_days', (string) $validated['order_auto_complete_days'], 'ORDER',
+                'Order Dikirim otomatis Selesai setelah lebih dari sekian hari (0 = mati)');
         }
 
         [$old, $new] = AuditTrail::changes($before, collect($keys)->mapWithKeys(fn ($k) => [$k => SystemSetting::get($k)])->all());

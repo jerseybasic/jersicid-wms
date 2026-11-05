@@ -23,7 +23,7 @@
             ? ($session->pickingSession?->items ?? collect())->filter(fn ($item) => $item->qty_picked < $item->qty_ordered)
             : collect();
         $problems = \App\Http\Controllers\Warehouse\PackingController::PROBLEMS;
-        $canEditResi = $order && !in_array($order->status, ['SHIPPED', 'COMPLETED', 'CANCELLED'], true) && $session->status !== 'CANCELLED';
+        $canEditResi = $order && !in_array($order->status, [...\App\Models\Order::SENT_STATUSES, 'CANCELLED'], true) && $session->status !== 'CANCELLED';
     @endphp
 
     <div class="max-w-3xl mx-auto space-y-4" x-data="{ done: false }" @scan-completed.window="done = true">

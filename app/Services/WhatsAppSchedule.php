@@ -88,6 +88,9 @@ class WhatsAppSchedule
         } catch (\Throwable $e) {
             report($e);
         }
+
+        // Cadangan bila cron belum dipasang: order Dikirim yang sudah lewat batas hari jadi Selesai
+        OrderAutoComplete::tick($trigger);
     }
 
     /** Sudah waktunya dan belum jalan hari ini */

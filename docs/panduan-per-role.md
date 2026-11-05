@@ -68,6 +68,10 @@ Jika tidak ada satu rak yang cukup, satu barang dibagi ke beberapa rak dan tampi
 2. Scan QR di label kirim atau ketik nomor order/resi.
 3. Isi jumlah barang yang masih bagus dan lokasi raknya. Barang yang rusak cukup dicatat.
 4. Barang yang bagus otomatis masuk lagi ke stok.
+5. Order yang paketnya kembali berubah status menjadi **Diretur**, baik yang masih **Dikirim** maupun yang sudah **Selesai**.
+
+### Order Dikirim otomatis Selesai
+Order **Dikirim** otomatis menjadi **Selesai** setelah lebih dari 3 hari sejak dikirim (Owner bisa mengubah jumlah harinya di **Pengaturan**, isi 0 untuk mematikan). Tidak perlu klik **Selesai** satu per satu. Detail order menampilkan kapan order itu akan selesai otomatis, dan riwayat order menulis **Otomatis** dengan pelaku **Sistem**.
 
 ### Memindahkan stok (Transfer Stok)
 Buka **Transfer Stok**, isi SKU, rak asal, rak tujuan, dan jumlahnya, lalu simpan. Pergerakannya tercatat di riwayat stok.

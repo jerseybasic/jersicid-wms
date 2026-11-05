@@ -41,10 +41,10 @@
         <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Selesai</button>
     </form>
 @endif
-@if(in_array($order->status, ['READY_TO_SHIP', 'SHIPPED', 'COMPLETED']))
+@if(in_array($order->status, ['READY_TO_SHIP', ...\App\Models\Order::SENT_STATUSES]))
     <a href="{{ route('gudang.label.shipping', $order->id) }}" target="_blank" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded font-medium">Label</a>
 @endif
-@if(in_array($order->status, ['SHIPPED', 'COMPLETED']))
+@if(in_array($order->status, \App\Models\Order::SENT_STATUSES))
     <a href="{{ route('gudang.retur.create', ['order' => $order->order_number]) }}" class="px-3 py-1.5 bg-slate-700 hover:bg-orange-600 text-white text-xs rounded font-medium">Retur</a>
 @endif
 @if(in_array($order->status, ['PENDING', 'CONFIRMED']))
@@ -63,7 +63,7 @@
         <button class="px-3 py-1.5 bg-red-600/80 hover:bg-red-500 text-white text-xs rounded font-medium">Batal</button>
     </form>
 @endif
-@if(in_array($order->status, ['SHIPPED', 'COMPLETED']) && in_array(auth()->user()->role, \App\Services\OrderReprocess::ROLES))
+@if(in_array($order->status, \App\Models\Order::SENT_STATUSES) && in_array(auth()->user()->role, \App\Services\OrderReprocess::ROLES))
     @php [$reprocessTo, $reprocessError] = \App\Services\OrderReprocess::target($order, ($returnedByOrder ?? [])[$order->id] ?? null); @endphp
     @if ($reprocessTo)
         {{-- Kirim ulang dengan resi yang sama, tanpa membuat order baru --}}

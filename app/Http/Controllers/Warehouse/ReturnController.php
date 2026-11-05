@@ -9,6 +9,7 @@ use App\Models\OrderReturn;
 use App\Models\OrderReturnItem;
 use App\Models\StockActive;
 use App\Models\StockMovement;
+use App\Services\OrderAutoComplete;
 use App\Services\OrderReprocess;
 use App\Services\WaitingStock;
 use Illuminate\Http\Request;
@@ -23,8 +24,8 @@ use Illuminate\Validation\ValidationException;
  */
 class ReturnController extends Controller
 {
-    /** Order yang boleh diretur: barangnya sudah keluar dari gudang */
-    private const RETURNABLE_STATUSES = ['SHIPPED', 'COMPLETED'];
+    /** Order yang boleh diretur: barangnya sudah keluar dari gudang (Diretur juga, untuk retur susulan) */
+    private const RETURNABLE_STATUSES = Order::SENT_STATUSES;
 
     /** Role yang boleh mengubah dan menghapus retur */
     private const MANAGER_ROLES = ['OWNER', 'SUPERVISOR', 'ADMIN_GUDANG'];
@@ -60,8 +61,10 @@ class ReturnController extends Controller
 
         if ($search !== '') {
             $order = Order::with('items.masterSku')
-                ->where(fn ($q) => $q->where('order_number', strtoupper($search))->orWhere('tracking_number', $search)->orWhere('id', $search))
-                ->first();
+                ->where(fn ($q) => $q->where('order_number', strtoupper($search))->orWhere('id', $search))
+                ->first()
+                // No. resi dari label retur: huruf besar/kecil diabaikan, ambil order terbaru dengan resi itu
+                ?? Order::with('items.masterSku')->whereRaw('UPPER(tracking_number) = ?', [strtoupper($search)])->latest()->first();
 
             if (!$order) {
                 return redirect()->route('gudang.retur.create')
@@ -161,6 +164,9 @@ class ReturnController extends Controller
                     $this->putBackToRack($row['sku'], $row['bin'], $row['good'], $return, $order, $request);
                 }
             }
+
+            // Paket retur datang: order Dikirim/Selesai menjadi Diretur
+            OrderAutoComplete::markReturned(Order::lockForUpdate()->find($order->id), $return, auth()->id(), $request->ip());
 
             AuditTrail::create([
                 'user_id' => auth()->id(),
@@ -282,6 +288,9 @@ class ReturnController extends Controller
 
                 $return->items()->delete();
                 $return->delete();
+
+                // Tidak ada retur lain: order Diretur kembali ke Dikirim/Selesai
+                OrderAutoComplete::undoReturned(Order::lockForUpdate()->find($order->id), auth()->id(), $request->ip());
 
                 AuditTrail::create([
                     'user_id' => auth()->id(),
