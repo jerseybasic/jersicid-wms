@@ -61,11 +61,13 @@ php artisan optimize
 
 ## Backup otomatis
 
-Database dibackup setiap hari pukul 01:30 WIB ke `storage/app/private`. Backup yang lama dirapikan otomatis: semua disimpan 7 hari, lalu satu per hari selama 16 hari. Agar jadwal ini berjalan, pasang satu baris cron di server (butuh `mysqldump`):
+Database dibackup setiap hari mulai pukul 01:30 WIB ke `storage/app/private`. Backup yang lama dirapikan otomatis: semua disimpan 7 hari, lalu satu per hari selama 16 hari. Agar jadwal ini berjalan, pasang satu baris cron di server (butuh `mysqldump`), dengan user yang menjalankan aplikasi:
 
 ```
 * * * * * cd /path/ke/jersicid-wms && php artisan schedule:run >> /dev/null 2>&1
 ```
+
+Jadwal backup dicek tiap 10 menit (`wms:backup-harian`): jika jam 01:30 terlewat karena server mati, backup menyusul pada pengecekan berikutnya, dan jika gagal dicoba lagi sampai 3 kali hari itu. Kegagalan pertama dikabarkan ke penerima notifikasi WhatsApp. Status cron dan backup terbaru terlihat di **Pengaturan → Cron Server & Backup**.
 
 Untuk mencoba backup secara manual, jalankan `php artisan backup:run --only-db`. Salin file backup ke tempat lain secara berkala, misalnya ke Google Drive.
 

@@ -83,7 +83,7 @@ class SystemChecksTest extends TestCase
     {
         $commands = collect(app(Schedule::class)->events())->pluck('command')->implode("\n");
 
-        $this->assertStringContainsString('backup:run --only-db', $commands);
-        $this->assertStringContainsString('backup:clean', $commands);
+        $this->assertStringContainsString('wms:backup-harian', $commands);
+        $this->assertStringContainsString('wms:jadwal-whatsapp', $commands);
     }
 }
