@@ -105,7 +105,7 @@
             </div>
 
             <div class="overflow-x-auto">
-                <table class="w-full">
+                <table class="[&_td]:whitespace-nowrap w-full">
                     <thead>
                         <tr class="text-xs text-slate-400 border-b border-slate-800 bg-slate-800/30">
                             <th class="text-left py-2.5 px-4 font-medium">Kode</th>

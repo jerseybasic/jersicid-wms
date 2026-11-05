@@ -1,27 +1,8 @@
 <x-app-layout>
-    <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-4">
-                <a href="{{ route('reports.index') }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-all flex items-center gap-2 border border-slate-700">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-                    Kembali
-                </a>
-                <div>
-                    <h2 class="font-semibold text-xl text-white leading-tight">Laporan Stock Opname</h2>
-                    <p class="text-sm text-slate-400 mt-1">Rekap hasil pencocokan stok fisik vs sistem</p>
-                </div>
-            </div>
-        </div>
-    </x-slot>
+    @include('reports.partials.header', ['title' => 'Laporan Stock Opname', 'subtitle' => 'Rekap hasil pencocokan stok fisik vs sistem', 'export' => route('reports.opname', array_merge(request()->query(), ['export' => 'excel']))])
 
     <div class="space-y-6">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div class="bg-slate-900 rounded-xl p-4 flex justify-end">
-                <a href="{{ route('reports.opname', array_merge(request()->query(), ['export' => 'excel'])) }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-on-accent font-semibold rounded-lg shadow-lg shadow-emerald-500/25 transition-all text-sm flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                    Export Excel
-                </a>
-            </div>
             <!-- Filter Bar -->
             <form method="GET" action="{{ route('reports.opname') }}" class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
@@ -79,7 +60,7 @@
             </div>
 
             <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
+                <table class="[&_td]:whitespace-nowrap w-full text-sm text-left">
                     <thead class="text-xs text-slate-400 uppercase bg-slate-800/50 border-b border-slate-700">
                         <tr>
                             <th class="py-3 px-4">No. Opname</th>

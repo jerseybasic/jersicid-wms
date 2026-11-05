@@ -32,7 +32,7 @@
                 <input type="text" x-ref="input" @keydown.enter.prevent="submit()" autocomplete="off" autofocus
                     :inputmode="scannerMode ? 'none' : 'text'"
                     placeholder="Arahkan scanner ke barcode..."
-                    class="min-w-0 flex-1 px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white text-lg font-mono uppercase placeholder-slate-500 focus:border-cyan-400 focus:outline-none">
+                    class="min-w-0 flex-1 px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white text-lg font-mono uppercase placeholder-slate-500 placeholder:font-sans placeholder:normal-case placeholder:text-base sm:placeholder:font-mono sm:placeholder:uppercase sm:placeholder:text-lg focus:border-cyan-400 focus:outline-none">
                 {{-- Tanpa scanner: pakai kamera HP --}}
                 <button type="button" @click="openCamera()" title="Scan pakai kamera HP"
                     class="shrink-0 flex items-center gap-2 px-4 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl">

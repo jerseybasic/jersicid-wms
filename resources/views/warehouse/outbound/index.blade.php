@@ -110,25 +110,27 @@
                         class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded-lg text-sm font-medium border border-emerald-500/40">
                         Pilih yang stoknya siap (<span x-text="processable.length"></span>)
                     </button>
+                    <div class="flex flex-wrap gap-2 sm:ml-auto">
                     @if ($stats['ready'] > 0)
-                        <a href="{{ route('gudang.label.shipping-bulk') }}" target="_blank" class="px-4 py-2 ml-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-all text-sm flex items-center gap-2 border border-slate-700">
+                        <a href="{{ route('gudang.label.shipping-bulk') }}" target="_blank" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-all text-sm flex items-center gap-2 border border-slate-700">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
                             Cetak {{ $stats['ready'] }} Label Siap Kirim
                         </a>
                     @endif
-                    <a href="{{ route('gudang.outbound.import') }}" class="px-4 py-2 ml-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-all text-sm flex items-center gap-2 border border-slate-700">
+                    <a href="{{ route('gudang.outbound.import') }}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg transition-all text-sm flex items-center gap-2 border border-slate-700">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                         Import BigSeller
                     </a>
-                    <a href="{{ route('gudang.outbound.create') }}" class="px-4 py-2 ml-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 text-slate-900 font-semibold rounded-lg shadow-lg shadow-cyan-500/25 transition-all text-sm flex items-center gap-2 border-2 border-slate-700">
+                    <a href="{{ route('gudang.outbound.create') }}" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 text-slate-900 font-semibold rounded-lg shadow-lg shadow-cyan-500/25 transition-all text-sm flex items-center gap-2 border border-cyan-500">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
                         Buat Order
                     </a>
+                    </div>
                 </form>
             </div>
 
             <div class="overflow-x-auto">
-                <table class="w-full">
+                <table class="[&_td]:whitespace-nowrap w-full">
                     <thead>
                         <tr class="text-xs text-slate-400 border-b border-slate-800 bg-slate-800/30">
                             <th class="py-3 pl-4 w-8">

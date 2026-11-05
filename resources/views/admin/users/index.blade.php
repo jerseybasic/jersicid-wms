@@ -29,7 +29,7 @@
         @endif
 
         <!-- Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-5">
                 <p class="text-xs text-slate-400 mb-1">Total User</p>
                 <p class="text-2xl font-bold text-white">{{ \App\Models\User::count() }}</p>
@@ -58,7 +58,7 @@
             </div>
 
             <div class="overflow-x-auto">
-                <table class="w-full">
+                <table class="[&_td]:whitespace-nowrap w-full">
                     <thead>
                         <tr class="text-xs text-slate-400 border-b border-slate-700/50">
                             <th class="text-left py-3 px-6">User</th>

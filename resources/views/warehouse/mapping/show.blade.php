@@ -44,8 +44,8 @@
         @endif
 
         <!-- Rack Info -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
                 <div>
                     <p class="text-xs text-slate-400 mb-1">Kode Rak</p>
                     <p class="text-2xl font-bold text-white">{{ $rack->code }}</p>
