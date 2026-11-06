@@ -478,6 +478,44 @@
             </div>
         </div>
 
+        <!-- Cron server & backup -->
+        @php($cron = $report['schedule'])
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 shadow-xl min-w-0">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <h3 class="text-lg font-semibold text-white">Cron Server &amp; Backup</h3>
+                @if ($cron['cron_active'])
+                    <span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/15 text-emerald-300">Cron aktif</span>
+                @else
+                    <span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/15 text-amber-300">Cron belum jalan</span>
+                @endif
+            </div>
+            <p class="text-sm text-slate-400 mb-4">Cron menjalankan backup database dan jadwal WhatsApp walau agen WhatsApp sedang mati. Pesan yang dibuat saat agen mati menunggu di antrean dan terkirim begitu agen tersambung lagi.</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                <div class="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 min-w-0">
+                    <p class="text-xs text-slate-400 mb-1">Cron terakhir jalan</p>
+                    <p class="text-sm font-semibold {{ $cron['cron_active'] ? 'text-white' : 'text-amber-300' }}">
+                        {{ $cron['cron_seen_at'] ? $cron['cron_seen_at']->format('d/m/Y H:i') : 'Belum pernah' }}
+                    </p>
+                </div>
+                <div class="p-4 bg-slate-900/50 rounded-xl border border-slate-700/50 min-w-0">
+                    <p class="text-xs text-slate-400 mb-1">Backup database terbaru (tiap hari mulai {{ $backup['time'] }})</p>
+                    <p class="text-sm font-semibold {{ $backup['stale'] ? 'text-amber-300' : 'text-white' }}">
+                        {{ $backup['newest_at'] ? $backup['newest_at']->format('d/m/Y H:i') . ' · ' . $backup['newest_size'] : 'Belum ada file backup' }}
+                    </p>
+                    @if ($backup['last_at'])
+                        <p class="text-xs mt-1 break-words {{ $backup['failed'] ? 'text-red-300' : 'text-slate-500' }}">Percobaan terakhir {{ $backup['last_at']->format('d/m H:i') }}: {{ $backup['result'] }}</p>
+                    @endif
+                </div>
+            </div>
+
+            @unless ($cron['cron_active'])
+                <p class="text-sm text-slate-300 mb-2">Pasang satu baris ini di crontab server (lewat SSH: <code class="text-cyan-300">crontab -e</code>, atau menu Cron Jobs di cPanel), dengan user yang menjalankan aplikasi:</p>
+                <pre class="text-xs text-cyan-300 bg-slate-950/60 border border-slate-700 rounded-lg p-3 whitespace-pre-wrap break-all select-all">* * * * * cd {{ escapeshellarg(base_path()) }} &amp;&amp; php artisan schedule:run &gt;&gt; /dev/null 2&gt;&amp;1</pre>
+                <p class="text-xs text-slate-500 mt-2">Setelah dipasang, status di atas berubah menjadi Cron aktif dalam 1 sampai 2 menit.</p>
+            @endunless
+        </div>
+
         <!-- System Maintenance -->
         <div class="bg-gradient-to-br from-red-900/20 to-slate-900 border border-red-500/30 rounded-2xl p-6 shadow-xl">
             <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">

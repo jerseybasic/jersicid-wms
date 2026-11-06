@@ -10,6 +10,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\WhatsAppMessage;
 use App\Console\Commands\SendLowStockAlert;
+use App\Services\DailyBackup;
 use App\Services\DailyShipmentReport;
 use App\Services\WhatsAppSchedule;
 use App\Services\LowStock;
@@ -74,7 +75,9 @@ class SettingsController extends Controller
             'schedule' => WhatsAppSchedule::overview(),
         ];
 
-        return view('settings.index', compact('stats', 'company', 'whatsapp', 'report'));
+        $backup = DailyBackup::overview();
+
+        return view('settings.index', compact('stats', 'company', 'whatsapp', 'report', 'backup'));
     }
 
     /**

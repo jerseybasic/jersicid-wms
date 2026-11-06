@@ -2,9 +2,10 @@
 
 use Illuminate\Support\Facades\Schedule;
 
-// Backup database harian (butuh cron: * * * * * php /path/artisan schedule:run). Hasilnya di storage/app/private.
-Schedule::command('backup:clean')->dailyAt('01:00');
-Schedule::command('backup:run --only-db')->dailyAt('01:30');
+// Backup database harian mulai 01:30 (butuh cron: * * * * * cd /path && php artisan schedule:run). Hasilnya di
+// storage/app/private. Dicek tiap 10 menit supaya menyusul bila jamnya terlewat atau gagal; sekali berhasil per hari.
+// wms:backup-harian menjalankan backup:clean lalu backup:run --only-db.
+Schedule::command('wms:backup-harian')->everyTenMinutes()->withoutOverlapping(60);
 
 // Kiriman WhatsApp terjadwal (stok menipis 08:00, pengingat batas kirim 2 jam sebelum jam potong, laporan kiriman
 // harian di jam Pengaturan). Dicek tiap menit, masing-masing sekali per hari. Agen WhatsApp yang tersambung juga
