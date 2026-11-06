@@ -161,7 +161,7 @@ class DailyShipmentReport
         })->filter(fn ($row) => $row['total'] > 0)->sortKeys();
 
         // Dikirim hari itu tanpa scan serah terima (misalnya diubah manual)
-        $unscanned = Order::whereIn('status', ['SHIPPED', 'COMPLETED'])
+        $unscanned = Order::whereIn('status', Order::SENT_STATUSES)
             ->whereBetween('shipped_at', [$from, $to])
             ->whereDoesntHave('handoverItem')
             ->count();

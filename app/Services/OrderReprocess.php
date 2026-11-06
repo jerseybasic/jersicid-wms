@@ -25,8 +25,8 @@ class OrderReprocess
      */
     public static function target(Order $order, ?\Illuminate\Support\Collection $returned = null): array
     {
-        if (!in_array($order->status, ['SHIPPED', 'COMPLETED'], true)) {
-            return [null, 'Hanya order Dikirim atau Selesai yang bisa diproses ulang.'];
+        if (!in_array($order->status, Order::SENT_STATUSES, true)) {
+            return [null, 'Hanya order Dikirim, Selesai, atau Diretur yang bisa diproses ulang.'];
         }
 
         $order->loadMissing('items', 'handoverItem.handover');
@@ -120,7 +120,7 @@ class OrderReprocess
      */
     public static function preloadForList(\Illuminate\Support\Collection $orders): array
     {
-        $shipped = $orders->filter(fn (Order $order) => in_array($order->status, ['SHIPPED', 'COMPLETED'], true));
+        $shipped = $orders->filter(fn (Order $order) => in_array($order->status, Order::SENT_STATUSES, true));
         if ($shipped->isEmpty()) {
             return [];
         }

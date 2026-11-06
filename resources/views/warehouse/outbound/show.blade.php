@@ -21,6 +21,7 @@
             'READY_TO_SHIP' => 'bg-indigo-500/20 text-indigo-400',
             'SHIPPED' => 'bg-emerald-500/20 text-emerald-400',
             'COMPLETED' => 'bg-slate-500/20 text-slate-300',
+            'RETURNED' => 'bg-orange-500/20 text-orange-300',
             'CANCELLED' => 'bg-red-500/20 text-red-400',
         ];
         $dotColors = [
@@ -46,6 +47,9 @@
             <div class="flex flex-wrap items-center gap-2">
                 <span class="text-sm px-3 py-1 rounded-full font-semibold {{ $order->isWaitingStock() ? 'bg-orange-500/20 text-orange-300' : ($statusColors[$order->status] ?? 'bg-slate-500/20 text-slate-400') }}">{{ $order->status_label }}</span>
                 <x-ship-badge :order="$order" class="!text-xs !px-3 !py-1" />
+                @if ($order->status === 'SHIPPED' && $order->shipped_at && \App\Services\OrderAutoComplete::enabled())
+                    <span class="text-xs text-slate-400">Otomatis Selesai setelah {{ $order->shipped_at->copy()->addDays(\App\Services\OrderAutoComplete::days())->translatedFormat('d M Y H:i') }}</span>
+                @endif
                 @if ($order->ship_by)
                     <span class="text-xs text-slate-400">Batas kirim {{ $order->ship_by->translatedFormat('d M Y H:i') }}</span>
                 @endif
@@ -182,7 +186,7 @@
                             @if ($step['detail'])
                                 <p class="text-xs text-slate-400">{{ $step['detail'] }}</p>
                             @endif
-                            <p class="text-xs text-slate-500">{{ $step['at']->translatedFormat('d M Y H:i') }}{{ $step['user'] ? ' · ' . $step['user'] : '' }}</p>
+                            <p class="text-xs text-slate-500">{{ $step['at']->translatedFormat('d M Y H:i') }}{{ $step['user'] ? ' · ' . $step['user'] : (str_starts_with((string) ($step['detail'] ?? ''), 'Otomatis') ? ' · Sistem' : '') }}</p>
                         </li>
                     @endforeach
                 </ol>

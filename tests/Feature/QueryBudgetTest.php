@@ -85,7 +85,7 @@ class QueryBudgetTest extends TestCase
     /** Buka setiap halaman dan hitung query-nya. Cache dashboard dikosongkan dulu supaya query-nya ikut terhitung. */
     private function measureAll(): array
     {
-        $order = Order::where('status', 'SHIPPED')->latest('id')->first() ?? Order::latest('id')->firstOrFail();
+        $order = Order::whereIn('status', Order::SENT_STATUSES)->latest('id')->first() ?? Order::latest('id')->firstOrFail();
         $pages = [
             ['owner', 'dashboard.owner'],
             ['admin', 'dashboard.gudang'],
@@ -109,7 +109,7 @@ class QueryBudgetTest extends TestCase
             ['admin', 'gudang.picking'],
             ['admin', 'gudang.picking.create'],
             // id-nya UUID, jadi latest('id') memilih sesi acak; ambil sesi dari order yang sudah dikirim supaya bentuk halamannya selalu sama
-            ['admin', 'gudang.picking.show', PickingSession::whereHas('order', fn ($q) => $q->where('status', 'SHIPPED'))->orderBy('id')->value('id')],
+            ['admin', 'gudang.picking.show', PickingSession::whereHas('order', fn ($q) => $q->whereIn('status', Order::SENT_STATUSES))->orderBy('id')->value('id')],
             ['admin', 'gudang.picking-batch.create'],
             ['admin', 'gudang.packing'],
             ['admin', 'gudang.packing.create'],
@@ -210,7 +210,7 @@ class QueryBudgetTest extends TestCase
             $this->orderUntil($i, 'PICKING', $skuA, $skuB);
             $this->orderUntil($i, 'READY_TO_SHIP', $skuA, $skuB);
 
-            // Retur dari order yang sudah dikirim
+            // Retur dari order yang sudah dikirim (order-nya jadi Diretur)
             $item = $shipped->items()->firstOrFail();
             $this->post(route('gudang.retur.store'), [
                 'order_id' => $shipped->id,

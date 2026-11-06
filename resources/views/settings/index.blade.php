@@ -102,6 +102,25 @@
                     </p>
                 </div>
 
+                <div class="pt-4 border-t border-slate-700/50">
+                    <label for="order_auto_complete_days" class="block text-sm font-medium text-slate-300 mb-2">Order Dikirim otomatis Selesai setelah (hari)</label>
+                    <input type="number" id="order_auto_complete_days" name="order_auto_complete_days" min="0" max="{{ \App\Services\OrderAutoComplete::MAX_DAYS }}"
+                        value="{{ old('order_auto_complete_days', $company['order_auto_complete_days']) }}" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none transition-all md:w-48"/>
+                    <p class="text-xs text-slate-500 mt-1">
+                        Order berstatus Dikirim yang sudah lebih dari sekian hari sejak dikirim otomatis menjadi Selesai (dicek tiap jam). Isi 0 untuk mematikan.
+                        Bila paket returnya datang, scan no. resi di Terima Retur: order Dikirim atau Selesai berubah menjadi Diretur.
+                    </p>
+                    @php $autoLast = $company['auto_complete_last']; @endphp
+                    <p class="text-xs text-slate-400 mt-1">
+                        @if ($company['order_auto_complete_days'] === 0)
+                            Selesai otomatis sedang mati.
+                        @else
+                            {{ $company['auto_complete_due'] }} order menunggu diselesaikan.
+                            Pengecekan terakhir: {{ $autoLast['at'] ? $autoLast['at']->format('d/m/Y H:i') . ' (' . $autoLast['count'] . ' order diselesaikan)' : 'belum pernah' }}.
+                        @endif
+                    </p>
+                </div>
+
                 <div class="flex justify-end pt-2">
                     <button type="submit" class="px-6 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">
                         Simpan Pengaturan

@@ -81,7 +81,7 @@ class OrderItemChange
     public static function apply(Order $order, array $newItems, array $prices, string $userId, ?string $ip, string $source): ?array
     {
         if (!in_array($order->status, self::STATUSES, true)) {
-            throw new \RuntimeException("Order {$order->order_number} ({$order->status_label}) tidak bisa diganti itemnya." . (in_array($order->status, ['SHIPPED', 'COMPLETED'], true) ? ' Paket sudah dikirim; pakai retur.' : ''));
+            throw new \RuntimeException("Order {$order->order_number} ({$order->status_label}) tidak bisa diganti itemnya." . (in_array($order->status, Order::SENT_STATUSES, true) ? ' Paket sudah dikirim; pakai retur.' : ''));
         }
 
         $newItems = self::normalize($newItems);

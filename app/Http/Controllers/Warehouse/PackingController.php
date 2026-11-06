@@ -368,7 +368,7 @@ class PackingController extends Controller
                 $session = PackingSession::lockForUpdate()->findOrFail($id);
                 $order = Order::lockForUpdate()->findOrFail($session->order_id);
 
-                if (in_array($order->status, ['SHIPPED', 'COMPLETED', 'CANCELLED'], true)) {
+                if (in_array($order->status, [...Order::SENT_STATUSES, 'CANCELLED'], true)) {
                     throw new \RuntimeException("Order {$order->order_number} sudah {$order->status_label}, resinya tidak bisa diubah di sini.");
                 }
                 if (filled($order->tracking_number) && !in_array(auth()->user()->role, Picking::MANUAL_ROLES, true)) {
