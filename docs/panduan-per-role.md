@@ -36,6 +36,16 @@ Barang PO boleh datang bertahap. Contoh: PO 5 pcs, hari ini datang 2 pcs. Isi **
    - Semua kode yang belum terdaftar tercatat di **Pemetaan SKU → SKU Terhambat** (juga untuk Admin Gudang), beserta jumlah pesanan yang tertahan. Di halaman yang sama ada daftar SKU aktif yang belum punya lokasi rak.
 4. Klik **Import**. Jika **Langsung konfirmasi** dicentang, pesanan langsung masuk ke daftar picking. Nomor resi marketplace ikut tersimpan.
 
+### Input resi yang sudah dikirim lewat BigSeller (Owner, Supervisor, Admin Gudang)
+Dipakai jika pesanan sudah diproses dan dikirim di BigSeller tapi tidak lewat picking/packing di aplikasi (misalnya staf pengganti belum memakai aplikasinya), supaya stok di sistem sama dengan barang di rak.
+1. Pastikan pesanannya sudah ada di aplikasi. Jika belum, import dulu file ekspor pesanannya lewat **Import BigSeller**.
+2. Buka **Outbound**, klik **Input Resi BigSeller**, tempel daftar nomor resi (atau nomor pesanan), satu per baris, lalu klik **Cek Resi**.
+3. Periksa daftarnya, lalu klik **Proses**:
+   - Order Pending / Siap Picking: stok dipotong dari rak yang ada isinya, order jadi **Dikirim**.
+   - Order Siap Kirim: cukup ditandai **Dikirim** (stoknya sudah dipotong saat picking).
+   - Dilewati dengan alasannya: resi tidak ditemukan, order sudah dikirim (resi yang sama aman diinput dua kali), sedang picking/packing, dibatalkan, atau stok di sistem kurang (cek lewat stock opname).
+4. Semua tercatat di Pergerakan Stok, Riwayat Aktivitas, dan riwayat tiap order.
+
 ### Mengambil barang untuk order (Picking)
 1. Buka **Tugas Saya** atau **Picking**, lalu pilih order yang perlu diambil.
 2. Mulai sesi, pergi ke rak yang disarankan, scan rak, lalu scan setiap barang.

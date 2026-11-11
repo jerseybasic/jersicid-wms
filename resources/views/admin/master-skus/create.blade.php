@@ -16,7 +16,9 @@
 
     <div class="max-w-4xl mx-auto">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <form method="POST" action="{{ route('master-skus.store') }}" class="space-y-4">
+            {{-- Tombol dikunci setelah diklik sekali, supaya klik dobel / sinyal lambat tidak menyimpan dua kali --}}
+            <form method="POST" action="{{ route('master-skus.store') }}" class="space-y-4"
+                  x-data="{ sending: false }" @submit="if (sending) { $event.preventDefault(); return; } sending = true">
                 @csrf
                 <input type="hidden" name="from_code" value="{{ old('from_code', $fromCode ?? '') }}">
                 <input type="hidden" name="return_to" value="{{ old('return_to', $returnTo ?? '') }}">
@@ -116,8 +118,8 @@
 
                 <div class="flex items-center gap-3 pt-4 border-t border-slate-800">
                     <a href="{{ $returnTo ?? route('master-skus.index') }}" class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700 transition-all">Batal</a>
-                    <button type="submit" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all">
-                        ✨ Simpan SKU
+                    <button type="submit" :disabled="sending" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-900 font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all disabled:opacity-60">
+                        <span x-text="sending ? 'Menyimpan...' : '✨ Simpan SKU'">✨ Simpan SKU</span>
                     </button>
                 </div>
             </form>

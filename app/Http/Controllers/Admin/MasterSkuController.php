@@ -172,15 +172,24 @@ class MasterSkuController extends Controller
     }
 
     /**
-     * ✅ FIX: Get SKU details by product_name + version (bukan article)
+     * Size satu baris di daftar Master SKU. Baris dikelompokkan per nama produk + versi + sub versi +
+     * kategori size, jadi detailnya juga harus memakai keempatnya. Tanpa itu, produk yang punya size
+     * Dewasa dan Kids tampil dobel: baris KIDS ikut berisi size Dewasa (dan sebaliknya).
      */
     public function getArticleSkus(Request $request, $productName, $version)
     {
+        $category = $request->query('kategori');
+        $subVersion = (string) $request->query('sub', '');
+
         $skus = MasterSku::select('master_skus.*')
             ->selectRaw('COALESCE((SELECT SUM(qty) FROM stock_actives WHERE stock_actives.sku = master_skus.sku), 0) as current_stock')
             ->where('master_skus.product_name', $productName)
             ->where('master_skus.version', $version)
             ->where('master_skus.status', 'AKTIF')
+            ->when($category !== null && $category !== '', fn ($q) => $q->where('master_skus.size_category', $category))
+            ->when($request->has('sub'), fn ($q) => $subVersion === ''
+                ? $q->where(fn ($w) => $w->whereNull('master_skus.sub_version')->orWhere('master_skus.sub_version', ''))
+                : $q->where('master_skus.sub_version', $subVersion))
             ->orderBy('master_skus.size')
             ->get();
 

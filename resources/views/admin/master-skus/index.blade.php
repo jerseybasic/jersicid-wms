@@ -192,7 +192,7 @@
                     @forelse($articles as $product)
                         <div x-data="{ expanded: false, skus: [], loading: false }" class="border-b border-slate-800 last:border-0">
                             <!-- Row Utama (Klik untuk expand) -->
-                            <div @click="toggleProduct('{{ addslashes($product->product_name) }}', '{{ addslashes($product->version ?? '') }}', $data)"
+                            <div @click="toggleProduct('{{ addslashes($product->product_name) }}', '{{ addslashes($product->version ?? '') }}', '{{ addslashes($product->size_category ?? '') }}', '{{ addslashes($product->sub_version ?? '') }}', $data)"
                                 class="flex items-center gap-3 p-3 hover:bg-slate-800/30 transition-colors cursor-pointer group">
 
                                 <!-- Expand Icon -->
@@ -267,6 +267,7 @@
                                                     <p class="text-xs font-mono font-semibold text-cyan-400 truncate"
                                                         x-text="sku.sku"></p>
                                                     <p class="text-[10px] text-slate-500 truncate">
+                                                        <span x-text="sku.size_category"></span> •
                                                         <span x-text="sku.article"></span> •
                                                         <span x-text="sku.version"></span>
                                                         <span x-show="sku.sub_version"> • <span
@@ -474,14 +475,15 @@
                     form.submit();
                 },
 
-                async toggleProduct(productName, version, component) {
+                async toggleProduct(productName, version, category, subVersion, component) {
                     component.expanded = !component.expanded;
 
                     if (component.expanded && component.skus.length === 0) {
                         component.loading = true;
                         try {
                             const url =
-                                `/master-skus/article/${encodeURIComponent(productName)}/${encodeURIComponent(version)}/skus`;
+                                `/master-skus/article/${encodeURIComponent(productName)}/${encodeURIComponent(version)}/skus` +
+                                `?kategori=${encodeURIComponent(category)}&sub=${encodeURIComponent(subVersion)}`;
                             const response = await fetch(url);
                             const data = await response.json();
                             component.skus = data;
