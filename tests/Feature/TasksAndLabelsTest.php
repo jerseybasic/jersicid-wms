@@ -78,6 +78,7 @@ class TasksAndLabelsTest extends TestCase
         $warehouse = $this->makeWarehouse();
 
         $response = $this->actingAs($staff)->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => 'SJ-LBL',
             'supplier_name' => 'JB Printing',
             'received_date' => now()->toDateString(),

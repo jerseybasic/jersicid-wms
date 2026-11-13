@@ -11,6 +11,7 @@ use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
 use App\Services\LowStock;
 use App\Services\PoNotifier;
+use App\Services\SkuCorrection;
 use App\Services\WhatsApp;
 use App\Services\WaitingStock;
 use Illuminate\Http\Request;
@@ -445,6 +446,59 @@ class PurchaseOrderController extends Controller
         });
 
         return back()->with('success', "Status PO {$po->po_number} dikoreksi menjadi {$po->status_label}.");
+    }
+
+    /**
+     * Koreksi SKU item PO yang salah input, juga untuk PO yang sudah Sudah Diterima. Barang yang sudah
+     * diterima untuk item itu ikut dipindah stoknya ke SKU yang benar (bin yang sama).
+     */
+    public function skuCorrectionForm($id)
+    {
+        $this->authorizeManager();
+        $po = PurchaseOrder::with(['items.masterSku:sku,product_name,size', 'receipts'])->findOrFail($id);
+        if ($po->status === 'DRAFT') {
+            return redirect()->route('po.edit', $po->id)->with('error', 'PO Draft cukup diubah lewat Edit PO.');
+        }
+
+        $skus = MasterSku::where('status', 'AKTIF')->orderBy('sku')->get(['sku', 'product_name', 'size']);
+        // Bin tempat barang tiap item disimpan, untuk ringkasan pengecekan terakhir
+        $bins = $po->receipts->groupBy('purchase_order_item_id')
+            ->map(fn ($rows) => $rows->groupBy('bin_code')->map(fn ($r) => (int) $r->sum('qty'))->all());
+
+        return view('warehouse.po.correct-sku', compact('po', 'skus', 'bins'));
+    }
+
+    public function correctSku(Request $request, $id)
+    {
+        $this->authorizeManager();
+        $po = PurchaseOrder::findOrFail($id);
+        if ($po->status === 'DRAFT') {
+            return redirect()->route('po.edit', $po->id)->with('error', 'PO Draft cukup diubah lewat Edit PO.');
+        }
+
+        $validated = $request->validate([
+            'sku' => 'required|array',
+            'sku.*' => 'nullable|string|max:100',
+            'reason' => 'required|string|max:500',
+            'final_check' => 'accepted',
+        ], [
+            'reason.required' => 'Alasan koreksi SKU wajib diisi.',
+            'final_check.accepted' => 'Cek ulang ringkasan perubahan SKU, lalu centang konfirmasi sebelum menyimpan.',
+        ]);
+
+        $summary = DB::transaction(fn () => SkuCorrection::purchaseOrder(
+            $po,
+            collect($validated['sku'])->map(fn ($sku) => (string) $sku)->all(),
+            $validated['reason'],
+            Auth::id(),
+            Auth::user()->name,
+            $request->ip(),
+        ));
+
+        $released = WaitingStock::release(Auth::id(), $request->ip());
+
+        return redirect()->route('po.show', $po->id)
+            ->with('success', "SKU PO {$po->po_number} dikoreksi: " . implode('; ', $summary) . '. Stok barang yang sudah diterima ikut dipindah ke SKU yang benar.' . WaitingStock::releasedMessage($released));
     }
 
     private function authorizeManager(): void

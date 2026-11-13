@@ -113,6 +113,7 @@ class PurchaseOrderPrintAndNotifyTest extends TestCase
         $warehouse = $this->makeWarehouse();
 
         $this->actingAs($this->userWithRole('STAFF_GUDANG'))->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => 'SJ-010',
             'supplier_name' => $po->supplier_name,
             'received_date' => now()->toDateString(),

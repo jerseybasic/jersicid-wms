@@ -33,9 +33,11 @@
             <!-- Koreksi penerimaan yang salah input -->
             <div x-data="{ hapus: {{ $errors->has('reason') ? 'true' : 'false' }} }" class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
                 <div class="flex flex-wrap items-center gap-2">
-                    <p class="flex-1 min-w-[12rem] text-sm text-slate-400">Salah input? Edit atau hapus penerimaan ini; stok dan qty PO ikut disesuaikan.</p>
+                    <p class="flex-1 min-w-[12rem] text-sm text-slate-400">Salah input? Edit, koreksi SKU, atau hapus penerimaan ini (juga yang sudah Komplit); stok dan qty PO ikut disesuaikan.</p>
                     <a href="{{ route('gudang.inbound.edit', $inbound->id) }}"
                         class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-xl">Edit penerimaan</a>
+                    <a href="{{ route('gudang.inbound.correct-sku.form', $inbound->id) }}"
+                        class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-on-accent text-sm font-semibold rounded-xl">Koreksi SKU</a>
                     <button type="button" @click="hapus = !hapus" x-show="!hapus"
                         class="px-4 py-2 bg-slate-700 hover:bg-red-600 text-white text-sm font-semibold rounded-xl">Hapus penerimaan</button>
                 </div>
@@ -185,5 +187,24 @@
                 </table>
             </div>
         </div>
+
+        @if ($skuCorrections->isNotEmpty())
+            <!-- Riwayat koreksi SKU: nilai lama, nilai baru, alasan -->
+            <div class="bg-slate-900 border border-amber-500/30 rounded-2xl p-4">
+                <h3 class="text-base font-semibold text-white mb-3">Riwayat Koreksi SKU</h3>
+                <ul class="space-y-3 text-sm">
+                    @foreach ($skuCorrections as $audit)
+                        <li class="border-l-2 border-amber-500/50 pl-3">
+                            <p class="text-slate-400 text-xs">{{ $audit->created_at->format('d M Y H:i') }} · {{ $audit->user?->name }}
+                                · {{ $audit->action === 'CORRECT_PO_SKU' ? 'lewat Koreksi SKU PO ' . ($audit->values['po_number'] ?? '') : 'Koreksi SKU penerimaan' }}</p>
+                            @foreach ((array) ($audit->values['sku_changes'] ?? []) as $change)
+                                <p class="font-mono text-amber-300">{{ $change }}</p>
+                            @endforeach
+                            <p class="text-slate-300">Alasan: {{ $audit->values['reason'] ?? '-' }}</p>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
     </div>
 </x-app-layout>

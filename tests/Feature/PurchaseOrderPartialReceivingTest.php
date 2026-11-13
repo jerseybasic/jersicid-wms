@@ -40,6 +40,7 @@ class PurchaseOrderPartialReceivingTest extends TestCase
     private function receive(PurchaseOrder $po, string $receiptNo, array $rows, ?string $date = null)
     {
         return $this->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => $receiptNo,
             'supplier_name' => $po->supplier_name,
             'received_date' => $date ?? now()->toDateString(),

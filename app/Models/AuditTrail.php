@@ -82,6 +82,8 @@ class AuditTrail extends Model
         'RECEIVE_PO' => 'Terima barang PO',
         'UPDATE_INBOUND' => 'Edit penerimaan barang',
         'DELETE_INBOUND' => 'Hapus penerimaan barang',
+        'CORRECT_INBOUND_SKU' => 'Koreksi SKU penerimaan',
+        'CORRECT_PO_SKU' => 'Koreksi SKU PO',
     ];
 
     public function user()

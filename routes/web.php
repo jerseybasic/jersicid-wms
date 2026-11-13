@@ -126,6 +126,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG'])
         Route::delete('/{id}', [PurchaseOrderController::class, 'destroy'])->name('destroy');
         Route::patch('/{id}/status', [PurchaseOrderController::class, 'updateStatus'])->name('update-status');
         Route::patch('/{id}/koreksi-status', [PurchaseOrderController::class, 'correctStatus'])->name('correct-status');
+        Route::get('/{id}/koreksi-sku', [PurchaseOrderController::class, 'skuCorrectionForm'])->name('correct-sku.form');
+        Route::put('/{id}/koreksi-sku', [PurchaseOrderController::class, 'correctSku'])->name('correct-sku');
         Route::get('/{id}/cetak', [PurchaseOrderController::class, 'print'])->name('print');
     });
 
@@ -136,6 +138,8 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/', [InboundController::class, 'store'])->name('gudang.inbound.store');
     Route::get('/{id}', [InboundController::class, 'show'])->name('gudang.inbound.show');
     Route::get('/{id}/edit', [InboundController::class, 'edit'])->name('gudang.inbound.edit');
+    Route::get('/{id}/koreksi-sku', [InboundController::class, 'skuCorrectionForm'])->name('gudang.inbound.correct-sku.form');
+    Route::put('/{id}/koreksi-sku', [InboundController::class, 'correctSku'])->name('gudang.inbound.correct-sku');
     Route::put('/{id}', [InboundController::class, 'update'])->name('gudang.inbound.update');
     Route::delete('/{id}', [InboundController::class, 'destroy'])->name('gudang.inbound.destroy');
 });

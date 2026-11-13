@@ -14,6 +14,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderReceipt;
 use App\Services\InboundCorrection;
 use App\Services\PoNotifier;
+use App\Services\SkuCorrection;
 use App\Services\WaitingStock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -239,9 +240,12 @@ class InboundController extends Controller
             'items.*.qty_expected' => ['nullable', 'integer', 'min:0'],
             'items.*.qty_rejected' => ['nullable', 'integer', 'min:0'],
             'items.*.batch_no' => ['nullable', 'string', 'max:100'],
+            // Pengecekan terakhir: ringkasan SKU, qty, dan lokasi rak sudah dicocokkan dengan barang fisik
+            'final_check' => ['accepted'],
         ], [
             'receipt_number.unique' => 'No. Surat Jalan sudah pernah digunakan.',
             'items.min' => 'Minimal 1 item harus ditambahkan.',
+            'final_check.accepted' => 'Cek ulang ringkasan penerimaan (SKU, qty, dan lokasi rak), lalu centang konfirmasi sebelum menyimpan.',
         ]);
 
         try {
@@ -463,8 +467,34 @@ class InboundController extends Controller
         $po = $poReceipts->first()?->purchaseOrder;
 
         $canCorrect = in_array(auth()->user()->role, self::CORRECTION_ROLES, true);
+        $skuCorrections = $this->skuCorrectionHistory($inbound->reference_no, $po);
 
-        return view('warehouse.inbound.show', compact('inbound', 'items', 'po', 'canCorrect'));
+        return view('warehouse.inbound.show', compact('inbound', 'items', 'po', 'canCorrect', 'skuCorrections'));
+    }
+
+    /**
+     * Riwayat koreksi SKU untuk penerimaan ini (langsung, atau lewat Koreksi SKU di PO-nya).
+     *
+     * @return \Illuminate\Support\Collection<int, AuditTrail>
+     */
+    private function skuCorrectionHistory(string $receiptNo, ?PurchaseOrder $po)
+    {
+        return AuditTrail::with('user:id,name')
+            ->where(function ($q) use ($receiptNo, $po) {
+                $q->where(fn ($q) => $q->where('action', 'CORRECT_INBOUND_SKU')->where('new_values', 'like', '%' . $receiptNo . '%'));
+                if ($po) {
+                    $q->orWhere(fn ($q) => $q->where('action', 'CORRECT_PO_SKU')->where('new_values', 'like', '%' . $po->id . '%'));
+                }
+            })
+            ->latest('id')
+            ->get()
+            ->each(function ($audit) {
+                // Kolom JSON lama tersimpan sebagai teks JSON di dalam JSON
+                $values = $audit->new_values;
+                $audit->values = is_array($values) ? $values : (json_decode((string) $values, true) ?: []);
+            })
+            ->filter(fn ($audit) => $audit->action === 'CORRECT_PO_SKU' || ($audit->values['receipt_number'] ?? null) === $receiptNo)
+            ->values();
     }
 
     /** Role yang boleh mengedit dan menghapus penerimaan (mengubah stok) */
@@ -537,6 +567,58 @@ class InboundController extends Controller
 
         return redirect()->route('gudang.inbound.show', $firstId)
             ->with('success', "Penerimaan {$receiptNo} diperbarui. Stok dan PO sudah disesuaikan." . WaitingStock::releasedMessage($released));
+    }
+
+    /**
+     * Koreksi SKU yang salah input, juga untuk penerimaan yang sudah Komplit. Stok dipindah dari SKU lama
+     * ke SKU yang benar di bin yang sama, qty diterima PO ikut dipindah ke item yang benar.
+     */
+    public function skuCorrectionForm($id)
+    {
+        $this->authorizeCorrection();
+        $inbound = StockMovement::where('type', 'INBOUND')->findOrFail($id);
+        $items = StockMovement::where('type', 'INBOUND')
+            ->where('reference_no', $inbound->reference_no)
+            ->with('masterSku:sku,product_name,size')
+            ->orderBy('id')
+            ->get();
+        $po = PurchaseOrderReceipt::whereIn('stock_movement_id', $items->pluck('id'))->with('purchaseOrder.items.masterSku:sku,product_name,size')->first()?->purchaseOrder;
+
+        // Penerimaan dari PO hanya bisa diganti ke SKU yang ada di PO itu
+        $skus = $po
+            ? $po->items->map(fn ($item) => ['sku' => $item->sku, 'product_name' => $item->masterSku?->product_name, 'size' => $item->masterSku?->size, 'remaining' => $item->qty_remaining])->values()
+            : MasterSku::where('status', 'AKTIF')->orderBy('sku')->get(['sku', 'product_name', 'size']);
+
+        return view('warehouse.inbound.correct-sku', compact('inbound', 'items', 'po', 'skus'));
+    }
+
+    public function correctSku(Request $request, $id)
+    {
+        $this->authorizeCorrection();
+        $inbound = StockMovement::where('type', 'INBOUND')->findOrFail($id);
+
+        $validated = $request->validate([
+            'sku' => ['required', 'array'],
+            'sku.*' => ['nullable', 'string', 'max:100'],
+            'reason' => ['required', 'string', 'max:500'],
+            'final_check' => ['accepted'],
+        ], [
+            'reason.required' => 'Alasan koreksi SKU wajib diisi.',
+            'final_check.accepted' => 'Cek ulang ringkasan perubahan SKU, lalu centang konfirmasi sebelum menyimpan.',
+        ]);
+
+        $summary = DB::transaction(fn () => SkuCorrection::inbound(
+            $inbound->reference_no,
+            collect($validated['sku'])->mapWithKeys(fn ($sku, $lineId) => [(int) $lineId => (string) $sku])->all(),
+            $validated['reason'],
+            auth()->id(),
+            $request->ip(),
+        ));
+
+        $released = WaitingStock::release(auth()->id(), $request->ip());
+
+        return redirect()->route('gudang.inbound.show', $inbound->id)
+            ->with('success', 'SKU penerimaan ' . $inbound->reference_no . ' dikoreksi: ' . implode('; ', $summary) . '. Stok di rak dan PO sudah disesuaikan. Cetak ulang label SKU untuk barang ini.' . WaitingStock::releasedMessage($released));
     }
 
     public function destroy(Request $request, $id)
