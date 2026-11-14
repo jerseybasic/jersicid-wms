@@ -77,6 +77,7 @@ class AuditTrail extends Model
         'REACTIVATE' => 'Aktifkan lagi',
         'CHANGE_ITEMS' => 'Ganti item order',
         'HANDOVER' => 'Serah terima',
+        'RESI_BIGSELLER' => 'Input resi BigSeller',
         'TRANSFER' => 'Transfer stok',
         'INBOUND' => 'Barang masuk',
         'RECEIVE_PO' => 'Terima barang PO',
