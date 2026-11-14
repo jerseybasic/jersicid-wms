@@ -77,6 +77,7 @@ class PurchaseOrderFlowTest extends TestCase
         // Staf inbound menerima barang dari PO
         $this->actingAs($staff)->get(route('gudang.inbound.create', ['po_id' => $po->id]))->assertOk()->assertSee($po->po_number);
         $this->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => 'SJ-001',
             'supplier_name' => $po->supplier_name,
             'received_date' => now()->toDateString(),
@@ -107,6 +108,7 @@ class PurchaseOrderFlowTest extends TestCase
         $po->update(['status' => 'APPROVED']);
 
         $this->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => 'SJ-002',
             'supplier_name' => $po->supplier_name,
             'received_date' => now()->toDateString(),

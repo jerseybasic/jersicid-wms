@@ -246,6 +246,7 @@ class ScanWorkflowTest extends TestCase
         // Bin diketik huruf kecil disimpan huruf besar, reject tercatat
         $warehouse = $this->makeWarehouse();
         $this->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => 'SJ-1',
             'supplier_name' => $supplier->name,
             'received_date' => now()->toDateString(),

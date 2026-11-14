@@ -342,7 +342,7 @@ class InboundCorrection
         }
     }
 
-    private static function moveStock(string $sku, string $binCode, int $delta): void
+    public static function moveStock(string $sku, string $binCode, int $delta): void
     {
         $stock = StockActive::where('sku', $sku)->where('bin_code', $binCode)->lockForUpdate()->first();
         if ($stock) {
@@ -363,7 +363,7 @@ class InboundCorrection
      * Status PO setelah qty diterima berubah. PO yang dibatalkan tetap dibatalkan. PO yang tidak lagi
      * punya barang diterima kembali ke status sebelum barang pertama datang.
      */
-    private static function refreshPoStatus(PurchaseOrder $po): string
+    public static function refreshPoStatus(PurchaseOrder $po): string
     {
         $po->load('items');
         if (!in_array($po->status, [...PurchaseOrder::RECEIVABLE_STATUSES, 'RECEIVED'], true)) {

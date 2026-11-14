@@ -195,6 +195,7 @@ class QueryBudgetTest extends TestCase
             $po = PurchaseOrder::whereHas('items', fn ($q) => $q->where('sku', $skuA))->firstOrFail();
             $po->update(['status' => 'APPROVED']);
             $this->actingAs($this->admin)->post(route('gudang.inbound.store'), [
+                'final_check' => '1',
                 'receipt_number' => "SJ-{$i}",
                 'supplier_name' => $po->supplier_name,
                 'received_date' => now()->toDateString(),

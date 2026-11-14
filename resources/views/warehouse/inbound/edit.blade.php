@@ -79,7 +79,7 @@
             <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                 <div class="p-4 border-b border-slate-800">
                     <h3 class="text-base font-semibold text-white">Qty Diterima</h3>
-                    <p class="text-xs text-slate-400 mt-1">Isi 0 untuk membuang baris yang salah. Pindah rak lewat menu Transfer Stok. @if ($po) Kolom Dipesan (PO) mengubah qty pesanan di PO {{ $po->po_number }}; tidak boleh di bawah yang sudah diterima. @else Isi kolom Dipesan dengan jumlah yang diorder. Kalau yang datang masih kurang, status penerimaan jadi Belum Komplit sampai sisanya datang. Kosongkan jika tidak ada pesanan. @endif</p>
+                    <p class="text-xs text-slate-400 mt-1">Isi 0 untuk membuang baris yang salah. Pindah rak lewat menu Transfer Stok. SKU salah? Pakai <a href="{{ route('gudang.inbound.correct-sku.form', $inbound->id) }}" class="text-amber-400 underline">Koreksi SKU</a>. @if ($po) Kolom Dipesan (PO) mengubah qty pesanan di PO {{ $po->po_number }}; tidak boleh di bawah yang sudah diterima. @else Isi kolom Dipesan dengan jumlah yang diorder. Kalau yang datang masih kurang, status penerimaan jadi Belum Komplit sampai sisanya datang. Kosongkan jika tidak ada pesanan. @endif</p>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">

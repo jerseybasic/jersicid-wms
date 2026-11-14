@@ -38,6 +38,7 @@ class InboundListTest extends TestCase
         $po->update(['status' => 'IN_PRODUCTION']);
 
         $receive = fn (string $no, int $qty, ?string $poId) => $this->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => $no,
             'supplier_name' => $poId ? $po->supplier_name : 'Toko Kain Sejahtera',
             'received_date' => now()->toDateString(),

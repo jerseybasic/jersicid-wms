@@ -44,6 +44,7 @@ class InboundCorrectionTest extends TestCase
     private function receive(string $no, array $qtys, bool $withPo = true): StockMovement
     {
         $this->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => $no,
             'supplier_name' => 'JB Printing',
             'received_date' => now()->toDateString(),
@@ -213,6 +214,7 @@ class InboundCorrectionTest extends TestCase
     {
         // Saat terima barang tanpa PO: kolom Order 5, yang datang 2
         $this->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => 'SJ-MANUAL',
             'supplier_name' => 'JB Printing',
             'received_date' => now()->toDateString(),

@@ -88,6 +88,12 @@
                         class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-on-accent text-sm font-semibold rounded-xl transition-all">Edit PO</a>
                 @endif
 
+                @if ($isManager && $po->status !== 'DRAFT' && ($po->status !== 'CANCELLED' || $po->qty_received_total > 0))
+                    <a href="{{ route('po.correct-sku.form', $po->id) }}"
+                        class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-on-accent text-sm font-semibold rounded-xl transition-all"
+                        title="Ganti SKU yang salah input, juga untuk PO yang sudah diterima. Stok barang yang sudah datang ikut dipindah ke SKU yang benar.">Koreksi SKU</a>
+                @endif
+
                 @if ($isManager && $po->status === 'DRAFT')
                     <form method="POST" action="{{ route('po.update-status', $po->id) }}" class="inline">
                         @csrf @method('PATCH')

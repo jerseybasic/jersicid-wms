@@ -25,7 +25,7 @@
 
     <div class="max-w-5xl mx-auto">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-            <form method="POST" action="{{ $isEdit ? route('po.update', $po->id) : route('po.store') }}" class="space-y-6">
+            <form method="POST" action="{{ $isEdit ? route('po.update', $po->id) : route('po.store') }}" class="space-y-6" id="po-form">
                 @csrf
                 @if ($isEdit)
                     @method('PUT')
@@ -192,7 +192,80 @@
         </div>
     </div>
 
+    <!-- Pengecekan terakhir sebelum PO disimpan: SKU yang salah di PO ikut terbawa ke penerimaan barang -->
+    <div id="po-review" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4">
+        <div class="w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-cyan-500/40 rounded-t-2xl sm:rounded-2xl p-5 space-y-4">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Pengecekan Terakhir</h3>
+                <p class="text-sm text-slate-400">Cocokkan SKU, nama produk, ukuran, dan qty dengan pesanan ke supplier. SKU yang salah di PO ikut terbawa saat barang diterima.</p>
+            </div>
+            <p class="text-sm text-slate-300" id="po-review-head"></p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-xs text-slate-400 border-b border-slate-800">
+                            <th class="text-left py-2 pr-3">SKU</th>
+                            <th class="text-left py-2 pr-3">Produk</th>
+                            <th class="text-right py-2 pr-3">Qty</th>
+                            <th class="text-right py-2">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody id="po-review-rows" class="divide-y divide-slate-800"></tbody>
+                </table>
+            </div>
+            <p class="text-right text-sm text-white">Total: <strong id="po-review-total"></strong></p>
+            <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-800/60 border border-slate-700 cursor-pointer">
+                <input type="checkbox" id="po-review-check" class="mt-1 w-5 h-5 rounded">
+                <span class="text-sm text-white">Saya sudah mengecek SKU dan qty di atas sesuai pesanan.</span>
+            </label>
+            <div class="flex items-center gap-3">
+                <button type="button" id="po-review-back" class="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700">Ubah lagi</button>
+                <button type="button" id="po-review-ok" disabled class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-900 font-bold rounded-xl">Ya, Simpan PO</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // Pengecekan terakhir: tampilkan ringkasan item sebelum PO benar-benar disimpan
+        (function () {
+            const form = document.getElementById('po-form');
+            const overlay = document.getElementById('po-review');
+            const check = document.getElementById('po-review-check');
+            const ok = document.getElementById('po-review-ok');
+            let confirmed = false;
+            const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            const close = () => { overlay.classList.add('hidden'); overlay.classList.remove('flex'); };
+
+            form.addEventListener('submit', function (e) {
+                if (confirmed) return;
+                e.preventDefault();
+                const rows = [];
+                let total = 0;
+                form.querySelectorAll('.item-row').forEach((row) => {
+                    const sku = row.querySelector('.sku-input')?.value.trim().toUpperCase() || '';
+                    const qty = parseInt(row.querySelector('[name*="[qty]"]')?.value || 0);
+                    const price = parseInt(row.querySelector('[name*="[price]"]')?.value || 0);
+                    total += qty * price;
+                    rows.push('<tr><td class="py-2 pr-3 font-mono text-cyan-400 font-bold">' + esc(sku) + '</td>'
+                        + '<td class="py-2 pr-3 text-white">' + esc(skuData[sku]?.name || '-') + '</td>'
+                        + '<td class="py-2 pr-3 text-right text-white font-semibold">' + qty + '</td>'
+                        + '<td class="py-2 text-right text-slate-300">Rp ' + (qty * price).toLocaleString('id-ID') + '</td></tr>');
+                });
+                const supplier = form.querySelector('[name="supplier_id"]');
+                document.getElementById('po-review-head').textContent = 'Supplier: ' + (supplier?.selectedOptions[0]?.textContent.trim() || '-')
+                    + ' · Target: ' + (form.querySelector('[name="expected_date"]')?.value || '-') + ' · ' + rows.length + ' SKU';
+                document.getElementById('po-review-rows').innerHTML = rows.join('');
+                document.getElementById('po-review-total').textContent = 'Rp ' + total.toLocaleString('id-ID');
+                check.checked = false;
+                ok.disabled = true;
+                overlay.classList.remove('hidden');
+                overlay.classList.add('flex');
+            });
+            check.addEventListener('change', () => { ok.disabled = !check.checked; });
+            document.getElementById('po-review-back').addEventListener('click', close);
+            ok.addEventListener('click', () => { confirmed = true; close(); form.requestSubmit ? form.requestSubmit() : form.submit(); });
+        })();
+
         let itemCount = {{ count($rows) ? max(array_keys($rows)) + 1 : 1 }};
 
         // Tambah Item

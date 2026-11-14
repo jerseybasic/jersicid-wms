@@ -13,8 +13,9 @@ Setiap anggota bisa memasang **foto profil** sendiri: klik nama di kanan atas, p
 ### Menerima barang (Inbound)
 1. Buka **Inbound**, lalu klik **Terima Barang Baru**.
 2. Jika barangnya dari PO, pilih PO-nya agar daftar barang terisi otomatis. Kolom **Sisa PO** berisi jumlah yang belum datang.
-3. Scan lokasi rak, lalu scan barangnya, kemudian simpan.
-4. Cetak label SKU dari tombol **Cetak** jika barang belum berlabel.
+3. Scan lokasi rak, lalu scan barangnya, kemudian klik **Periksa & Proses Penerimaan**.
+4. Muncul **Pengecekan Terakhir**: ringkasan surat jalan, supplier, PO, dan setiap baris SKU, produk, lokasi rak, qty diterima, dan reject. Cocokkan dengan barang fisik dan surat jalan. Baris merah (mis. lokasi rak kosong, melebihi sisa PO) harus dibetulkan dulu; baris kuning adalah peringatan (mis. rak tidak ada di denah, SKU biasanya disimpan di rak lain, baris qty 0 tidak ikut disimpan). Centang konfirmasinya, lalu klik **Ya, Simpan Penerimaan**. Penerimaan tidak bisa disimpan tanpa centang ini.
+5. Cetak label SKU dari tombol **Cetak** jika barang belum berlabel.
 
 Barang PO boleh datang bertahap. Contoh: PO 5 pcs, hari ini datang 2 pcs. Isi **Diterima** 2 dan simpan; stok bertambah 2 pcs dan PO menjadi **Diterima Sebagian** dengan sisa 3 pcs. Saat sisanya datang, buat penerimaan baru dengan nomor surat jalan yang baru dan pilih PO yang sama (atau klik **Terima Sisa Barang** di detail PO). Setelah semua lengkap, PO otomatis menjadi **Sudah Diterima**.
 - Di bawah tiap barang tampil jumlah dipesan, yang sudah datang sebelumnya, dan sisa setelah penerimaan ini.
@@ -144,8 +145,16 @@ Jika penerimaan salah input, buka detailnya di **Inbound** (atau klik **Edit** d
 - Pindah rak tidak lewat edit, tapi lewat **Transfer Stok**.
 - Isi sebelum dan sesudahnya tercatat di **Audit Trail**.
 
+### Koreksi SKU yang salah input (PO dan Inbound, juga yang sudah selesai)
+Dipakai jika SKU yang tercatat salah, misalnya salah ukuran, padahal barangnya sudah masuk rak. Barangnya tidak pindah tempat: stok SKU lama di bin itu dikurangi dan stok SKU yang benar di bin yang sama ditambah.
+- **Koreksi SKU di PO** (tombol **Koreksi SKU** di detail PO, juga untuk PO Sudah Diterima): isi SKU yang benar di baris yang salah. Qty pesanan, qty diterima, dan harga ikut pindah. Semua penerimaan untuk baris itu ikut dikoreksi stoknya. Jika SKU yang benar sudah ada di PO, kedua baris digabung. Pakai ini jika SKU di PO-nya yang salah.
+- **Koreksi SKU di penerimaan** (tombol **Koreksi SKU** di detail penerimaan, juga untuk yang sudah Komplit): pilih SKU yang benar per baris. Untuk penerimaan dari PO, pilihannya hanya SKU di PO itu, dan qty diterima PO ikut pindah ke SKU yang benar. Pakai ini jika PO-nya benar tapi salah pilih SKU saat terima barang.
+- Klik **Periksa Ringkasan**, cocokkan SKU lama dan SKU benar, qty, dan bin dengan barang fisik, centang konfirmasi, lalu **Simpan Koreksi SKU**. Alasan wajib diisi.
+- Ditolak jika stok SKU lama di bin itu sudah dipindah, diambil, atau dijatah untuk order yang dikonfirmasi; koreksi seperti itu lewat stock opname. Penerimaan lama yang belum terhubung ke PO perlu dihubungkan dulu lewat **Edit penerimaan** (PO Terkait).
+- Setelah koreksi, cetak ulang label SKU untuk barangnya. SKU lama dan baru, qty, bin, dan alasannya tercatat di **Audit Trail**, catatan PO, dan **Riwayat Koreksi SKU** di detail penerimaan.
+
 ### Membuat dan menyetujui PO
-1. Buka **Purchase Order**, lalu buat PO baru. Tombol **PO dari Stok Menipis** mengisi otomatis SKU yang stoknya di bawah batas.
+1. Buka **Purchase Order**, lalu buat PO baru. Tombol **PO dari Stok Menipis** mengisi otomatis SKU yang stoknya di bawah batas. Saat disimpan muncul **Pengecekan Terakhir** berisi SKU, nama produk, qty, dan subtotal; cocokkan dengan pesanan, centang, lalu **Ya, Simpan PO**.
 2. Klik **Ajukan untuk Approval** jika PO sudah siap.
 3. PO yang menunggu persetujuan bisa disetujui (**Approve PO**) atau dikembalikan (**Tolak**) dengan alasan. PO yang ditolak kembali menjadi draft dan bisa diedit.
    - Jika supplier tidak sanggup mengirim sisa PO yang sudah diterima sebagian, klik **Batalkan PO**. Barang yang sudah datang tetap di stok; hanya sisanya yang dibatalkan. Jika jumlah pesanan berubah, edit qty PO; qty tidak bisa diturunkan di bawah yang sudah diterima, dan jika diturunkan sampai sama, PO otomatis selesai.

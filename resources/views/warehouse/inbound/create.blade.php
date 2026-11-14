@@ -50,7 +50,7 @@
             </div>
         @endif
 
-        <form method="POST" action="{{ route('gudang.inbound.store') }}">
+        <form method="POST" action="{{ route('gudang.inbound.store') }}" x-ref="form">
             @csrf
 
             <!-- Informasi Penerimaan -->
@@ -294,12 +294,79 @@
                     </svg>
                     Batal
                 </a>
-                <button type="submit" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-on-accent font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center gap-2">
+                <button type="button" @click="openReview()" class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-on-accent font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition-all flex items-center justify-center gap-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                     </svg>
-                    Proses Penerimaan Barang
+                    Periksa &amp; Proses Penerimaan
                 </button>
+            </div>
+
+            <!-- Pengecekan terakhir: ringkasan SKU, qty, dan lokasi rak sebelum stok bertambah -->
+            <div x-show="reviewing" x-cloak class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-0 sm:p-4" @keydown.escape.window="reviewing = false">
+                <div class="w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-cyan-500/40 rounded-t-2xl sm:rounded-2xl p-5 space-y-4" @click.outside="reviewing = false">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">Pengecekan Terakhir</h3>
+                            <p class="text-sm text-slate-400">Cocokkan dengan surat jalan dan barang fisik. Setelah disimpan, stok langsung bertambah<span x-show="poId"> dan qty diterima PO ikut naik</span>.</p>
+                        </div>
+                        <button type="button" @click="reviewing = false" class="p-2 text-slate-400 hover:text-white" title="Tutup">✕</button>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div class="bg-slate-800/60 rounded-lg p-2"><p class="text-slate-400">Surat jalan</p><p class="text-white font-mono font-semibold" x-text="reviewReceipt || '-'"></p></div>
+                        <div class="bg-slate-800/60 rounded-lg p-2"><p class="text-slate-400">Supplier</p><p class="text-white font-semibold" x-text="supplierName || '-'"></p></div>
+                        <div class="bg-slate-800/60 rounded-lg p-2"><p class="text-slate-400">PO</p><p class="text-white font-mono font-semibold" x-text="poId && poData[poId] ? poData[poId].po_number : 'Tanpa PO'"></p></div>
+                        <div class="bg-slate-800/60 rounded-lg p-2"><p class="text-slate-400">Total</p><p class="text-emerald-400 font-semibold" x-text="submitItems.length + ' baris · ' + submitItems.reduce((t, i) => t + parseInt(i.qty_received || 0), 0) + ' pcs'"></p></div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-xs text-slate-400 border-b border-slate-800">
+                                    <th class="text-left py-2 pr-3">SKU</th>
+                                    <th class="hidden sm:table-cell text-left py-2 pr-3">Produk</th>
+                                    <th class="text-left py-2 pr-3">Lokasi rak</th>
+                                    <th class="text-right py-2 pr-3">Diterima</th>
+                                    <th class="hidden sm:table-cell text-right py-2">Reject</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800">
+                                <template x-for="(item, i) in submitItems" :key="'rv' + i">
+                                    <tr>
+                                        <td class="py-2 pr-3"><span class="font-mono text-cyan-400 font-bold break-all" x-text="item.sku"></span>
+                                            <span class="sm:hidden block text-xs text-slate-400" x-text="(item.product_name || '-') + ' ' + (item.size || '') + (parseInt(item.qty_rejected || 0) ? ' · reject ' + item.qty_rejected : '')"></span></td>
+                                        <td class="hidden sm:table-cell py-2 pr-3 text-white"><span x-text="item.product_name || '-'"></span> <span class="text-slate-400" x-text="item.size"></span></td>
+                                        <td class="py-2 pr-3 font-mono" :class="item.bin_code ? 'text-slate-200' : 'text-red-400'" x-text="item.bin_code ? item.bin_code.toUpperCase() : 'belum diisi'"></td>
+                                        <td class="py-2 pr-3 text-right font-semibold text-emerald-400" x-text="item.qty_received"></td>
+                                        <td class="hidden sm:table-cell py-2 text-right text-red-400" x-text="parseInt(item.qty_rejected || 0) || '-'"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <template x-if="reviewProblems.blocking.length">
+                        <ul class="p-3 rounded-xl border border-red-500/50 bg-red-900/20 text-sm text-red-300 space-y-1">
+                            <template x-for="msg in reviewProblems.blocking"><li x-text="msg"></li></template>
+                        </ul>
+                    </template>
+                    <template x-if="reviewProblems.warnings.length">
+                        <ul class="p-3 rounded-xl border border-amber-500/40 bg-amber-900/10 text-sm text-amber-300 space-y-1">
+                            <template x-for="msg in reviewProblems.warnings"><li x-text="msg"></li></template>
+                        </ul>
+                    </template>
+
+                    <label class="flex items-start gap-3 p-3 rounded-xl bg-slate-800/60 border border-slate-700 cursor-pointer">
+                        <input type="checkbox" name="final_check" value="1" x-model="checked" class="mt-1 w-5 h-5 rounded">
+                        <span class="text-sm text-white">Saya sudah mencocokkan SKU, qty, dan lokasi rak di atas dengan barang fisik dan surat jalan.</span>
+                    </label>
+                    <div class="flex items-center gap-3">
+                        <button type="button" @click="reviewing = false" class="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700">Ubah lagi</button>
+                        <button type="submit" :disabled="!checked || reviewProblems.blocking.length > 0"
+                            class="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed text-on-accent font-bold rounded-xl">Ya, Simpan Penerimaan</button>
+                    </div>
+                </div>
             </div>
         </form>
     </div>
@@ -314,6 +381,47 @@
                 suggestedBins: {},
                 poId: '',
                 supplierName: '',
+                reviewing: false,
+                checked: false,
+                reviewReceipt: '',
+
+                // Tombol proses: cek isian wajib dulu, lalu tampilkan ringkasan untuk dicek terakhir kali
+                openReview() {
+                    if (!this.$refs.form.reportValidity()) {
+                        return;
+                    }
+                    this.reviewReceipt = this.$refs.form.querySelector('[name=receipt_number]')?.value?.trim() || '';
+                    this.checked = false;
+                    this.reviewing = true;
+                },
+
+                get reviewProblems() {
+                    const blocking = [];
+                    const warnings = [];
+                    const rows = this.submitItems;
+                    if (rows.length === 0) {
+                        blocking.push('Belum ada barang dengan qty diterima lebih dari 0.');
+                    }
+                    rows.forEach((item) => {
+                        const bin = (item.bin_code || '').trim().toUpperCase();
+                        if (!bin) {
+                            blocking.push(item.sku + ': lokasi rak belum diisi.');
+                        } else if (this.racks.length && !this.racks.some(r => r.code === this.rackCodeFromBin(bin))) {
+                            warnings.push(item.sku + ': rak ' + this.rackCodeFromBin(bin) + ' tidak ada di denah gudang. Cek lagi lokasi ' + bin + '.');
+                        } else if (this.suggestedBins[item.sku] && this.suggestedBins[item.sku] !== bin) {
+                            warnings.push(item.sku + ' biasanya disimpan di ' + this.suggestedBins[item.sku] + ', sekarang ke ' + bin + '. Pastikan memang disengaja.');
+                        }
+                        if (this.overRemaining(item)) {
+                            blocking.push(item.sku + ': melebihi sisa PO. Kurangi qty, atau minta Owner/Supervisor menambah qty di PO.');
+                        }
+                    });
+                    const skipped = this.items.filter(i => (i.sku && !(parseInt(i.qty_received || 0) > 0)) || (!i.sku && parseInt(i.qty_received || 0) > 0));
+                    skipped.forEach((i) => warnings.push((i.sku || 'Baris tanpa SKU') + (i.sku ? ': qty diterima 0, tidak ikut disimpan' + (this.poId ? ' (sisanya tetap ditunggu di PO).' : '.') : ' tidak ikut disimpan. Pilih SKU-nya jika barangnya ada.')));
+                    const seen = {};
+                    rows.forEach((i) => { seen[i.sku] = (seen[i.sku] || 0) + 1; });
+                    Object.keys(seen).filter(sku => seen[sku] > 1).forEach(sku => warnings.push(sku + ' ada di ' + seen[sku] + ' baris. Pastikan memang dibagi ke beberapa lokasi rak.'));
+                    return { blocking: [...new Set(blocking)], warnings: [...new Set(warnings)] };
+                },
 
                 // Bukan init(): Alpine memanggil init() otomatis tanpa argumen, jadi baris kosong ikut tertambah dua kali
                 setup(skus, racks, poData, suggestedBins, poId, supplierName) {

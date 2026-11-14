@@ -79,6 +79,7 @@ class StockShortageAndCancellationTest extends TestCase
         // Barang diterima di Inbound: order otomatis dikonfirmasi
         $warehouse = $this->makeWarehouse();
         $this->post(route('gudang.inbound.store'), [
+            'final_check' => '1',
             'receipt_number' => 'SJ-001',
             'supplier_name' => 'JB Printing',
             'received_date' => today()->toDateString(),
