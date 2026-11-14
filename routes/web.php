@@ -15,6 +15,7 @@ use App\Http\Controllers\Warehouse\PurchaseOrderController;
 use App\Http\Controllers\Warehouse\CourierHandoverController;
 use App\Http\Controllers\Warehouse\InboundController;
 use App\Http\Controllers\Warehouse\OrderImportController;
+use App\Http\Controllers\Warehouse\ResiShipmentController;
 use App\Http\Controllers\Warehouse\OutboundController;
 use App\Http\Controllers\Warehouse\PickingBatchController;
 use App\Http\Controllers\Warehouse\PickingController;
@@ -153,6 +154,10 @@ Route::middleware(['auth', 'role:OWNER,SUPERVISOR,ADMIN_GUDANG,STAFF_GUDANG'])->
     Route::post('/import/map', [OrderImportController::class, 'map'])->name('outbound.import.map');
     Route::get('/import/pratinjau/{token}', [OrderImportController::class, 'show'])->name('outbound.import.show');
     Route::post('/import', [OrderImportController::class, 'store'])->name('outbound.import.store');
+    // Resi yang sudah dikirim lewat BigSeller: stok dipotong tanpa picking (Owner, Supervisor, Admin Gudang)
+    Route::get('/input-resi', [ResiShipmentController::class, 'create'])->name('outbound.resi');
+    Route::post('/input-resi/cek', [ResiShipmentController::class, 'preview'])->name('outbound.resi.preview');
+    Route::post('/input-resi', [ResiShipmentController::class, 'store'])->name('outbound.resi.store');
     Route::post('/', [OutboundController::class, 'store'])->name('outbound.store');
     Route::post('/massal', [OutboundController::class, 'bulkStatus'])->name('outbound.bulk-status');
     Route::post('/massal/picking-gabungan', [OutboundController::class, 'bulkPick'])->name('outbound.bulk-pick');
