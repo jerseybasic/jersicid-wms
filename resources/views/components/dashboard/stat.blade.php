@@ -23,16 +23,15 @@
 @endphp
 
 <{{ $tag }} @if ($href) href="{{ $href }}" @endif {{ $attributes->merge(['class' => 'card block p-4 lg:p-5' . ($href ? ' hover:border-cyan-500/40 transition-colors' : '')]) }}>
-    <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-            <p class="text-xs font-medium text-slate-400 truncate">{{ $label }}</p>
-            <p class="mt-1.5 text-2xl font-extrabold tracking-tight text-white truncate">{{ $value }}</p>
-            @if ($sub)
-                <p class="mt-1 text-[11.5px] text-slate-500 truncate">{{ $sub }}</p>
-            @endif
-        </div>
-        <span class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 {{ $chip }}">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $icon }}" /></svg>
+    {{-- Ikon sejajar judul, angka memakai lebar penuh kartu supaya tidak terpotong di HP --}}
+    <div class="flex items-start justify-between gap-2 sm:gap-3">
+        <p class="min-w-0 text-xs font-medium text-slate-400 leading-snug">{{ $label }}</p>
+        <span class="-mt-1 w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 {{ $chip }}">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $icon }}" /></svg>
         </span>
     </div>
+    <p class="mt-1 text-xl sm:text-2xl font-extrabold tracking-tight leading-tight text-white break-words">{{ $value }}</p>
+    @if ($sub)
+        <p class="mt-1 text-[11.5px] leading-snug text-slate-500">{{ $sub }}</p>
+    @endif
 </{{ $tag }}>
