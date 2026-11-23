@@ -93,6 +93,36 @@
             }
         }
 
+        /* Tinggi layar penuh yang benar di HP/tablet.
+           100vh di browser HP lebih tinggi dari layar yang terlihat (bilah alamat/tombol browser),
+           sehingga bagian bawah sidebar (tema & akun) dan bawah halaman tertutup. 100dvh mengikuti
+           tinggi yang benar-benar terlihat; 100vh tetap jadi cadangan untuk browser lama. */
+        .app-shell {
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        .app-sidebar {
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        .app-sidebar nav {
+            overscroll-behavior: contain;
+        }
+
+        /* Layar pendek (HP miring, tablet kecil): seluruh sidebar ikut digulir
+           supaya menu tidak terjepit oleh logo dan bagian akun di bawah. */
+        @media (max-height: 560px) {
+            .app-sidebar {
+                overflow-y: auto !important;
+            }
+
+            .app-sidebar nav {
+                flex: none;
+                overflow: visible;
+            }
+        }
+
         /* Notification Badge Pulse */
         @keyframes pulse-ring {
             0% {
@@ -120,24 +150,50 @@
 </head>
 
 <body class="font-sans antialiased bg-slate-950 text-slate-200" x-data="{
-    // Di HP/tablet sidebar tertutup dan muncul sebagai lapisan di atas konten
-    sidebarOpen: window.innerWidth >= 1024,
-}">
+    // HP & tablet tegak (< 1024px): sidebar tertutup dan muncul sebagai lapisan di atas konten.
+    // Tablet mendatar & laptop kecil (1024-1279px): sidebar ringkas (ikon saja) supaya isi halaman lega.
+    // Layar lebar (>= 1280px): sidebar terbuka. Pilihan buka/tutup di layar >= 1024px diingat.
+    sidebarOpen: (() => {
+        if (window.innerWidth < 1024) return false;
+        try {
+            const saved = localStorage.getItem('sidebar-open');
+            if (saved !== null) return saved === '1';
+        } catch (e) {}
+        return window.innerWidth >= 1280;
+    })(),
+    wide: window.innerWidth >= 1024,
+    init() {
+        this.$watch('sidebarOpen', (open) => {
+            if (!this.wide) return;
+            try { localStorage.setItem('sidebar-open', open ? '1' : '0'); } catch (e) {}
+        });
+    },
+    onResize() {
+        const wide = window.innerWidth >= 1024;
+        if (wide === this.wide) return;
+        this.wide = wide;
+        // Tablet diputar dari mendatar ke tegak: tutup sidebar supaya tidak menutupi isi halaman
+        if (!wide) { this.sidebarOpen = false; return; }
+        let open = window.innerWidth >= 1280;
+        try { const saved = localStorage.getItem('sidebar-open'); if (saved !== null) open = saved === '1'; } catch (e) {}
+        this.sidebarOpen = open;
+    },
+}" @resize.window.debounce.150ms="onResize()" @keydown.escape.window="if (!wide) sidebarOpen = false">
     <!-- Skip to main content link for keyboard users -->
     <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-white focus:rounded-lg">
         Skip to main content
     </a>
 
     <!-- ==================== LAYOUT CONTAINER (FLEXBOX) ==================== -->
-    <div class="flex h-screen overflow-hidden">
+    <div class="app-shell flex overflow-hidden">
 
         <!-- ==================== SIDEBAR ==================== -->
         <div x-show="sidebarOpen" x-cloak @click="sidebarOpen = false" class="fixed inset-0 z-[45] bg-black/60 lg:hidden"></div>
         <aside
-            class="app-sidebar-bg fixed inset-y-0 left-0 z-50 lg:static lg:z-auto flex-shrink-0 flex flex-col overflow-hidden duration-300 ease-in-out -translate-x-full lg:translate-x-0"
+            class="app-sidebar app-sidebar-bg app-shell fixed inset-y-0 left-0 z-50 lg:static lg:z-auto flex-shrink-0 flex flex-col overflow-hidden duration-300 ease-in-out -translate-x-full lg:translate-x-0"
             x-data="{ menuQuery: '' }"
             x-init="$nextTick(() => $el.classList.add('transition-all'))"
-            :class="sidebarOpen ? 'w-64 !translate-x-0' : 'w-[4.5rem]'" style="height: 100vh;">
+            :class="sidebarOpen ? 'w-64 !translate-x-0' : 'w-[4.5rem]'">
 
             <!-- Logo & Toggle Button -->
             <div class="flex items-center gap-3 px-3 pt-4 pb-3 flex-shrink-0 overflow-hidden">
@@ -151,10 +207,15 @@
                         loading="eager"
                         fetchpriority="high">
                 </button>
-                <div x-show="sidebarOpen" class="overflow-hidden whitespace-nowrap">
+                <div x-show="sidebarOpen" class="flex-1 min-w-0 overflow-hidden whitespace-nowrap">
                     <p class="text-[15px] font-extrabold tracking-wide text-on-accent">JERSIC.ID</p>
                     <p class="text-[10.5px] font-semibold tracking-wider" style="color:#9CD3F0">Gudang &amp; Stok</p>
                 </div>
+                {{-- HP & tablet tegak: tombol tutup yang jelas di pojok sidebar --}}
+                <button x-show="sidebarOpen" type="button" @click="sidebarOpen = false" aria-label="Tutup menu" title="Tutup menu"
+                    class="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 flex-shrink-0" style="color:#D6ECFA">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
             </div>
 
             <!-- Cari menu -->
